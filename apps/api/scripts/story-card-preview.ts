@@ -116,7 +116,7 @@ const routeCases: { name: string; facts: RouteCardInput['facts'] }[] = [
   },
 ];
 
-/** Карточка достижения: обычная, счётная с длинным объектом и именем, без публичного объекта. */
+/** Карточка достижения: обычная, счётная с длинным объектом и именем, без публичного объекта, три сезонных. */
 const achievementCases: {
   name: string;
   input: Omit<AchievementCardInput, 'template' | 'themeId'>;
@@ -160,6 +160,19 @@ const achievementCases: {
       riderName: null,
     },
   },
+  ...(['season_regular', 'season_podium', 'season_champion'] as const).map((code) => ({
+    name: code.replace('_', '-'),
+    input: {
+      facts: {
+        code,
+        object: { kind: 'season' as const, id: 'preview', title: 'Сезон 2025' },
+        factDate: '2025-10-31',
+        level: null,
+      },
+      objectTitle: 'Сезон 2025',
+      riderName: 'Анна К.',
+    },
+  })),
 ];
 
 /** OG-картинки: вид × линия × длина текстов (тема — `OG_THEME_ID`, как у выдачи; схема — `scheme` фикстуры). */

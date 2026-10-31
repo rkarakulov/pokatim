@@ -35,6 +35,8 @@ export interface SeasonRaces {
    * (индекс `races_protocol_idx`); порядок `(seasonId, windowEndsAt, _id)`.
    */
   protocolRaces(seasonIds?: readonly string[]): Promise<SeasonRaceForStandings[]>;
+  /** Сезон опубликованной гонки с протоколом (событие `results` → сезон для пересчёта); иначе `undefined`. */
+  protocolRaceSeason(raceId: string): Promise<string | undefined>;
   /** Завершённые к `now` сезоны (`endsBefore ≤ now`; их десятки). */
   finishedSeasons(now: Date): Promise<FinishedSeason[]>;
   /**

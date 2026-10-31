@@ -325,6 +325,9 @@ worker: очередь identity-email ─► письмо «Пароль изм�
   → итог своей ревизией одной записью.
 - **Чтение:** список, кандидаты, заезд, `/track` — только свои, `no-store`; заезды фильтруются по живым активностям
   (`ActivitySource.liveActivities`), сравнение и «зависшие» — при чтении (`route-rides.policy.ts`).
+- **Удаление активности:** outbox `tracks.activity-removed` (fan-out вместе с `results-intake`) → очередь
+  `route-rides-intake` → `deleteOfActivity` (заезды активности по всем маршрутам); фильтр на чтении и удаление сирот в
+  транзакции POST — страховка.
 
 ### Web (SSR, PWA)
 

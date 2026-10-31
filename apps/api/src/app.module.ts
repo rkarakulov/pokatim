@@ -30,6 +30,7 @@ import { ResultsModule } from './modules/results';
 import { RidersModule } from './modules/riders';
 import { RoutesModule } from './modules/routes';
 import { SharingModule } from './modules/sharing';
+import { SocialModule } from './modules/social';
 import { RouteRidesModule } from './modules/route-rides';
 import { StandingsModule } from './modules/standings';
 import { TicketsModule } from './modules/tickets';
@@ -75,6 +76,8 @@ import { TracksModule } from './modules/tracks';
     AccountModule,
     // центр уведомлений (ADR-0017)
     NotificationsModule,
+    // «Свои» (ADR-0027): якорь контроллеров P2–P4, P7
+    SocialModule,
   ],
   // единый формат ошибок ApiError для всех модулей; тексты кодов проекта — рядом с фильтром
   providers: [

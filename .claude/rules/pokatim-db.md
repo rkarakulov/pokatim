@@ -441,8 +441,10 @@ paths:
   (условие в фильтре) + outbox в транзакции. `trackMap` — позиции на линии `activity_tracks`, без координат;
   датчиков, флагов и диагностики нет.
 - Сироты (RC-1, RC-8): удалённая активность и недоступный маршрут — заезды не видны (фильтр на чтении по
-  `ActivitySource.liveActivities` и `RouteRideRoutes`); заезды с удалёнными активностями удаляются в транзакции
-  следующего нового заезда по маршруту. Не append-only.
+  `ActivitySource.liveActivities` и `RouteRideRoutes`). Заезды удалённой активности удаляет `RouteRidesIntakeProcessor`
+  по `tracks.activity-removed` (fan-out, очередь `route-rides-intake`, `deleteOfActivity`); фильтр и удаление сирот в
+  транзакции следующего нового заезда по маршруту — страховка (POST без замка активностей может вставить заезд после
+  обработки события). Не append-only.
 
 ## Достижения (achievements, ADR-0020 Proposed)
 
@@ -527,7 +529,8 @@ paths:
 - Порядок шагов worker (`account-deletion`): профиль → райды → «Мои маршруты» → устройства → заезды → заезды по
   маршрутам (`RouteRideErasure`, `deleteMany({ userId })`) → достижения (`AchievementErasure`: выдачи
   `deleteMany({ userId })` + маркер `deleteOne({ _id })`) → билеты (`TicketErasure`: регистрации и билеты →
-  `cancelled`) → уведомления → identity. Push-токены (`push_tokens`) снимаются раньше — в транзакции удаления (`PushTokens.revokeAllOf`). Каждый
+  `cancelled`) → свои (`SocialErasure`: явки `$pull` первыми, связи в обе стороны, свои и полученные реакции, код
+  приглашения) → события метрик (`ProductEventErasure`, `deleteMany({ userId })`) → уведомления → identity. Push-токены (`push_tokens`) снимаются раньше — в транзакции удаления (`PushTokens.revokeAllOf`). Каждый
   шаг — порт модуля-владельца, идемпотентен; живой аккаунт (`deletedAt: null`) не трогается. Повторный проход через
   15 мин и регламент `account.erasure-resume` (частичный `users_erasure_pending_idx { deletedAt: 1 }`, partial
   `deletedAt: { $type: 'date' }, erasureSweptAt: { $eq: null }`).
@@ -539,7 +542,8 @@ paths:
   нет документа — без декора, `version: 0` (seed нет; первая смена — `insertOne`, дубликат `_id` → 409). Кто менял — только `panel_audit` (без
   `userId` в документе: порт стирания не нужен). Миграция `0024_platform_settings` — только `ensureCollection`.
 - Append-only журналы (`user_consents`, `profile_consent_events`, `panel_audit`, `device_audit`, `dispute_events`,
-  `race_recalculations`, `race_protocol_rows`) не меняются (A9); `race_entries`, споры и протоколы — остаются.
+  `race_recalculations`, `race_protocol_rows`) не меняются (A9); исключение — `product_events` (K13: события метрик
+  удалённого стираются шагом `product-events`, других update/delete нет); `race_entries`, споры и протоколы — остаются.
 - Рейтинг сезона (race-results-08): **порт стирания не нужен** — снимок `season_standing_rows` — проекция
   `race_protocol_rows` (A9: протоколы с псевдонимным `userId` остаются), без имён, e-mail и биометрии; имя читается
   при каждом запросе через `RIDER_NAMES` — удалённый становится «Участник». Стирание снимка разошлось бы с
@@ -574,3 +578,23 @@ paths:
   `limited`, `failed`); захват — условием состояния в фильтре. Убрать условие — дубль push/письма (**HIGH**).
 - `race_attempts.lastVisibleVerdict` (`0026_attempt_last_verdict`, бэкфилл `counted|rejected`) — прежний видимый
   вердикт: `requeueAttempt` его не сбрасывает; событие вердикта — только при смене.
+
+## «Свои» (ADR-0027 Proposed, `docs/product/social.md`)
+
+- Миграция `0045_social` (expand-only; номер — по факту слияния): `rider_connections`
+  (`rider_connections_owner_other_unique { ownerId, otherId }`, `rider_connections_other_idx { otherId, ownerId }`,
+  `rider_connections_ride_idx { 'rides.rideId' }`), `ride_attendance` (`ride_attendance_user_idx { 'entries.userId' }`),
+  `social_reactions` (`social_reactions_unique { actorId, kind, targetType, targetId, recipientId }` — RC-1,
+  `social_reactions_target_idx { targetType, targetId, kind }`, `social_reactions_recipient_idx { recipientId, kind,
+  createdAt: -1 }`), `invite_codes` (`invite_codes_code_unique`), `product_events` (`product_events_user_idx`,
+  `product_events_type_at_idx { type, at }`). Писатели — репозитории модулей `social` и `product-events`.
+- `rider_connections` — направленная пара, источники не хранятся (`connectionSources`: `rides` непуст, `inviteAt`,
+  `manualAt`); `rides: {rideId, at}[]`, `rideCount` = `$size`, `lastRideAt` = `$max` — пишет только пересчёт явки
+  (pipeline с `$literal`). `removedAt` — надгробие (RC-6): пересчёт его не сбрасывает и документ не удаляет; ручное
+  добавление сбрасывает. Документ без источников с `removedAt: null` удаляется.
+- `ride_attendance` — **документ на райд** (`_id` = rideId, `entries: {userId, via, at, declinedAt}[]`, RC-2a):
+  каждое изменение явки — в транзакции первой операцией (сериализует пересчёт связей райда; документ на райдера дал
+  бы write skew). Стирание — `$pull` без пересчёта связей других (RC-7).
+- `social_reactions` — счётчики только `countDocuments` на чтении (без денормализации).
+- Уведомления группы «Свои» (P1, ADR-0027 п. 6) — исключение из «текст — снимок»: документ хранит `actors: userId[]`
+  и `params`, имена собираются при чтении; схлопывание копит `actors` (`$addToSet`).

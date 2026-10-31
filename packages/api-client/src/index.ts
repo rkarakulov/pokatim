@@ -1,6 +1,7 @@
 import {
   AchievementList,
   type AchievementCode,
+  type AchievementStoryCardQuery,
   AppAppearance,
   ApiError,
   CatalogRouteCities,
@@ -864,9 +865,14 @@ export function createApiClient({
       ),
     /**
      * Карточка своего полученного достижения (achievement-story-card): `pending` | `ready` + токен | `failed`; не
-     * получено или отозвано — 409 `STORY_CARD_UNAVAILABLE`. Картинка — тем же `storyCardImageUrl`.
+     * получено или отозвано — 409 `STORY_CARD_UNAVAILABLE`. Сезонное — с `seasonId` (у прочих — без, иначе 400).
+     * Картинка — тем же `storyCardImageUrl`.
      */
-    getAchievementCard: (accessToken: string, code: AchievementCode, query: StoryCardQuery) =>
+    getAchievementCard: (
+      accessToken: string,
+      code: AchievementCode,
+      query: AchievementStoryCardQuery,
+    ) =>
       request(
         `/v1/achievements/${encodeURIComponent(code)}/story-card${queryString(query)}`,
         StoryCardStatus,

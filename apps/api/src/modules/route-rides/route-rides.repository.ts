@@ -102,7 +102,10 @@ export class RouteRidesRepository {
     return result.modifiedCount === 1;
   }
 
-  /** Сироты маршрута (активность удалена, RC-1) — удаляются в транзакции нового заезда. */
+  /**
+   * Сироты маршрута (активность удалена, RC-1), которых не убрало событие `tracks.activity-removed` (POST вставил заезд
+   * после обработки события), — удаляются в транзакции нового заезда.
+   */
   async deleteOrphans(
     session: DbSession,
     userId: string,
@@ -179,6 +182,14 @@ export class RouteRidesRepository {
       .sort(changedSort('updatedAt'))
       .limit(limit)
       .toArray();
+  }
+
+  /**
+   * Заезды удалённой активности по всем маршрутам (`tracks.activity-removed`); `userId` — префикс уникального индекса.
+   * Идемпотентно: повтор удаляет 0.
+   */
+  async deleteOfActivity(userId: string, activityId: string): Promise<number> {
+    return (await this.c.rides.deleteMany({ userId, activityId })).deletedCount;
   }
 
   /** Стирание заездов удалённого аккаунта (ADR-0015). */

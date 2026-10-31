@@ -6,6 +6,7 @@ import type { Job } from 'bullmq';
 import type { z } from 'zod';
 
 import { QUEUE } from '../../queues';
+import { cardRef } from '../achievements';
 import { RESULTS_FOR_SHARING, type ResultsForSharing } from '../results';
 import { RIDES_FOR_SHARING, type RidesForSharing } from '../rides';
 import {
@@ -186,8 +187,8 @@ export class StoryCardProcessor extends WorkerHost {
 
   /**
    * Рендер карточки своего достижения — вызывается и тестами напрямую. Достижение больше не получено (факт пропал,
-   * отозвано) или вход изменился — `skipped`. В логе — код и шаблон; причина провала — только тип (разметка содержит
-   * название объекта и имя).
+   * отозвано) или вход изменился — `skipped`. В логе — код и шаблон (без сезона); причина провала — только тип
+   * (разметка содержит название объекта и имя).
    */
   buildAchievementCard(
     job: AchievementCardJob,
@@ -195,7 +196,10 @@ export class StoryCardProcessor extends WorkerHost {
   ): Promise<StoryCardOutcome> {
     const label = () => `achievement ${job.code} ${job.template}`;
     return this.run(this.cache, job.hash, label, options, 'name-only', async () => {
-      const resolved = await this.achievementInputs.resolve(job.userId, job.code, job.template);
+      // задачу ставил `AchievementCardService` по тому же `cardRef` — несоответствие не бывает, но не рендерим
+      const ref = cardRef(job.code, job.seasonId);
+      if (!ref) return null;
+      const resolved = await this.achievementInputs.resolve(job.userId, ref, job.template);
       if (!resolved || resolved.hash !== job.hash) return null;
       return { png: await renderAchievementCard(resolved.input), note: 'badge' };
     });

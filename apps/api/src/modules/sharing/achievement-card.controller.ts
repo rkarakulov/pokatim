@@ -1,8 +1,8 @@
 import { Controller, Get, Header, Param, Query, UseGuards } from '@nestjs/common';
 import {
   AchievementCode,
+  AchievementStoryCardQuery,
   FieldErrorCode,
-  StoryCardQuery,
   type StoryCardStatus,
 } from '@pokatim/contracts';
 import { ZodValidationPipe } from '@rkarakulov/api-kit/core';
@@ -13,8 +13,8 @@ import { AchievementCardService } from './achievement-card.service';
 const codePipe = new ZodValidationPipe(AchievementCode, FieldErrorCode);
 
 /**
- * Статус карточки своего достижения (ADR-0018): только вошедшие, пользователь — из access (в пути только код — чужое
- * недостижимо), `no-store`.
+ * Статус карточки своего достижения (ADR-0018): только вошедшие, пользователь — из access (в пути код, в query —
+ * сезон сезонного: выдача ищется по `(userId, code, seasonId)`, чужое недостижимо), `no-store`.
  */
 @Controller('achievements')
 @UseGuards(AuthGuard)
@@ -26,8 +26,9 @@ export class AchievementCardController {
   status(
     @CurrentUser() user: AuthUser,
     @Param('code', codePipe) code: AchievementCode,
-    @Query(new ZodValidationPipe(StoryCardQuery, FieldErrorCode)) query: StoryCardQuery,
+    @Query(new ZodValidationPipe(AchievementStoryCardQuery, FieldErrorCode))
+    query: AchievementStoryCardQuery,
   ): Promise<StoryCardStatus> {
-    return this.cards.status(user.userId, code, query.template);
+    return this.cards.status(user.userId, code, query);
   }
 }

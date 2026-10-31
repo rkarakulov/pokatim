@@ -17,6 +17,7 @@ import {
   isSeen,
   type LevelRank,
   levelName,
+  manuallyGranted,
   noticeDue,
   progressBeyondManual,
   raceAchievements,
@@ -791,5 +792,19 @@ describe('ручные решения (achievements-panel, 5.B)', () => {
       expect(result.get(code)?.object.kind, code).toBe(ACHIEVEMENT_OBJECT_KIND_BY_CODE[code]);
     }
     expect(Object.keys(ACHIEVEMENT_RULES)).toEqual([...FACT_ACHIEVEMENT_CODES]);
+  });
+});
+
+describe('manuallyGranted (achievements-panel)', () => {
+  const at = new Date('2026-10-01T00:00:00Z');
+  it('видима только не отозванная выдача с решением `granted`', () => {
+    const granted = { decision: 'granted' as const, at, byUserId: 'staff' };
+    expect(manuallyGranted({ revokedAt: null, override: granted })).toBe(true);
+    expect(manuallyGranted({ revokedAt: at, override: granted })).toBe(false);
+    expect(
+      manuallyGranted({ revokedAt: null, override: { ...granted, decision: 'revoked' } }),
+    ).toBe(false);
+    expect(manuallyGranted({ revokedAt: null, override: null })).toBe(false);
+    expect(manuallyGranted({ revokedAt: null })).toBe(false);
   });
 });

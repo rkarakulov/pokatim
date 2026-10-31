@@ -355,8 +355,10 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   `['routes','story',routeId,template,themeId]`, 404 — «Карточка недоступна» и «К маршруту»). Выбор «Карточка / Ссылка» —
   общий `ShareChoiceSheet` + `useShareChoice` (`features/sharing/share-choice-sheet.tsx`): оба пути — шит; гость —
   сразу ссылка; нет origin — сразу карточка; `shareLink` — синхронно в обработчике. Карточка достижения — `features/achievements/story/*`,
-  экран `achievements/story/[code]` внутри `Stack.Protected` (ключ `['achievements','story',code,template,themeId]`; 409 и
-  незнакомый код — «Карточки нет» и «К достижению»).
+  экран `achievements/story/[code]` внутри `Stack.Protected` (сезонное — `?season=<id>`; ключ
+  `['achievements','story',code,seasonId,template,themeId]`, `seasonId` в запросе — только у сезонного; сезонный без
+  валидного `Uuid` в `season` — «Карточки нет» без запроса, у несезонного `season` игнорируется; 409 и незнакомый код —
+  «Карточки нет» и «К достижению» → `achievementPath(code, seasonId)` каталога).
 
 ## Профиль райдера (rider-profile, `docs/product/profile.md`)
 
@@ -410,8 +412,8 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   уровень»), `achievementA11y` — с уровнем. Незнакомый код (`'unknown'`, RC-8) — `knownItems`
   отбрасывает везде (список, вспышка, публичный блок); «Поделиться» — карточка достижения у любого известного кода;
   незнакомый вид объекта — без «Сторис результата» (`shareRaceId`). Сезонные (achievements-seasonal): флаги каталога
-  `storyCard` (карточка для сторис; у сезонных `false` — «Поделиться» нет, прямой адрес карточки — «Карточки нет» без
-  запроса) и `seasonal`; `public: true`; условие «Сезон в зачёте» — `{count}` из `SEASON_REGULAR_MIN_RACES` (копии
+  `storyCard` (карточка для сторис; у сезонных `true` с achievement-season-story-card — «Поделиться» →
+  `achievementStoryPath(code, seasonOf(item))`, перед «К сезону») и `seasonal`; `public: true`; условие «Сезон в зачёте» — `{count}` из `SEASON_REGULAR_MIN_RACES` (копии
   нет). Ключ элемента — `achievementKey` (`code:seasonId` у `object.kind === 'season'`, иначе `code`): ключи React,
   поиск на экране, оптимистичная пометка; `flashKey` = `achievementKey:level`; адрес `seen` — `seenTarget`
   (`{ code, seasonId | null }`); путь экрана — `achievementItemPath` (`/achievements/<code>`, у сезонных
