@@ -936,6 +936,22 @@ select.field__control option:disabled {
   padding: var(--space-s3);
 }
 
+/* картинка до `load` скрыта (`hidden`), на её месте — скелетон 16:9 той же ширины; ошибка — кнопки под текстом */
+.ride-photo-preview[hidden] {
+  display: none;
+}
+
+.ride-photo-preview--skeleton {
+  aspect-ratio: 16 / 9;
+}
+
+.ride-photo-preview__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-s2);
+  margin-top: var(--space-s2);
+}
+
 /* форма одной колонкой с группами */
 .form-column {
   width: var(--panel-form-width);

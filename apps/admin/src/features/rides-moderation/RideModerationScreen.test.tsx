@@ -230,14 +230,14 @@ describe('фото организатора в карточке (ride-photo, P7,
     await open();
     expect(await screen.findByRole('heading', { name: 'Кофе-райд на море' })).toBeTruthy();
     expect(screen.getByText('Нет фото')).toBeTruthy();
-    expect(screen.queryByRole('img')).toBeNull();
+    expect(screen.queryByRole('img', { hidden: true })).toBeNull();
     expect(resetPhotoButton()).toBeNull();
   });
 
   it('видимый райд с фото — картинка по ridePhotoUrl и кнопка «Удалить фото»', async () => {
     mocked.getModerationRide.mockResolvedValue(detail({ photo: { id: PHOTO } }));
     await open();
-    const img = await screen.findByRole('img', { name: 'Фото организатора «Кофе-райд на море»' });
+    const img = await screen.findByAltText('Фото организатора «Кофе-райд на море»');
     expect(img.getAttribute('src')).toBe(PHOTO_URL);
     expect(mocked.ridePhotoUrl).toHaveBeenCalledWith(PHOTO);
     expect(resetPhotoButton()).toBeTruthy();
@@ -250,7 +250,7 @@ describe('фото организатора в карточке (ride-photo, P7,
     );
     await open();
     expect(await screen.findByText('Фото скрыто вместе с райдом')).toBeTruthy();
-    expect(screen.queryByRole('img')).toBeNull();
+    expect(screen.queryByRole('img', { hidden: true })).toBeNull();
     expect(mocked.ridePhotoUrl).not.toHaveBeenCalled();
     expect(resetPhotoButton()).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Вернуть' })).toBeTruthy();
@@ -297,7 +297,7 @@ describe('фото организатора в карточке (ride-photo, P7,
     mocked.getModerationRide.mockResolvedValue(detail({ photo: { id: NEXT } }));
     fireEvent.click(screen.getByRole('button', { name: 'Обновить' }));
     await waitFor(() =>
-      expect(screen.getByRole('img').getAttribute('src')).toBe(
+      expect(screen.getByRole('img', { hidden: true }).getAttribute('src')).toBe(
         `https://api.test/v1/ride-photos/${NEXT}`,
       ),
     );
@@ -310,5 +310,58 @@ describe('фото организатора в карточке (ride-photo, P7,
     await open();
     await confirmWith('Удалить фото', 'Чужое фото', 'Удалить фото');
     expect(await within(dialog()).findByText(/Не удалось сохранить/)).toBeTruthy();
+  });
+
+  describe('загрузка картинки (ревью pass 1, HIGH)', () => {
+    const photoImg = () => screen.getByAltText('Фото организатора «Кофе-райд на море»');
+
+    it('до onLoad — скелетон превью, картинка скрыта; после — скелетона нет', async () => {
+      mocked.getModerationRide.mockResolvedValue(detail({ photo: { id: PHOTO } }));
+      await open();
+      expect(await screen.findByTestId('ride-photo-skeleton')).toBeTruthy();
+      expect(photoImg().hidden).toBe(true);
+      fireEvent.load(photoImg());
+      expect(screen.queryByTestId('ride-photo-skeleton')).toBeNull();
+      expect(photoImg().hidden).toBe(false);
+    });
+
+    it('onError — «Фото недоступно»; «Повторить» перемонтирует картинку, «Обновить карточку» — перечитывает', async () => {
+      mocked.getModerationRide.mockResolvedValue(detail({ photo: { id: PHOTO } }));
+      await open();
+      await screen.findByTestId('ride-photo-skeleton');
+      const first = photoImg();
+      fireEvent.error(first);
+      expect(screen.getByText(/Фото недоступно/)).toBeTruthy();
+      expect(screen.queryByRole('img', { hidden: true })).toBeNull();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Повторить' }));
+      expect(screen.queryByText(/Фото недоступно/)).toBeNull();
+      expect(screen.getByTestId('ride-photo-skeleton')).toBeTruthy();
+      expect(photoImg()).not.toBe(first);
+      fireEvent.load(photoImg());
+      expect(photoImg().hidden).toBe(false);
+
+      fireEvent.error(photoImg());
+      const calls = mocked.getModerationRide.mock.calls.length;
+      mocked.getModerationRide.mockResolvedValue(detail({ photo: null }));
+      fireEvent.click(screen.getByRole('button', { name: 'Обновить карточку' }));
+      expect(await screen.findByText('Нет фото')).toBeTruthy();
+      expect(mocked.getModerationRide.mock.calls.length).toBeGreaterThan(calls);
+    });
+
+    it('смена photo.id сбрасывает состояние ошибки', async () => {
+      const NEXT = 'q'.repeat(43);
+      mocked.getModerationRide.mockResolvedValue(detail({ photo: { id: PHOTO } }));
+      await open();
+      await screen.findByTestId('ride-photo-skeleton');
+      fireEvent.error(photoImg());
+      mocked.getModerationRide.mockResolvedValue(detail({ photo: { id: NEXT } }));
+      fireEvent.click(screen.getByRole('button', { name: 'Обновить карточку' }));
+      await waitFor(() =>
+        expect(photoImg().getAttribute('src')).toBe(`https://api.test/v1/ride-photos/${NEXT}`),
+      );
+      expect(screen.queryByText(/Фото недоступно/)).toBeNull();
+      expect(screen.getByTestId('ride-photo-skeleton')).toBeTruthy();
+    });
   });
 });

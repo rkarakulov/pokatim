@@ -76,10 +76,62 @@ const isStale = (error: unknown) =>
   (httpStatus(error) === 409 && apiErrorOf(error)?.code === 'RIDE_INVALID_STATE');
 
 /**
+ * Картинка фото отдельным запросом: до `load` — скелетон превью, `error` (сеть, или фото сменилось/удалено/райд скрыт,
+ * пока карточка открыта) — «Фото недоступно» с «Повторить» (перемонтирует `<img>`) и «Обновить карточку». Состояние
+ * сбрасывается при смене фото: родитель монтирует по ключу `photo.id`.
+ */
+function PhotoImage({ src, alt, onReload }: { src: string; alt: string; onReload: () => void }) {
+  const [attempt, setAttempt] = useState(0);
+  const [status, setStatus] = useState<'loading' | 'loaded' | 'error'>('loading');
+
+  if (status === 'error') {
+    return (
+      <span className="ride-photo-preview ride-photo-preview--hidden t-meta" role="alert">
+        {t('admin.ridesModeration.photoUnavailable')}
+        <span className="ride-photo-preview__actions">
+          <Button
+            size="sm"
+            onClick={() => {
+              setAttempt((value) => value + 1);
+              setStatus('loading');
+            }}
+          >
+            {t('state.retry')}
+          </Button>
+          <Button size="sm" onClick={onReload}>
+            {t('admin.ridesModeration.reloadCard')}
+          </Button>
+        </span>
+      </span>
+    );
+  }
+  return (
+    <>
+      {status === 'loading' ? (
+        <span
+          className="skeleton ride-photo-preview ride-photo-preview--skeleton"
+          data-testid="ride-photo-skeleton"
+          aria-busy="true"
+        />
+      ) : null}
+      <img
+        key={attempt}
+        className="ride-photo-preview"
+        src={src}
+        alt={alt}
+        hidden={status === 'loading'}
+        onLoad={() => setStatus('loaded')}
+        onError={() => setStatus('error')}
+      />
+    </>
+  );
+}
+
+/**
  * Фото организатора (ride-photo): у скрытого райда публичная отдача — 404 (P6), поэтому вместо картинки плашка (R11);
  * id фото в карточке есть, «Удалить фото» доступна.
  */
-function RidePhoto({ ride }: { ride: ModerationRideDetail }) {
+function RidePhoto({ ride, onReload }: { ride: ModerationRideDetail; onReload: () => void }) {
   if (!ride.photo) return t('admin.ridesModeration.noPhoto');
   if (ride.status === 'hidden') {
     return (
@@ -89,15 +141,16 @@ function RidePhoto({ ride }: { ride: ModerationRideDetail }) {
     );
   }
   return (
-    <img
-      className="ride-photo-preview"
+    <PhotoImage
+      key={ride.photo.id}
       src={api.ridePhotoUrl(ride.photo.id)}
       alt={t('admin.ridesModeration.photoAlt', { title: ride.title })}
+      onReload={onReload}
     />
   );
 }
 
-function Preview({ ride }: { ride: ModerationRideDetail }) {
+function Preview({ ride, onReload }: { ride: ModerationRideDetail; onReload: () => void }) {
   const none = t('admin.ridesModeration.none');
   return (
     <div className="form-column">
@@ -161,7 +214,7 @@ function Preview({ ride }: { ride: ModerationRideDetail }) {
         />
         <ReadonlyField
           label={t('admin.ridesModeration.field.photo')}
-          value={<RidePhoto ride={ride} />}
+          value={<RidePhoto ride={ride} onReload={onReload} />}
         />
       </div>
     </div>
@@ -282,7 +335,7 @@ export function RideModerationScreen({ rideId }: { rideId: string }) {
         ) : stale ? (
           <ConflictBanner busy={ride.isFetching} onReload={() => void reload()} />
         ) : null}
-        <Preview ride={data} />
+        <Preview ride={data} onReload={() => void ride.refetch()} />
         <h2 className="form-group__title t-label">{t('admin.ridesModeration.reportsTitle')}</h2>
         <DataTable
           caption={t('admin.ridesModeration.reportsTitle')}

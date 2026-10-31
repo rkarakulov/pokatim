@@ -1755,6 +1755,9 @@ export const ru = {
   'admin.ridesModeration.noPhoto': 'Нет фото',
   'admin.ridesModeration.photoAlt': 'Фото организатора «{title}»',
   'admin.ridesModeration.photoHidden': 'Фото скрыто вместе с райдом',
+  'admin.ridesModeration.photoUnavailable':
+    'Фото недоступно. Возможно, его заменили или удалили — обновите карточку.',
+  'admin.ridesModeration.reloadCard': 'Обновить карточку',
   'admin.ridesModeration.resetPhoto': 'Удалить фото',
   'admin.ridesModeration.resetPhotoTitle': 'Удалить фото райда «{title}»?',
   'admin.ridesModeration.resetPhotoConsequences':
