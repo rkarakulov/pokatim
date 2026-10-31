@@ -46,6 +46,8 @@ describe('маршруты web-сервера: первое совпадение
     ['/welcome', '/welcome'],
     // event-tickets B: билет по ссылке из письма
     ['/tickets/ABCDE12345', '/tickets/[code]'],
+    // social P6: короткая ссылка приглашения с карточки для сторис
+    ['/i/K7M2PQX', '/i/[code]'],
     ['/', '/(tabs)/index'],
   ])('%s → %s', (url, page) => {
     expect(serverPage(url)).toBe(page);

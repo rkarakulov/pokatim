@@ -160,3 +160,21 @@ describe('единый формат ошибок', () => {
     expect(ApiError.parse(res.body).code).toBe('NOT_FOUND');
   });
 });
+
+describe('код приглашения (P6, K9)', () => {
+  const inviteOf = async () => (await collections(h).users.findOne())?.invite;
+
+  it('валидный код хранится на users в верхнем регистре', async () => {
+    expect((await register(h, { invite: 'k7m2pqx' })).status).toBe(201);
+    expect(await inviteOf()).toBe('K7M2PQX');
+  });
+
+  it.each([['K7M2PQ0'], [42], [null], [undefined]])(
+    'неверный формат или нет кода (%s) — 201 и invite: null',
+    async (invite) => {
+      const res = await register(h, invite === undefined ? {} : { invite });
+      expect(res.status).toBe(201);
+      expect(await inviteOf()).toBeNull();
+    },
+  );
+});

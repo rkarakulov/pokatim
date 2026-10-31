@@ -4,6 +4,7 @@ import { storyCard, type StoryCardColors, type StoryCardText } from '@pokatim/de
 import type { RideInviteTexts } from './ride-invite.texts';
 import {
   box,
+  brandRow,
   page,
   statRow,
   type StoryCardChild,
@@ -27,6 +28,8 @@ export interface RideInviteRenderInput {
   texts: RideInviteTexts;
   /** линия публичного маршрута; нет — ярус/плитка пусты, старт — текстом */
   track: StoryCardTrack | null;
+  /** короткая ссылка приглашения `<домен>/i/<код>` справа от бренда (P6); нет кода или домена — `null` */
+  address: string | null;
 }
 
 /** Метка, название, дата, время, старт — общий верх обоих шаблонов. */
@@ -113,7 +116,7 @@ function lineCard(input: RideInviteRenderInput): StoryCardNode {
         paddingTop: g.colophonPadTop,
         borderTop: `${storyCard.rule}px solid ${colors.rule}`,
       },
-      [text(storyCard.text.colophon, colors.ink, texts.brand)],
+      [brandRow(storyCard.text.colophon, colors, texts.brand, input.address)],
     ),
   ]);
 }
@@ -131,7 +134,7 @@ function nightCard(input: RideInviteRenderInput): StoryCardNode {
         paddingBottom: g.mastheadPadBottom,
         borderBottom: `${storyCard.rule}px solid ${colors.rule}`,
       },
-      [text(storyCard.text.masthead, colors.ink, texts.brand)],
+      [brandRow(storyCard.text.masthead, colors, texts.brand, input.address)],
     ),
     box({ flexGrow: 1, flexShrink: 1, minHeight: 0 }),
     box({ flexDirection: 'column', flexShrink: 0, marginBottom: g.copyBottom }, [

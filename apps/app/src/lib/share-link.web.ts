@@ -1,5 +1,6 @@
 import type { ShareLinkInput as NativeShareLinkInput, ShareOutcome } from './share-link';
 import type { ShareImage } from './share-image.web';
+import { withInvite } from './share-invite';
 
 export type { ShareOutcome } from './share-link';
 export type ShareLinkInput = Omit<NativeShareLinkInput, 'image'> & { image?: ShareImage };
@@ -29,7 +30,8 @@ function shareData({ title, text, image }: ShareLinkInput, url: string): ShareDa
 export async function shareLink(input: ShareLinkInput): Promise<ShareOutcome> {
   const origin = shareOrigin();
   if (!origin) throw new Error('share origin is not available');
-  const url = `${origin}${input.path}`;
+  // код приглашения вошедшего (P6): одно место для всех ссылок «Поделиться»
+  const url = `${origin}${withInvite(input.path)}`;
   if (typeof navigator.share === 'function') {
     try {
       await navigator.share(shareData(input, url));

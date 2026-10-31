@@ -93,6 +93,11 @@ export const storyCard = {
     achievementObject: { role: 'text', weight: 600, size: 42, lineHeight: 57 },
     /** число счётного значка «5» на кольце */
     badgeCount: { role: 'display', weight: 600, size: 60, lineHeight: 66 },
+    /**
+     * короткая ссылка приглашения `<домен>/i/<код>` справа от бренда (P6, K9) [ASSUMPTION — прототипа нет]: высота
+     * строки — как у колонтитула и мастхеда (геометрия ярусов не меняется), кегль меньше — помещается рядом с брендом
+     */
+    address: { role: 'text', weight: 600, size: 36, lineHeight: 54, tracking: 0.04 },
   } satisfies Record<string, StoryCardText>,
   night: {
     mastheadTop: 48,

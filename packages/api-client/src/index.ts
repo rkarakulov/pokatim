@@ -1,5 +1,6 @@
 import {
   AchievementList,
+  InviteCodeResponse,
   type AchievementCode,
   type AchievementStoryCardQuery,
   AppAppearance,
@@ -1230,6 +1231,14 @@ export function createApiClient({
         `/v1/rides/${encodeURIComponent(id)}/attendance/decline`,
         RideParticipants,
         {},
+      ),
+    // --- «Свои»: приглашения (P6, K9) ---
+    /** Личный код приглашения (`no-store`; выдаётся при первом запросе, дальше — тот же). */
+    getInviteCode: (accessToken: string) =>
+      request(
+        '/v1/social/invite-code',
+        InviteCodeResponse,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
       ),
   };
 }

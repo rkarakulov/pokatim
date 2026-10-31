@@ -1,4 +1,5 @@
 /// <reference types="jest" />
+import { setShareInvite } from './share-invite';
 import { shareLink, shareOrigin } from './share-link.web';
 
 const input = { title: 'Райд', text: 'Райд — дата', path: '/rides/x' };
@@ -31,6 +32,20 @@ describe('shareLink (web)', () => {
     abort.name = 'AbortError';
     nav.share = jest.fn().mockRejectedValue(abort);
     await expect(shareLink(input)).resolves.toBe('dismissed');
+  });
+
+  it('вошедший — ссылка с ?invite=<код>, гость — без (P6, AC2)', async () => {
+    nav.share = jest.fn().mockResolvedValue(undefined);
+    setShareInvite('K7M2PQX');
+    await shareLink(input);
+    setShareInvite(null);
+    await shareLink(input);
+    expect(nav.share).toHaveBeenNthCalledWith(1, {
+      title: 'Райд',
+      text: 'Райд — дата',
+      url: `${url}?invite=K7M2PQX`,
+    });
+    expect(nav.share).toHaveBeenNthCalledWith(2, { title: 'Райд', text: 'Райд — дата', url });
   });
 
   it('без Web Share — копирование ссылки в буфер', async () => {
