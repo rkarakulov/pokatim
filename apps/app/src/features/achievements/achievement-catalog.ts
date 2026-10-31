@@ -192,11 +192,15 @@ export const seenTarget = (item: KnownAchievement<PublicRiderAchievement>): Seen
   seasonId: item.object.kind === 'season' ? item.object.id : null,
 });
 
+/** Экран своего достижения по коду и сезону: `/achievements/<code>`, у сезонных — `?season=<id>`. */
+export const achievementPath = (code: PublicRiderAchievement['code'], seasonId: string | null) =>
+  seasonId === null
+    ? `/achievements/${code}`
+    : `/achievements/${code}?season=${encodeURIComponent(seasonId)}`;
+
 /** Экран своего достижения: `/achievements/<code>`, у сезонных — `?season=<id>`. */
 export const achievementItemPath = (item: Pick<PublicRiderAchievement, 'code' | 'object'>) =>
-  item.object.kind === 'season'
-    ? `/achievements/${item.code}?season=${encodeURIComponent(item.object.id)}`
-    : `/achievements/${item.code}`;
+  achievementPath(item.code, item.object.kind === 'season' ? item.object.id : null);
 
 /** Сезон объекта для «К сезону» (S7); не сезон — `null`. */
 export const seasonOf = (item: Pick<PublicRiderAchievement, 'object'>): string | null =>

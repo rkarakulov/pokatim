@@ -351,6 +351,38 @@ P1–P6 приняты; изменения предлагаются только
   expand); перед мержем проверить номер ещё раз.
 - Противоречий с инвариантами нет: outbox в транзакции (§4.5), тяжёлое — в worker, сервер решает выдачу и канал.
 
+## 8.2 Решения и отклонения реализации
+
+Решения оркестратора: RC-P1 (b) — для N2; RC-P2 (a) — заголовок «Новое достижение: Чемпион сезона», тело «Сезон
+«…»»; RC-P5 (a) — имена из каталога `@pokatim/i18n`; остальные RC — по рекомендации architect (RC-P3 (a), RC-P6 (a),
+RC-P8, RC-P9 (a), RC-P10 — два PR).
+
+Отклонения N1 (coder, 2026-10-31):
+
+- **`noticeDue` — только для `refresh`/`restore`** (формула 7.2); вставка не в первой сверке уведомляет всегда — это
+  решает сверка (`AchievementsReconciler.apply`), не функция.
+- **Порт `ACHIEVEMENT_NOTICES` строже 5.B:** несезонная — `state` и тогда, когда ранг по фактам ниже ранга события;
+  сезонная — `state`, если сезона нет среди завершённых (`seasonTitles` пуст).
+- **`inApp` важнее `push_off`:** `reason: 'in_app'` при любом состоянии канала (в центр без push по замыслу P1).
+- **Service worker:** цель `achievement` добавлена и в копию белого списка SW (`scripts/service-worker.ts`) — иначе
+  Web Push открывал бы центр; коды — `SW_ACHIEVEMENT_CODES` (генератор SW запускается Node без сборки пакетов),
+  равенство с `ACHIEVEMENT_CODES` и паритет путей держит `notification-target.test.ts`.
+- **Reuse пути экрана:** из `achievementItemPath` выделен `achievementPath(code, seasonId)` (им собираются оба пути);
+  цель уведомления не строит строку сама.
+- **Экран настроек:** разметка группы «Маршруты» вынесена в общий `PushOnlyGroup` («Маршруты» и «Достижения» — одна
+  форма `{ push }`), поведение «Маршрутов» не менялось (тесты прежние).
+- **Отрицательное доказательство (б)** — детерминированно, последовательно: проигравшая сверка получает снимок плана
+  до вставки победившей (подмена `listOf` на один вызов) → её вставка даёт дубль в транзакции. С перехватом дубля внутри
+  колбэка сервер уже оборвал транзакцию: следующая операция (событие) падает `NoSuchTransaction`, драйвер повторил бы
+  колбэк до таймаута `withTransaction` (120 с) — ворота теста останавливают повтор после первого отказа, результат —
+  500 и `NoSuchTransaction`. Параллельные GET вместо снимка давали недетерминированный исход (то 500, то повтор до
+  таймаута).
+- **Отрицательное доказательство (в):** подмена `restoreOrRefresh` возвращает «документ до записи» из снимка плана
+  (бронза, ничего не объявлено) — параллельные сверки дают больше одного события; центр схлопывает их в одно
+  уведомление (вторая линия, N7) — это тоже проверяется.
+- `push.test.ts` приложения не менялся: путь нажатия push — `pushTargetPath` (unit + паритет SW в
+  `notification-target.test.ts`).
+
 ## 9. Acceptance Criteria
 
 - AC1. Новая выдача после первой сверки (GET или worker) → одно уведомление в центре + push; повторная сверка и
@@ -415,3 +447,40 @@ PR N2
 3. `AchievementsSweep`: курсоры, `settleMs`/`rideSettleMs`, `liveUserIds` ∩ `syncedAmong`, постановка (int AC5).
 4. Процессор, расписание, `worker.module.ts`, очередь (int AC3 через реальные очереди до фейкового Expo).
 5. Документы N2, `pnpm check`.
+
+## 12. Outcome
+
+### N1 — уведомление о выдаче из сверки `GET /v1/achievements` (2026-10-31)
+
+Сделано:
+
+- Контракты: группа `achievements`, вид `achievement_granted`, цель `achievement` (`code`, `seasonId?`), подресурс
+  `AchievementNotificationSettingsView` / `UpdateAchievementNotificationSettings` / `DEFAULT_…` (+ тест «старый разбор
+  → `unknown`»); api-client `get/updateAchievementNotificationSettings`.
+- `achievements`: `noticeDue` (политика), `notifiedLevel`, `insertGrantInTx` / `insertSeasonalInTx`,
+  `restoreOrRefresh` → `findOneAndUpdate` pipeline (`returnDocument: 'before'`), `findGrant`; `AchievementsReconciler`
+  (`reconcile(userId, origin)`, транзакция + outbox только у шагов с событием; `origin: 'server'` готов для N2, вызывающего
+  пока нет); `AchievementsService` — лимит + ответ; событие `achievements.grant-noticed`; порт `ACHIEVEMENT_NOTICES`;
+  `AchievementsSyncModule`. `standings`: `RIDER_SEASON_STANDINGS.seasonTitles`.
+- `notifications`: маршрут события, `achievementGranted` (цель, схлопывание `achievement:<grantId>` по рангу, `inApp`
+  при `origin: 'read'`), `initialDelivery(…, { inApp })` → `skipped/in_app`, группа и `KIND_GROUPS`, тексты (заголовок
+  — функция, имена из каталога), подресурс `GET|PUT settings/achievements` (`push.achievements`, нет поля — включено).
+- Приложение: цель → `/achievements/<код>` (`?season=`), в т. ч. в service worker; секция «Достижения» (только push,
+  последней; 404 — секции нет); строка i18n.
+- Документы: ADR-0017 (дополнение + RC-P5), ADR-0020 («Дополнение: push»), `notifications.md` (N3, N4, N10, P6, тексты),
+  `profile.md`, `.claude/rules/pokatim-{backend,db,contracts,app}.md`.
+
+Отрицательные доказательства (`achievements-notices.int.test.ts`; механизм убран подменой — тест показывает нарушение
+по результату):
+
+- (а) вставка выдачи вне транзакции события + сбой `append` → выдача есть, события нет навсегда (`{ grants: 1, events: 0 }`);
+  с транзакцией — сбой откатывает выдачу, следующий GET выдаёт с событием (`{ grants: 1, events: 1 }`).
+- (б) дубль уникального индекса глотается внутри колбэка → `NoSuchTransaction` на записи события, 500; с перехватом
+  снаружи `run` — проигравшая сверка 200 без второго события.
+- (в) решение о событии по снимку плана, а не по документу до записи в транзакции → параллельные `reconcile` × 3 дают
+  > 1 события (центр схлопывает в одно); с механизмом — ровно одно.
+- Гонки AC1 (`achievements.int.test.ts`): `reconcile('read')` × 4 + `reconcile('server')` с воротами на чтении — одна
+  выдача, одно событие, одно уведомление на код; то же при повышении до серебра — одно событие `level: 2`.
+
+Не входит в N1 (N2): worker и регламент `achievements.sweep`, методы портов источников, миграция `0044`, push без
+открытия приложения (AC3, AC5).

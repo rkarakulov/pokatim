@@ -11,6 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import {
+  type AchievementNotificationSettingsView,
   type EventNotificationSettingsView,
   FieldErrorCode,
   NotificationListQuery,
@@ -22,6 +23,7 @@ import {
   RevokeWebPushSubscription,
   type RouteNotificationSettingsView,
   type UnreadCount,
+  UpdateAchievementNotificationSettings,
   UpdateEventNotificationSettings,
   UpdateRouteNotificationSettings,
   Uuid,
@@ -112,6 +114,25 @@ export class NotificationsController {
     body: UpdateRouteNotificationSettings,
   ): Promise<RouteNotificationSettingsView> {
     return this.settings.putRoutes(user.userId, body);
+  }
+
+  /** Группа «Достижения» — подресурс, только push (achievements-push, P4). */
+  @Get('settings/achievements')
+  @Header('Cache-Control', 'no-store')
+  getAchievementSettings(
+    @CurrentUser() user: AuthUser,
+  ): Promise<AchievementNotificationSettingsView> {
+    return this.settings.getAchievements(user.userId);
+  }
+
+  @Put('settings/achievements')
+  @HttpCode(200)
+  putAchievementSettings(
+    @CurrentUser() user: AuthUser,
+    @Body(new ZodValidationPipe(UpdateAchievementNotificationSettings, FieldErrorCode))
+    body: UpdateAchievementNotificationSettings,
+  ): Promise<AchievementNotificationSettingsView> {
+    return this.settings.putAchievements(user.userId, body);
   }
 
   @Put('push-tokens')

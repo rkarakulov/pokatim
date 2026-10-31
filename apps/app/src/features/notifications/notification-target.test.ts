@@ -1,5 +1,8 @@
 /// <reference types="jest" />
+import { ACHIEVEMENT_CODES } from '@pokatim/contracts';
+
 import { loadServiceWorker } from '../../../scripts/service-worker-harness';
+import { SW_ACHIEVEMENT_CODES } from '../../../scripts/service-worker';
 import { notificationTargetPath, pushTargetPath } from './notification-target';
 
 const RACE = '0190a6f4-0000-7000-8000-000000000001';
@@ -18,6 +21,11 @@ describe('notificationTargetPath — белый список целей (N10)', 
     [{ type: 'my-route', routeId: ROUTE }, `/routes/mine/${ROUTE}`],
     [{ type: 'ticket', code: '7XK2M9PQRT' }, '/tickets/7XK2M9PQRT'],
     [{ type: 'profile-edit' }, '/settings/profile'],
+    [{ type: 'achievement', code: 'race_podium' }, '/achievements/race_podium'],
+    [
+      { type: 'achievement', code: 'season_champion', seasonId: RACE },
+      `/achievements/season_champion?season=${RACE}`,
+    ],
   ])('%j → %s', (target, path) => {
     expect(notificationTargetPath(target)).toBe(path);
   });
@@ -33,6 +41,9 @@ describe('notificationTargetPath — белый список целей (N10)', 
     ['маршрут не Uuid', { type: 'my-route', routeId: '../publish/x' }],
     ['код билета не канонический', { type: 'ticket', code: '7xk2m-9pqrt' }],
     ['код билета — путь', { type: 'ticket', code: '../../settings' }],
+    ['незнакомый код достижения', { type: 'achievement', code: 'future_code' }],
+    ['код достижения — путь', { type: 'achievement', code: '../settings' }],
+    ['сезон не Uuid', { type: 'achievement', code: 'season_podium', seasonId: '../x' }],
   ])('%s — без перехода', (_case, target) => {
     expect(notificationTargetPath(target)).toBeNull();
   });
@@ -61,6 +72,11 @@ describe('паритет с service worker (Web Push, ADR-0022)', () => {
     { type: 'ticket', code: '7XK2M9PQRU' },
     { type: 'ticket', code: '../admin/x' },
     { type: 'profile-edit' },
+    { type: 'achievement', code: 'races_5' },
+    { type: 'achievement', code: 'season_regular', seasonId: RACE },
+    { type: 'achievement', code: 'future_code' },
+    { type: 'achievement', code: 'season_podium', seasonId: '../x' },
+    { type: 'achievement' },
     { type: 'race', raceId: '../admin' },
     { type: 'race', raceId: RACE.toUpperCase() },
     { type: 'race', raceId: '00000000-0000-0000-0000-000000000000' },
@@ -73,4 +89,8 @@ describe('паритет с service worker (Web Push, ADR-0022)', () => {
     await sw.click(target);
     expect(sw.opened).toEqual([pushTargetPath(target)]);
   });
+});
+
+it('коды достижений service worker — копия каталога контрактов', () => {
+  expect(SW_ACHIEVEMENT_CODES).toEqual(ACHIEVEMENT_CODES);
 });

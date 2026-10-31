@@ -23,11 +23,23 @@
    (`route_published`, `route_rejected`), только push; подресурс `GET|PUT /v1/notifications/settings/routes`
    (`push.routes`, нет поля — значение `push.rides`). Группа хранится в документе уведомления: прежние `route_*` с
    `group: 'rides'` доставляются по тумблеру «Райдов».
+   **Дополнено (achievements-push N1, 2026-10-31):** шестая группа «Достижения» — `achievement_granted` (новое
+   достижение, уровень, сезонное), только push, по умолчанию включена без наследования; подресурс `GET|PUT
+   /v1/notifications/settings/achievements` (`push.achievements`, нет поля — включено). Новый источник
+   `achievements.grant-noticed` (15 типов в `notificationsOutboxRoutes`), порт `ACHIEVEMENT_NOTICES`
+   (`AchievementsSyncModule`). Выдача, найденная сверкой при чтении (`origin: 'read'`, райдер в приложении), — в центр
+   без push: `push.skipped`, `reason: 'in_app'` (`NoticeDraft.inApp`, `initialDelivery(…, { inApp })`); серверная
+   сверка (`origin: 'server'`, PR N2) — по тумблеру группы. Схлопывание `achievement:<grantId>` по рангу (`seq`): одно
+   уведомление на (выдача, уровень), новый уровень заменяет прежний.
 2. **Модуль `notifications`** — единственный потребитель событий для уведомлений. Модули-источники (`results`,
    `disputes`, `rides`, `routes`) пишут только outbox в своих транзакциях (payload — id и коды, без `userId` и текстов) и дают
    порт чтения получателей и полей текста через `index.ts`. Чужих коллекций `notifications` не читает.
 3. **Текст рендерит сервер при создании** и хранит снимком (словарь модуля, не `@pokatim/i18n`); цель перехода — тип
-   и id из белого списка (`race`, `ride`, `dispute-response`, `my-route`), адресов нет. Незнакомая цель в ответе —
+   и id из белого списка (`race`, `ride`, `dispute-response`, `my-route`; позже `ticket`, `profile-edit`,
+   `achievement` — код из строгого `AchievementCode` и `seasonId?`), адресов нет. **Уточнение (achievements-push,
+   RC-P5):** имена достижений, уровней и объектов («Подиум», «Серебро», «Гонка «…»») — строки каталога `@pokatim/i18n`
+   (`achievements.*`, как карточка достижения `sharing`), второго каталога в модуле нет; снимок по-прежнему рендерит
+   сервер. Незнакомая цель в ответе —
    `{ type: 'unknown' }`, приложение не переходит; из push — открывает центр.
 4. **Доставка at-least-once.** Захват (lease) в документе уведомления, ретраи BullMQ, повтор задачи не шлёт второй
    push или письмо. Остаточный риск — дубль при падении worker между ответом Expo/SMTP и записью факта.

@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { tolerantEnum } from '../common.ts';
 
 import {
+  AchievementNotificationSettingsView,
+  DEFAULT_ACHIEVEMENT_NOTIFICATION_SETTINGS,
   DEFAULT_EVENT_NOTIFICATION_SETTINGS,
   DEFAULT_NOTIFICATION_SETTINGS,
   DEFAULT_ROUTE_NOTIFICATION_SETTINGS,
@@ -23,6 +25,7 @@ import {
   RevokeWebPushSubscription,
   RouteNotificationSettingsView,
   UnreadCount,
+  UpdateAchievementNotificationSettings,
   UpdateEventNotificationSettings,
   UpdateRouteNotificationSettings,
   WebPushConfig,
@@ -51,7 +54,14 @@ const view = (overrides: Record<string, unknown> = {}) => ({
 
 describe('справочники уведомлений (только в конец)', () => {
   it('порядок значений зафиксирован', () => {
-    expect(NOTIFICATION_GROUPS).toEqual(['races', 'disputes', 'rides', 'events', 'routes']);
+    expect(NOTIFICATION_GROUPS).toEqual([
+      'races',
+      'disputes',
+      'rides',
+      'events',
+      'routes',
+      'achievements',
+    ]);
     expect(NOTIFICATION_KINDS).toEqual([
       'result_counted',
       'result_rejected',
@@ -73,6 +83,7 @@ describe('справочники уведомлений (только в кон�
       'profile_name_reset',
       'profile_avatar_reset',
       'profile_club_reset',
+      'achievement_granted',
     ]);
     expect(PUSH_PLATFORMS).toEqual(['ios', 'android']);
   });
@@ -129,6 +140,45 @@ describe('ответы (tolerantEnum, неизвестная цель)', () => {
     expect(NotificationView.parse(view({ kind: 'route_published', group: 'routes' })).group).toBe(
       'routes',
     );
+  });
+
+  it('цель achievement: строгий код, seasonId — Uuid; незнакомый код или битый сезон — unknown', () => {
+    expect(NotificationTargetView.parse({ type: 'achievement', code: 'race_podium' })).toEqual({
+      type: 'achievement',
+      code: 'race_podium',
+    });
+    expect(
+      NotificationTargetView.parse({ type: 'achievement', code: 'season_champion', seasonId: ID }),
+    ).toEqual({ type: 'achievement', code: 'season_champion', seasonId: ID });
+    for (const target of [
+      { type: 'achievement', code: 'future_code' },
+      { type: 'achievement', code: 'season_champion', seasonId: 'https://evil.test' },
+      { type: 'achievement' },
+    ]) {
+      expect(NotificationTargetView.parse(target)).toEqual({ type: 'unknown' });
+    }
+  });
+
+  it('группа achievements и вид achievement_granted в сборке без них — unknown', () => {
+    const OLD_GROUPS = ['races', 'disputes', 'rides', 'events', 'routes'] as const;
+    // справочник видов сборки до achievements-push: всё, кроме последнего значения
+    const [first, ...rest] = NOTIFICATION_KINDS.filter((kind) => kind !== 'achievement_granted');
+    const OLD_KINDS = [first!, ...rest] as const;
+    const old = NotificationView.extend({
+      group: tolerantEnum(OLD_GROUPS),
+      kind: tolerantEnum(OLD_KINDS),
+    });
+    const item = view({
+      kind: 'achievement_granted',
+      group: 'achievements',
+      title: 'Новое достижение: Подиум',
+      target: { type: 'achievement', code: 'race_podium' },
+    });
+    const parsed = old.parse(item);
+    expect(parsed.group).toBe('unknown');
+    expect(parsed.kind).toBe('unknown');
+    expect(parsed.title).toBe('Новое достижение: Подиум');
+    expect(NotificationView.parse(item).group).toBe('achievements');
   });
 
   it('страница и счётчик', () => {
@@ -212,6 +262,33 @@ describe('настройки «Маршруты» (подресурс, толь�
       NotificationSettings.safeParse({
         ...DEFAULT_NOTIFICATION_SETTINGS,
         push: { ...DEFAULT_NOTIFICATION_SETTINGS.push, routes: true },
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe('настройки «Достижения» (подресурс, только push)', () => {
+  it('умолчания — включено; ответ терпит лишние ключи', () => {
+    expect(DEFAULT_ACHIEVEMENT_NOTIFICATION_SETTINGS).toEqual({ push: true });
+    expect(AchievementNotificationSettingsView.parse({ push: false, email: true })).toEqual({
+      push: false,
+    });
+  });
+
+  it('запрос строгий: push обязателен, лишние ключи и не boolean — ошибка', () => {
+    expect(UpdateAchievementNotificationSettings.parse({ push: false })).toEqual({ push: false });
+    expect(codesOf(UpdateAchievementNotificationSettings.safeParse({}))).toEqual(['push:REQUIRED']);
+    expect(
+      UpdateAchievementNotificationSettings.safeParse({ push: true, email: true }).success,
+    ).toBe(false);
+    expect(UpdateAchievementNotificationSettings.safeParse({ push: 'yes' }).success).toBe(false);
+  });
+
+  it('основные настройки не меняются: ключ achievements — ошибка (старые сборки)', () => {
+    expect(
+      NotificationSettings.safeParse({
+        ...DEFAULT_NOTIFICATION_SETTINGS,
+        push: { ...DEFAULT_NOTIFICATION_SETTINGS.push, achievements: true },
       }).success,
     ).toBe(false);
   });

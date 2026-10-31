@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import {
+  type AchievementNotificationSettingsView,
   DEFAULT_NOTIFICATION_SETTINGS,
   type EventNotificationSettingsView,
   type NotificationSettings,
@@ -28,7 +29,8 @@ import type { DeliverySettings } from './notifications.policy';
 
 /**
  * Документ настроек → настройки доставки: нет тумблеров «Мероприятия» — включены (RC-D1); нет `push.routes` — значение
- * `push.rides` (райдер, выключивший «Райды», не начинает получать push о решении по маршруту).
+ * `push.rides` (райдер, выключивший «Райды», не начинает получать push о решении по маршруту); нет `push.achievements`
+ * — включено (P4).
  */
 const deliverySettingsOf = (
   doc: Pick<NotificationSettingsDoc, 'push' | 'email' | 'quietHours'>,
@@ -37,6 +39,7 @@ const deliverySettingsOf = (
     ...doc.push,
     events: doc.push.events ?? true,
     routes: doc.push.routes ?? doc.push.rides,
+    achievements: doc.push.achievements ?? true,
   },
   email: { ...doc.email, events: doc.email.events ?? true },
   quietHours: doc.quietHours,
@@ -315,6 +318,22 @@ export class NotificationsRepository {
     await this.settings.updateOne(
       { _id: userId },
       { $set: { 'push.routes': routes.push, updatedAt: now }, $setOnInsert: settingsOnInsert() },
+      { upsert: true },
+    );
+  }
+
+  /** Тумблер «Достижения» (подресурс, только push): `$set push.achievements`; новый документ — как у «Мероприятий». */
+  async saveAchievementSettings(
+    userId: string,
+    achievements: AchievementNotificationSettingsView,
+    now: Date,
+  ): Promise<void> {
+    await this.settings.updateOne(
+      { _id: userId },
+      {
+        $set: { 'push.achievements': achievements.push, updatedAt: now },
+        $setOnInsert: settingsOnInsert(),
+      },
       { upsert: true },
     );
   }

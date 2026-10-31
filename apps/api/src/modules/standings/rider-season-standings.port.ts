@@ -40,4 +40,9 @@ export interface RiderSeasonStandings {
     alsoSeasonIds: readonly string[],
     now: Date,
   ): Promise<RiderSeasonOutcome[]>;
+  /**
+   * Названия **завершённых** сезонов из `seasonIds` (текст уведомления о сезонном достижении, achievements-push): лёгкое
+   * чтение через `SEASON_RACES.finishedSeasons`, без снимка и источника. Незавершённые и неизвестные — нет в карте.
+   */
+  seasonTitles(seasonIds: readonly string[], now: Date): Promise<Map<string, string>>;
 }

@@ -1,4 +1,7 @@
+import { type MessageKey, t } from '@pokatim/i18n';
 import {
+  type AchievementCode,
+  type AchievementObjectKind,
   type DisputeOutcome,
   type NotificationKind,
   PLATFORM_TIME_ZONE,
@@ -7,8 +10,9 @@ import {
 
 /**
  * Словарь текстов уведомлений (RC-9, «Тексты v1» `docs/product/notifications.md`). Строки сервера живут в модуле, как
- * письма identity и `error-messages.ts`: api от `@pokatim/i18n` не зависит. Текст рендерится при создании и хранится
- * снимком. Только название гонки, райда или маршрута, дата, число, код причины — без имён и текстов других райдеров (N12). Даты — по Минску.
+ * письма identity и `error-messages.ts`; исключение (achievements-push, RC-P5) — имена достижений, уровней и объектов
+ * берутся из каталога `@pokatim/i18n` (`achievements.*`, как карточка достижения `sharing`), второго каталога нет.
+ * Текст рендерится при создании и хранится снимком. Только название гонки, райда или маршрута, дата, число, код причины — без имён и текстов других райдеров (N12). Даты — по Минску.
  */
 export type NoticeText =
   | { kind: 'result_counted' | 'result_rejected'; race: string; activityAt: Date }
@@ -32,7 +36,15 @@ export type NoticeText =
   /** напоминание о событии с билетом (PR D): текст правила — организатора, не ПДн райдеров */
   | { kind: 'event_reminder'; event: string; startsAt: Date; place: string | null; text: string }
   | { kind: 'profile_name_reset' | 'profile_club_reset' }
-  | { kind: 'profile_avatar_reset'; blockedUntil: Date | null };
+  | { kind: 'profile_avatar_reset'; blockedUntil: Date | null }
+  /** новое достижение, уровень (ранг 2–3 — «Новый уровень») или сезонное; объект — свой (гонка, маршрут, райд, сезон) */
+  | {
+      kind: 'achievement_granted';
+      code: AchievementCode;
+      level: 1 | 2 | 3 | null;
+      objectKind: AchievementObjectKind;
+      objectTitle: string;
+    };
 
 export interface RenderedText {
   title: string;
@@ -58,6 +70,23 @@ const dayTime = (at: Date) => `${dayMonth.format(at)}, ${hourMinute.format(at)}`
 /** Название в кавычках «…»: снимок — одна строка. */
 const quoted = (name: string) => `«${name.replace(/\s+/g, ' ').trim()}»`;
 
+/** Одна строка: пробелы и переводы строк схлопываются. */
+const oneLine = (text: string) => text.replace(/\s+/g, ' ').trim();
+const LEVEL_KEYS = ['bronze', 'silver', 'gold'] as const;
+
+/**
+ * Заголовок о новом достижении (P5, RC-P2): ранг ≥ 2 — «Новый уровень: Гонщик · Серебро» (как вспышка `isLevelUp`),
+ * иначе — «Новое достижение: Подиум» (счётное на бронзе и сезонное — тоже).
+ */
+function achievementTitle(input: Extract<NoticeText, { kind: 'achievement_granted' }>): string {
+  const name = t(`achievements.${input.code}.title` as MessageKey);
+  if (input.level !== null && input.level >= 2) {
+    const level = t(`achievements.level.${LEVEL_KEYS[input.level - 1]}` as MessageKey);
+    return `${t('achievements.flash.levelUp')}: ${name} · ${level}`;
+  }
+  return `${t('achievements.flash.kicker')}: ${name}`;
+}
+
 const OUTCOME: Record<DisputeOutcome, string> = {
   upheld: 'удовлетворён',
   rejected: 'отклонён',
@@ -73,7 +102,7 @@ const REJECTION: Record<RouteRejectionReason, string> = {
   other: 'Подробности — в карточке маршрута.',
 };
 
-const TITLES: Record<NotificationKind, string> = {
+const TITLES: Record<Exclude<NotificationKind, 'achievement_granted'>, string> = {
   result_counted: 'Результат засчитан',
   result_rejected: 'Результат не засчитан',
   protocol_published: 'Протокол опубликован',
@@ -142,12 +171,17 @@ function bodyOf(input: NoticeText): string {
         : 'Модератор удалил фото после жалоб. Загрузите другое фото.';
     case 'profile_club_reset':
       return 'Модератор сбросил клуб после жалоб. Укажите другой клуб в профиле.';
+    case 'achievement_granted':
+      return t(`achievements.object.${input.objectKind}` as MessageKey, {
+        title: oneLine(input.objectTitle),
+      });
   }
 }
 
 /** Заголовок и текст уведомления по таблице продукта. */
 export function renderNotification(input: NoticeText): RenderedText {
-  return { title: TITLES[input.kind], body: bodyOf(input) };
+  const title = input.kind === 'achievement_granted' ? achievementTitle(input) : TITLES[input.kind];
+  return { title, body: bodyOf(input) };
 }
 
 /** Русская форма числа: `one` (1, 21, 101), `few` (2–4, 22–24), `many` (0, 5–20, 11–14, 25…). */

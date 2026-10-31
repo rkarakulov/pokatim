@@ -39,6 +39,8 @@ import {
   type UpdateEventNotificationSettings,
   RouteNotificationSettingsView,
   type UpdateRouteNotificationSettings,
+  AchievementNotificationSettingsView,
+  type UpdateAchievementNotificationSettings,
   type RegisterPushToken,
   type RevokePushToken,
   type RegisterWebPushSubscription,
@@ -1070,6 +1072,23 @@ export function createApiClient({
       request(
         '/v1/notifications/settings/routes',
         RouteNotificationSettingsView,
+        authorized(accessToken, { method: 'PUT', body: JSON.stringify(body), ...withCredentials }),
+      ),
+    /** Тумблер группы «Достижения» (подресурс, только push); нет сохранённого — включено. */
+    getAchievementNotificationSettings: (accessToken: string) =>
+      request(
+        '/v1/notifications/settings/achievements',
+        AchievementNotificationSettingsView,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /** Замена тумблера «Достижения»; ответ — сохранённый. */
+    updateAchievementNotificationSettings: (
+      accessToken: string,
+      body: UpdateAchievementNotificationSettings,
+    ) =>
+      request(
+        '/v1/notifications/settings/achievements',
+        AchievementNotificationSettingsView,
         authorized(accessToken, { method: 'PUT', body: JSON.stringify(body), ...withCredentials }),
       ),
     /** Регистрация или обновление push-токена этого устройства; `204`. */

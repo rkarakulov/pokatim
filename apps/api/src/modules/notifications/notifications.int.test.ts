@@ -68,6 +68,8 @@ describe('без сессии', () => {
     ['PUT', `${NOTIFICATIONS}/settings/events`],
     ['GET', `${NOTIFICATIONS}/settings/routes`],
     ['PUT', `${NOTIFICATIONS}/settings/routes`],
+    ['GET', `${NOTIFICATIONS}/settings/achievements`],
+    ['PUT', `${NOTIFICATIONS}/settings/achievements`],
     ['PUT', `${NOTIFICATIONS}/push-tokens`],
     ['POST', `${NOTIFICATIONS}/push-tokens/revoke`],
     ['POST', `${NOTIFICATIONS}/read-all`],
@@ -338,6 +340,60 @@ describe('настройки «Мероприятия» (подресурс, RC-
     }
     expect((await as(a, 'PUT', EVENTS, { push: true, email: true })).status).toBe(200);
     const limited = await as(a, 'PUT', EVENTS, { push: true, email: true });
+    expect(limited.status).toBe(429);
+    expect(limited.body).toMatchObject({ code: 'RATE_LIMITED' });
+  });
+});
+
+describe('настройки «Достижения» (подресурс, только push, achievements-push P4)', () => {
+  const ACHIEVEMENTS = `${NOTIFICATIONS}/settings/achievements`;
+  const custom: NotificationSettings = {
+    push: { races: false, disputes: true, rides: false },
+    email: { disputes: false, rides: true },
+    quietHours: { enabled: true, startHour: 23, endHour: 7 },
+  };
+
+  it('нет документа и нет поля — включено (без наследования от «Райдов»); no-store', async () => {
+    const initial = await as(a, 'GET', ACHIEVEMENTS);
+    expect(initial.status).toBe(200);
+    expect(initial.headers['cache-control']).toBe('no-store');
+    expect(initial.body).toEqual({ push: true });
+    await as(a, 'PUT', `${NOTIFICATIONS}/settings`, custom);
+    expect((await as(a, 'GET', ACHIEVEMENTS)).body).toEqual({ push: true });
+  });
+
+  it('PUT пишет только push.achievements; /settings — прежняя форма; PUT /settings старой формы его не стирает', async () => {
+    await as(a, 'PUT', `${NOTIFICATIONS}/settings`, custom);
+    const saved = await as(a, 'PUT', ACHIEVEMENTS, { push: false });
+    expect(saved.status).toBe(200);
+    expect(saved.body).toEqual({ push: false });
+    expect((await as(a, 'GET', ACHIEVEMENTS)).body).toEqual({ push: false });
+    expect((await as(a, 'GET', `${NOTIFICATIONS}/settings`)).body).toEqual(custom);
+    await as(a, 'PUT', `${NOTIFICATIONS}/settings`, {
+      ...custom,
+      push: { ...custom.push, rides: true },
+    });
+    expect((await as(a, 'GET', ACHIEVEMENTS)).body).toEqual({ push: false });
+    expect((await as(b, 'GET', ACHIEVEMENTS)).body).toEqual({ push: true });
+  });
+
+  it('PUT без документа — умолчания основных настроек ($setOnInsert): /settings — полный объект', async () => {
+    expect((await as(a, 'PUT', ACHIEVEMENTS, { push: false })).status).toBe(200);
+    expect((await as(a, 'GET', `${NOTIFICATIONS}/settings`)).body).toEqual(
+      DEFAULT_NOTIFICATION_SETTINGS,
+    );
+  });
+
+  it('лишний ключ, пустой объект, не boolean — 400; лимит общий с /settings — 429', async () => {
+    for (const body of [{}, { push: true, email: true }, { push: 1 }]) {
+      const res = await as(a, 'PUT', ACHIEVEMENTS, body);
+      expect(res.status).toBe(400);
+      expect(res.body).toMatchObject({ code: 'VALIDATION_FAILED' });
+    }
+    for (let i = 0; i < NOTIFICATIONS_POLICY.settingsLimit.limit; i++) {
+      expect((await as(a, 'PUT', ACHIEVEMENTS, { push: true })).status).toBe(200);
+    }
+    const limited = await as(a, 'PUT', `${NOTIFICATIONS}/settings`, custom);
     expect(limited.status).toBe(429);
     expect(limited.body).toMatchObject({ code: 'RATE_LIMITED' });
   });

@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import {
   type Achievement,
   type AchievementCode,
@@ -13,82 +13,49 @@ import { CLOCK, type Clock, RateLimiter, type RateLimitRule } from '@rkarakulov/
 import { domainError } from '../../error-messages';
 import { RIDER_PROFILES, type RiderProfileDirectory } from '../profile';
 import { RIDER_RESULTS, type RiderResults } from '../results';
-import {
-  RIDER_SEASON_STANDINGS,
-  type RiderSeasonOutcome,
-  type RiderSeasonStandings,
-} from '../standings';
+import type { RiderSeasonOutcome } from '../standings';
 import { AchievementFactsReader } from './achievement-facts.reader';
+import { AchievementsReconciler } from './achievements-reconciler';
 import {
   ACHIEVEMENTS_POLICY,
   isSeen,
   levelName,
   raceAchievements,
-  reconcilePlan,
-  type ReconcileStep,
   seasonalAchievements,
   type SeasonalEarned,
   seasonalKey,
-  seasonalPlan,
-  type SeasonalStep,
   sortForList,
 } from './achievements.policy';
 import { AchievementsRepository } from './achievements.repository';
 
 /**
- * Достижения райдера — композиция портов (ADR-0020 «выдача сверкой при чтении»): факты — `AchievementFactsReader`
- * (`RIDER_RESULTS`, `RIDER_ROUTE_RIDES`, `RIDER_RIDES`), сезонные — итоги снимка `RIDER_SEASON_STANDINGS`; правила и
- * планы сверки — чистые функции `achievements.policy`; запись — только `AchievementsRepository`. Ответы — явным списком полей: без `userId`, id выдачи и времени суток (RC-7). Логи — uid и
+ * Достижения райдера — HTTP-обёртка (ADR-0020 «выдача сверкой при чтении»): сверка — `AchievementsReconciler` (одна для
+ * GET и серверной сверки), публичный список — факты `AchievementFactsReader` и итоги сезонов без записи; запись — только
+ * `AchievementsRepository`. Ответы — явным списком полей: без `userId`, id выдачи и времени суток (RC-7). Логи — uid и
  * счётчики, без кодов объектов и названий.
  */
 @Injectable()
 export class AchievementsService {
-  private readonly logger = new Logger(AchievementsService.name);
-
   constructor(
     private readonly repository: AchievementsRepository,
     @Inject(RIDER_PROFILES) private readonly profiles: RiderProfileDirectory,
     @Inject(RIDER_RESULTS) private readonly results: RiderResults,
-    @Inject(RIDER_SEASON_STANDINGS) private readonly standings: RiderSeasonStandings,
+    private readonly reconciler: AchievementsReconciler,
     private readonly facts: AchievementFactsReader,
     private readonly rateLimiter: RateLimiter,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
   /**
-   * `GET /v1/achievements`: сверка выдач с фактами (7.2) и сезонных — с итогами сезонов (S1–S5), список видимых. Без
-   * транзакции: каждая запись — одна условная операция; маркер первой сверки — только после выдач обеих коллекций
-   * (RC-1). Сбой посередине доводит следующий GET.
+   * `GET /v1/achievements`: лимит пользователя → сверка `AchievementsReconciler.reconcile(userId, 'read')` (выдачи,
+   * уведомление о новой выдаче — только центр, P1) → список видимых. Сбой посередине доводит следующий GET.
    */
   async sync(userId: string): Promise<AchievementList> {
     await this.limit(`achievements-read:${userId}`, ACHIEVEMENTS_POLICY.readLimit);
-    const now = this.clock.now();
-    const [{ earned, progress }, stored, storedSeasonal, syncedAt] = await Promise.all([
-      this.facts.evaluate(userId),
-      this.repository.listOf(userId),
-      this.repository.listSeasonalOf(userId),
-      this.repository.syncedAt(userId),
-    ]);
-    const seasonIds = [...new Set(storedSeasonal.map((grant) => grant.seasonId))];
-    const [titled, outcomes] = await Promise.all([
-      this.facts.titled(earned, userId),
-      this.seasonOutcomes(userId, seasonIds, now),
-    ]);
-    const seasonal = seasonalAchievements(outcomes);
-    const first = syncedAt === null;
-    const plan = reconcilePlan(stored, earned, first, now);
-    const seasonalSteps = seasonalPlan(
-      storedSeasonal,
-      seasonal.earned,
-      seasonal.settled,
-      first,
-      now,
+    const { titled, progress, seasonal, outcomes } = await this.reconciler.reconcile(
+      userId,
+      'read',
     );
-    for (const step of plan) await this.apply(userId, step, now);
-    for (const step of seasonalSteps) await this.applySeasonal(userId, step, now);
-    if (first) await this.repository.markSynced(userId, now);
-    if (plan.length > 0 || seasonalSteps.length > 0)
-      this.logSync(userId, first, plan, seasonalSteps);
 
     // `seen` — по уровню ответа (фактов этого запроса), а не сохранённому: устаревший параллельный план мог записать
     // меньший уровень (RC-L10)
@@ -114,7 +81,7 @@ export class AchievementsService {
       }));
     for (const grant of seasonGrants) {
       if (grant.revokedAt !== null) continue;
-      const item = this.visibleSeasonal(grant, seasonal.earned, outcomes);
+      const item = this.visibleSeasonal(grant, seasonal, outcomes);
       if (item)
         items.push({ ...item, achievement: { ...item.achievement, seen: grant.seenAt !== null } });
     }
@@ -150,7 +117,7 @@ export class AchievementsService {
     if (!rider) throw domainError('NOT_FOUND', 404);
     const [rows, outcomes] = await Promise.all([
       this.results.publishedRows(rider.userId),
-      this.seasonOutcomes(rider.userId, [], this.clock.now()),
+      this.reconciler.seasonOutcomes(rider.userId, [], this.clock.now()),
     ]);
     const titled = await this.facts.titled(raceAchievements(rows), rider.userId);
     const items = [
@@ -177,25 +144,6 @@ export class AchievementsService {
    * Видимая сезонная выдача в своём списке (S2): сезон `final` — только заработанная сейчас; сезон `pending` —
    * остаётся (не мерцает между ревизией и пересчётом), название — из исхода порта; сезон пропал из ответа порта — нет.
    */
-  /**
-   * Итоги сезонов; сбой порта — как «ни одного сезона» (ревью pass 1, MEDIUM): `settled` пуст — сезонные выдачи не
-   * трогаются, в ответе их нет до следующего запроса; несезонные и прогресс отдаются. Лог — uid, без текста ошибки.
-   */
-  private async seasonOutcomes(
-    userId: string,
-    alsoSeasonIds: readonly string[],
-    now: Date,
-  ): Promise<RiderSeasonOutcome[]> {
-    try {
-      return await this.standings.outcomesOf(userId, alsoSeasonIds, now);
-    } catch (error) {
-      this.logger.warn(
-        `achievements.seasons_unavailable uid=${userId} error=${error instanceof Error ? error.name : 'unknown'}`,
-      );
-      return [];
-    }
-  }
-
   private visibleSeasonal(
     grant: { code: SeasonalEarned['code']; seasonId: string; factAt: Date },
     earned: ReadonlyMap<string, SeasonalEarned>,
@@ -209,55 +157,6 @@ export class AchievementsService {
       factAt: grant.factAt,
       achievement: seasonalAchievement(grant, outcome.title),
     };
-  }
-
-  private async apply(userId: string, step: ReconcileStep, now: Date): Promise<void> {
-    switch (step.type) {
-      case 'insert':
-        await this.repository.insertGrant(userId, step.code, step.earned, step.seenAt, now);
-        return;
-      case 'revoke':
-        await this.repository.revoke(userId, step.code, now);
-        return;
-      case 'restore':
-      case 'refresh':
-        await this.repository.restoreOrRefresh(
-          userId,
-          step.code,
-          step.earned,
-          step.type === 'restore',
-          now,
-        );
-        return;
-    }
-  }
-
-  private async applySeasonal(userId: string, step: SeasonalStep, now: Date): Promise<void> {
-    switch (step.type) {
-      case 'insert':
-        await this.repository.insertSeasonal(userId, step.earned, step.seenAt, now);
-        return;
-      case 'revoke':
-        await this.repository.revokeSeasonal(userId, step.key, now);
-        return;
-      case 'restore':
-        await this.repository.restoreSeasonal(userId, step.key, now);
-        return;
-    }
-  }
-
-  private logSync(
-    userId: string,
-    first: boolean,
-    plan: readonly ReconcileStep[],
-    seasonal: readonly SeasonalStep[],
-  ): void {
-    const count = (type: ReconcileStep['type']) => plan.filter((step) => step.type === type).length;
-    const countSeasonal = (type: SeasonalStep['type']) =>
-      seasonal.filter((step) => step.type === type).length;
-    this.logger.log(
-      `achievements.sync uid=${userId} first=${first} granted=${count('insert')} revoked=${count('revoke')} restored=${count('restore')} refreshed=${count('refresh')} seasonal_granted=${countSeasonal('insert')} seasonal_revoked=${countSeasonal('revoke')} seasonal_restored=${countSeasonal('restore')}`,
-    );
   }
 
   private async limit(key: string, rule: RateLimitRule): Promise<void> {

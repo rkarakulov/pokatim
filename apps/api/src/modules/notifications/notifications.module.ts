@@ -15,6 +15,7 @@ import { ResultsCoreModule } from '../results';
 import { RidesCoreModule } from '../rides';
 import { RoutesCoreModule } from '../routes';
 import { TicketsCoreModule } from '../tickets';
+import { AchievementsSyncModule } from '../achievements';
 import { NotificationIntake } from './notification-intake';
 import { NotificationErasure } from './notification-erasure';
 import { NotificationSettingsService } from './notification-settings.service';
@@ -83,7 +84,8 @@ export class NotificationsModule {}
  * (`notifications-intake`, `notifications.fanout`), доставка push и писем
  * (`notifications-delivery`), регламент квитанций и перепостановки (`notifications-maintenance`). Источники — только
  * порты через их `index.ts`: `RESULTS_NOTICES` и `RACE_REGISTRY` (`ResultsCoreModule` реэкспортирует `RacesCoreModule`),
- * `DISPUTE_NOTICES`, `RIDE_NOTICES`, `ROUTE_NOTICES`, `TICKET_NOTICES` (`TicketsCoreModule`, PR D), `IdentityAccounts`.
+ * `DISPUTE_NOTICES`, `RIDE_NOTICES`, `ROUTE_NOTICES`, `TICKET_NOTICES` (`TicketsCoreModule`, PR D),
+ * `ACHIEVEMENT_NOTICES` (`AchievementsSyncModule`, achievements-push), `IdentityAccounts`.
  */
 @Module({
   imports: [
@@ -93,6 +95,7 @@ export class NotificationsModule {}
     RidesCoreModule,
     RoutesCoreModule,
     TicketsCoreModule,
+    AchievementsSyncModule,
     IdentityAccountsModule,
     BullModule.registerQueue(
       { name: QUEUE.notificationsIntake },
