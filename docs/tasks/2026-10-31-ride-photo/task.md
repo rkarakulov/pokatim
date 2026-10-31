@@ -614,3 +614,26 @@ dev-клиент, удаление, сеть), `pick-image(.web).test.ts`, `phot
 
 **Риски / follow-up.** Значения скрима — `[ASSUMPTION]` (прототипов нет, D10); автопереключение шаблона на «Ночь» после
 загрузки не делалось (D11); ручной смоук загрузки HEIC с iPhone (`compatible` → JPEG) — на dev-сборке.
+
+### Правки по ревью PR B (findings-b-codex.md, findings-b.md)
+
+Ветка перенесена на свежий `develop` после merge PR A — `ride-photo-app` (хэши коммитов выше — до переноса).
+
+- **Pass 1** (`f0f99bf8` код, `1417c8af` доки): блок «Своё фото» — `AsyncContent` по `me` (D13); «Удалить фото» в
+  карточке прошедшего и отменённого райда (D12, скрытый — принято); native без проверки формата по `mimeType` (D9);
+  токен `photoScrimHero` (D10); текст `too_small`; web — кнопка не занята на время диалога файла (D14).
+- **Pass 2** (`6cee6dc6` код, `e589e8e7` доки): мутации фото отменяют запросы статуса приглашения райда перед
+  инвалидацией (`cancelCardStatuses`, D15, с отрицательным доказательством); `photoScrimHero` без провала — порог
+  контраста на всей высоте (D10).
+- **Тесты добавлены:** `ride-invite.test.tsx` (отказ `/me` и повтор, 404, ошибка обновления с блоком, удержанный первый
+  статус → новый токен), `ride-detail.test.tsx` (удаление у отменённого и прошедшего, 429, будущий/не организатор/без
+  фото — нет кнопки), `ride-photo-section.web.test.tsx`, `photo-scrim.test.ts` (design-tokens: монотонность и контраст
+  на всей высоте во всех темах), `pick-image.test.ts` (Android HEIC не отклоняется).
+- **Проверки.** Полный `pnpm check` (Mongo `ridephotoapp_test`, Redis db 12, `TURBO_CONCURRENCY=4`) на **HEAD
+  `e589e8e7`** — `EXIT=0`: prettier — ok; depcruise — «no dependency violations found (2392 modules, 9547 dependencies
+  cruised)»; typecheck — 9/9; тесты — 15/15 задач: app 275 наборов / 2619 тестов, api 240 / 2680, admin 49 / 511,
+  contracts 494, design-tokens 612, api-client 175, tracks 374, route-view 51, i18n 16. Предыдущие прогоны (load average
+  20–50 от параллельных сессий) падали только таймаутами в нетронутых файлах (api: `achievements`, `results-check`,
+  `route-rides` int; app: 12 наборов вне фото; i18n `index.test`), каждый отдельно — зелёный. После `e589e8e7` — только
+  этот раздел (prettier — ok).
+- Визуальная проверка web-превью и ручная проверка на устройстве — **NOT VERIFIED**.
