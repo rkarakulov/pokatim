@@ -810,6 +810,7 @@ describe('Главная: подсказка имени K3 (P3, RC-P3-7)', () =>
       rideReasons: [],
       publicName: 'Анна К.',
       showNameInResults: true,
+      showRouteRides: false,
       club: null,
       avatar: null,
       publicId: 'r'.repeat(43),
