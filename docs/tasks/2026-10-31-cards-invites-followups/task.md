@@ -23,11 +23,14 @@ Follow-up карточек для сторис (PR #139, #142) и приглаш
 - **A1.** Сервер рисует карточку в теме запрашивающего (`RIDER_THEMES.themeOf`, хэш с `themeId`), а клиентский ключ был
   `[…, template]` — после смены темы TanStack Query отдавал кэш прошлой темы на `staleTime`. `useCardStatus` добавляет к
   ключу источника `useAppTheme().id` (одно место для всех четырёх карточек). `useCardFile` ключуется токеном — новый
-  токен даёт новый файл. Тема меняется оптимистично; если экран карточки открыт до ответа `PUT /v1/profile/theme`,
-  сервер может вернуть карточку старой темы под новым ключом — на `staleTime` (10 с), потом перезапрос. Принято.
+  токен даёт новый файл. Тема меняется оптимистично: ответ, полученный до сохранения `PUT /v1/profile/theme`, — карточка
+  прежней темы под новым ключом, поэтому успех `useSetTheme` инвалидирует статусы карточек (`invalidateCardStatuses`,
+  метка `meta.cardStatus`; запрос в полёте отменяется и повторяется). Отсчёт 30 с ожидания `pending` — по шаблону и
+  теме (смена темы не наследует чужой отсчёт).
 - **A2.** `noindexPageMetadata(title)` (`src/lib/page-metadata.ts`) — нейтральная мета без данных объекта + `noindex`;
   `generateMetadata` в четырёх маршрутах. `Disallow` в `robots.txt` остаётся: экраны только для вошедших; `noindex` —
-  страховка, если HTML всё же попадёт к краулеру. Попутно `routes/story/[id]` получил `useSettingsShell` (правило:
+  защита в глубину, если HTML всё же попадёт к краулеру в обход robots. Правило SEO (`pokatim-app.md`) и комментарий
+  `seo.ts` дополнены этим исключением. Попутно `routes/story/[id]` получил `useSettingsShell` (правило:
   каждый экран `Stack.Protected` вне вкладок — за оболочкой) и строку в сторож `protected-shell.test.tsx`.
 - **A3.** Превью серверного рендера (`pnpm --filter @pokatim/api preview:story-cards`) падало на карточках достижений —
   в фикстурах скрипта не было `level` после уровней достижений; до приглашений не доходило. Фикстуры дополнены, все
@@ -54,8 +57,11 @@ Follow-up карточек для сторис (PR #139, #142) и приглаш
 |---|---|---|
 | A1 | `apps/app/src/features/sharing/card-status.test.tsx` — смена темы → второй запрос и новая карточка | красный |
 | A2 | `apps/app/src/__tests__/card-metadata.test.ts` — 4 экрана: `noindex`, без id и `og:url`; `protected-shell` + `routes/story` | — |
+| A1 | `card-status.test.tsx` — ответ до сохранения темы → инвалидация → новая карточка; смена темы в `pending` — свой отсчёт | красный (отсчёт) |
+| A1 | `theme-mutation.test.tsx` — успех смены темы инвалидирует только статусы карточек | красный |
 | A1 | `story-card.test.tsx` — ключи кэша с темой (`'classic'` без провайдера) | — |
 | B4 | `panel-members.int.test.ts` — снятие удаляет 2FA и устройства (чужие на месте); выдача снятому с прежней 2FA | красные |
+| B4 | `cli/panel-cli.int.test.ts` — `grant-admin` снятому с прежней 2FA → 2FA удалена | — |
 | B4 | `panel-invitations.int.test.ts` — снятый с прежней 2FA принимает приглашение → `signedIn`, 2FA удалена | красный |
 | B5 | `apps/admin/e2e/invitations.spec.ts` | — |
 | B6 | `packages/i18n/src/index.test.ts` — 1 день, 3 дня, 7 дней, 21 день | — |

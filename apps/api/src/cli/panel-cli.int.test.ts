@@ -126,6 +126,22 @@ describe('CLI grant-admin (AC1)', () => {
     });
   });
 
+  it('снятый с прежней 2FA — admin без старой 2FA (ADR-0026, дополнение): подключит заново', async () => {
+    await register(h, { email: EMAIL });
+    await confirm(h, await activeLinkToken(h, EMAIL));
+    const userId = await userIdByEmail(h, EMAIL);
+    await seedMember(h, userId, 'moderator', { status: 'revoked' });
+    await seedTotp(h, userId);
+
+    expect((await cli('grant-admin', '--email', EMAIL, '--name', 'Ольга')).code).toBe(0);
+
+    expect(await panel().members.findOne({ _id: userId })).toMatchObject({
+      role: 'admin',
+      status: 'active',
+    });
+    expect(await panel().totp.countDocuments({ _id: userId })).toBe(0);
+  });
+
   it('аргументы: --help — 0; без команды, неизвестная команда, без --name, лишний флаг — 2', async () => {
     expect((await cli('--help')).code).toBe(0);
     expect((await cli()).code).toBe(2);

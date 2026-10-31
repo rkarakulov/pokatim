@@ -57,7 +57,8 @@ test('приглашение: письмо → регистрация в при�
   );
 
   // администратор приглашает адрес, у которого ещё нет аккаунта
-  const admin = await (await browser.newContext()).newPage();
+  const adminContext = await browser.newContext();
+  const admin = await adminContext.newPage();
   watchErrors(admin, errors);
   await admin.goto('/admin/');
   await admin.getByLabel('E-mail').fill(adminEmail);
@@ -80,7 +81,8 @@ test('приглашение: письмо → регистрация в при�
   expect(link.startsWith(`${PANEL_URL}invite#token=`)).toBe(true);
   await verifiedUser(request, inviteeEmail);
 
-  const invitee = await (await browser.newContext()).newPage();
+  const inviteeContext = await browser.newContext();
+  const invitee = await inviteeContext.newPage();
   watchErrors(invitee, errors);
   await invitee.goto(link);
   await expect(invitee.getByRole('heading', { name: 'Приглашение в команду' })).toBeVisible();
@@ -99,5 +101,6 @@ test('приглашение: письмо → регистрация в при�
     admin.getByRole('button', { name: `Отправить повторно: ${inviteeEmail}` }),
   ).toHaveCount(0);
 
+  await Promise.all([adminContext.close(), inviteeContext.close()]);
   expect(errors).toEqual([]);
 });
