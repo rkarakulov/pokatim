@@ -20,5 +20,7 @@ describe('installDesignSystem', () => {
     expect(style.textContent).toContain('--panel-dialog-width: 420px;');
     // profile-moderation RC-P4: фото 128 px в карточке модерации профиля
     expect(style.textContent).toContain('--panel-avatar-preview: 128px;');
+    // ride-photo PR C: фото организатора 320 px в карточке модерации райда
+    expect(style.textContent).toContain('--panel-ride-photo-preview: 320px;');
   });
 });

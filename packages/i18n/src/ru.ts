@@ -1750,6 +1750,23 @@ export const ru = {
   'admin.ridesModeration.dismissTitle': 'Отклонить жалобы на «{title}»?',
   'admin.ridesModeration.dismissConsequences':
     'Открытые жалобы закроются, райд останется видимым. Повторно эти райдеры пожаловаться не смогут.',
+  // ride-photo PR C: фото организатора в карточке и «Удалить фото»
+  'admin.ridesModeration.field.photo': 'Фото организатора',
+  'admin.ridesModeration.noPhoto': 'Нет фото',
+  'admin.ridesModeration.photoAlt': 'Фото организатора «{title}»',
+  'admin.ridesModeration.photoHidden': 'Фото скрыто вместе с райдом',
+  'admin.ridesModeration.photoUnavailable':
+    'Фото недоступно. Возможно, его заменили или удалили — обновите карточку.',
+  'admin.ridesModeration.reloadCard': 'Обновить карточку',
+  'admin.ridesModeration.resetPhoto': 'Удалить фото',
+  'admin.ridesModeration.resetPhotoTitle': 'Удалить фото райда «{title}»?',
+  'admin.ridesModeration.resetPhotoConsequences':
+    'Фото пропадёт из ленты и с Главной, новые карточки-приглашения будут без него. Уже выданные картинки приглашения и сохранённое в браузерах фото могут открываться ещё до суток. Жалобы останутся открытыми, организатор уведомления не получит и сможет загрузить другое фото, пока райд не начался.',
+  'admin.ridesModeration.reasonWarning':
+    'Причина видна команде: она навсегда остаётся в журнале действий.',
+  'admin.ridesModeration.photoConflict': 'Фото уже изменилось — обновите карточку',
+  'admin.ridesModeration.photoConflictMessage':
+    'Пока вы смотрели, организатор заменил или удалил фото — проверьте новое перед решением.',
   'admin.ridesModeration.report.reason': 'Причина',
   'admin.ridesModeration.report.comment': 'Комментарий',
   'admin.ridesModeration.report.createdAt': 'Когда',
