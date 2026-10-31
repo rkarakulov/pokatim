@@ -241,17 +241,10 @@ describe('участки маршрута (route-rides-05)', () => {
     ]);
   });
 
-  it('«туда-обратно» 2 × 15 км: участок с разворотом слит — 0–10 и 10–30 км (RC-4)', async () => {
+  it('«туда-обратно» 2 × 15 км по одной дороге — участков нет (§8.2 Q1), маршрут passed', async () => {
     const w = await queuedRide({ kind: 'outAndBack' });
     expect(await processor().check(w.rideId, 1)).toBe('passed');
-    const { sections } = await docOf(w.rideId);
-    // открытый вопрос §8.2 (Q1): слитый участок 10–30 км проходит через свои ворота старта на обратном пути —
-    // неизменённый движок завершает попытку линейного коридора на повторном входе в них (`missed_section`).
-    // Тест фиксирует текущее поведение; решение по «туда-обратно» поменяет ожидание второго участка.
-    expect(sections!.items.map(({ fromM, toM, status }) => [fromM, toM, status])).toEqual([
-      [0, 10_000, 'passed'],
-      [10_000, 30_000, 'not_passed'],
-    ]);
+    expect((await docOf(w.rideId)).sections).toEqual({ version: 1, failure: null, items: [] });
   });
 
   it('маршрут 8 км — участков нет, второго потока нет', async () => {
