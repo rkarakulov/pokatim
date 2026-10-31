@@ -376,6 +376,13 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   история) + `invalidateQueries(['riders'])`; `PATCH /v1/profile` — тоже `['riders']`. «Показать ещё» — без
   `onEndReached`; состояния истории — `HistoryList` (`features/profile/history-rows.tsx`). Публичная история: 400 на
   курсор (строка выпала из новой ревизии протокола) — `resetQueries` к первой странице, не вечная ошибка догрузки.
+- Шит согласия на имя (name-consent-prompt, `docs/product/profile.md` N1–N8): предложение — `offerNameConsent(raceId)`
+  (`features/profile/name-consent-store.ts`, одно за запуск) только из `onSuccess` `useEnterRace` (новая активная
+  заявка), место — `<NameConsentPrompt raceId>` в «Ваше участие»; решение — один раз (`showNameConsent`, чистая
+  `nameConsentVisible`: профиль известен, имя не показывается, пауза 90 дн. `pokatim.nameConsentPrompt` —
+  `name-consent-storage(.web).ts`). Согласие — только «Сохранить» с включённым переключателем (`useUpdateProfile`);
+  «Не сейчас», закрытие и сохранение без показа — пауза. Подпись строки таблицы гонки — только `raceRowWho`
+  (`participation-format.ts`: имя → «Райдер #N» по `riderNo` → «Участник»).
 - Аватар — только `components/rider-avatar.tsx` (`expo-image`, `cachePolicy: memory-disk` — URL `immutable`; нет фото
   или ошибка — иконка человека); размер шапки — `layout.avatarProfile` (`@pokatim/design-tokens`, follow-up
   `size.avatarLg` в базе), верхней панели — `size.avatarTopBar`.

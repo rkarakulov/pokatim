@@ -19,6 +19,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { rememberReturnPath } from '@/features/auth/return-path';
 import { PushSoftPrompt } from '@/features/notifications/push-soft-prompt';
+import { NameConsentPrompt } from '@/features/profile/name-consent-prompt';
 import { OpenTicketButton } from '@/features/tickets/open-ticket-button';
 
 import {
@@ -174,6 +175,8 @@ export function RaceParticipation({
       <EntryResult entry={data} race={race} now={now} />
       {/* после записи на гонку (N5): «Участвовать» ушло — подсказка под итогом участия */}
       <PushSoftPrompt context="race" id={race.id} />
+      {/* шит «Как вас показывать в результатах?» после новой записи (name-consent-prompt N1) */}
+      <NameConsentPrompt raceId={race.id} />
       <OpenTicketButton ticket={ticket.data} />
       {data.actions.canShareStory ? <ShareStoryButton raceId={race.id} /> : null}
       <EntryActions entry={data} raceId={race.id} now={now} />
