@@ -17,6 +17,12 @@ paths:
   `UPDATE_CORRIDOR_GOLDEN=1`. Новые выходы движка, не меняющие вердикт (maps-02: интервалы схода
   `matchCorridorDetailed`), — отдельной функцией вне `CorridorMatch`: golden и AC16 (ключи результата) не меняются,
   тест `match` = `matchCorridor` на всех фикстурах.
+- Участки маршрута (route-rides-05) — `routeSections`/`sectionLine` unit на синтетике (`corridor/sections.test.ts`:
+  границы 15/25/305 км, хвост, петля, «туда-обратно», детерминизм), `analyzeSections` unit на синтетическом потоке
+  (`corridor/analyze-sections.test.ts`), бенч 200 км × 50 000 точек (`bench.test.ts`); golden коридора и
+  `CORRIDOR_ENGINE_VERSION` не меняются (участки — неизменённый движок на подлиниях). Int — длинный маршрут
+  `longCorridorRoute(h, owner, 'line' | 'outAndBack')` и синтетический GPX `longRideGpx(kind, startAt, { stopAtM })`
+  (`apps/api/test/route-rides.ts`, без файлов фикстур); сбои второго потока — `vi.spyOn(evaluator, 'analyzeSections')`.
 - Упрощение линии (`simplifyTrack`) — golden `simplify-golden.json` (sha256 индексов сохранённых точек всех фикстур по
   профилям вызовов) + сверка с эталонным перебором в тесте; перезапись `UPDATE_SIMPLIFY_GOLDEN=1` — только с решением
   в task.md (меняются хранимые линии). Стоянка 200 000 точек — в памяти теста.

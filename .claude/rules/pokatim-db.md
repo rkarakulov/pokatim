@@ -477,6 +477,11 @@ paths:
   'passed'` — агрегат `leaderboardTop` (`$match` → `$group` с `$topN` 3 → `$sort` по лучшему → `$limit` 5000, `hint`
   индекса; план — `IXSCAN`, int-тест). Порядок ключа = `compareRides` (единственный компаратор, им же `bestOf`).
   Согласие и живость активностей — порты `profile`/`tracks` после агрегата (`$lookup` в чужие коллекции нет).
+- Участки (route-rides-05, без миграции и индексов): `route_rides.sections?: { version, failure, items } | null` —
+  `items` — `{ fromM, toM, status: 'passed' | 'not_passed', elapsedSec | null }` (метры по линии, без координат и
+  причин); нет поля — заезд до 05 (бэкфилла нет), `null` — не считались (нет итога движка, автопроверка не `passed`,
+  сброс `requeue`); `failure` — отказ сверки участков (`items: []`). «Лучший» и дельты не хранятся. Пишется в
+  `record`/`insertChecked` вместе с итогом, стирается с документом (`RouteRideErasure`).
 
 ## Достижения (achievements, ADR-0020 Proposed)
 

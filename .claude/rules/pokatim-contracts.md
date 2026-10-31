@@ -206,6 +206,11 @@ paths:
   `ProfileView.showRouteRides` (`.default(false)`), `UpdateProfileRequest.showRouteRides` (`optional`, в условии
   `REQUIRED`; старый API — 400, поэтому приложение — после выката API). api-client — `getRouteRideLeaderboard(token,
   routeId, { limit })`.
+  route-rides-05 (участки): `ROUTE_RIDE_SECTION_STATUSES` (`passed | not_passed`, только в конец),
+  `ROUTE_RIDE_SECTIONS_MAX` (30, = `ROUTE_SECTION_POLICY.maxSections` — сторожит unit-тест API, контракты от
+  `@pokatim/tracks` не зависят), `RouteRideSection` (`fromM`, `toM`, `status` — `tolerantEnum`, `elapsedSec`, `isBest`,
+  `bestElapsedSec`, `deltaToBestSec`); в `RouteRideDetail` аддитивно `sections: z.array(RouteRideSection)
+  .max(30).default([])` — старый API и заезды без участков дают `[]`.
 - Достижения (achievements, ADR-0020): `src/achievements/achievement.schema.ts` — `ACHIEVEMENT_CODES` (каталог, **только в
   конец**), `ACHIEVEMENT_OBJECT_KINDS` (`race | route | ride | season`), запрос `AchievementCode` (строгий `z.enum`) и
   `MarkAchievementsSeenRequest` (`strictObject`, без повторов → `INVALID`); ответы `Achievement`

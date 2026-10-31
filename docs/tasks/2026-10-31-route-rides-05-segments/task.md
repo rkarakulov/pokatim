@@ -161,7 +161,30 @@ Contracts-first, TDD. Int-тесты — своя БД Mongo (`*_test`) и св�
 
 ## 8.2 Deviations from spec
 
-(заполняет coder)
+- **D1 (данные теста, намерение то же).** Пример §11 «туда-обратно 2 × 20 км — участок с концами ≤ 150 м слит»
+  невоспроизводим: у 2 × 20 км границы 10/20/30 км не попадают на разворот, концов ближе 150 м нет. Взяты 2 × 15 км
+  (участок 10–20 км с совпадающими концами → `[0–10, 10–30]`) и таблица порога: разворот 15 070 м — слит, 15 080 и
+  15 100 м — нет (ширина 50, порог 150 м), 15 100 м при ширине 100 (порог 250 м) — слит.
+- **D2 (бенч).** `analyzeSections` 200 км (20 участков) × 50 000 точек — замер локально 383–405 мс (load ≈ 5);
+  бюджет `SECTIONS_TIME_LIMIT_MS = 800` мс (2 × замера по §11), × 3 на CI (`CI_BUDGET_FACTOR`), < 15 с.
+- **D3 (фикстура приложения).** `apps/app/src/__tests__/route-rides-fixtures.ts` — `sections: []` в `rideDetail`
+  (выход `RouteRideDetail` теперь с обязательным `sections`; иначе typecheck `@pokatim/app` красный). Код приложения не
+  менялся (PR B).
+- **D4 (типы).** `RouteRideResult` = прежний `Pick` + `Required<Pick<RouteRideDoc, 'sections'>>`: в итоге проверки
+  поле обязательно (`null` или набор), в документе — необязательно (заезды до 05).
+- **Q1 — ОТКРЫТЫЙ ВОПРОС оркестратору (дефект спеки RC-3/RC-4, решение не принималось).** Слитый участок с разворотом
+  «туда-обратно» по той же дороге (2 × 15 км: участок 10–30 км идёт 10 → 15 → 0 км) проходит через свои ворота старта
+  на обратном пути. Неизменённый движок для линейного коридора завершает попытку на повторном входе в ворота старта
+  (сегмент 10 → 15 → 10 км, покрытие 0,49 → `missed_section`) — честный проезд такого участка никогда не засчитывается.
+  Слияние RC-4 (по расстоянию концов) этого не ловит; для одной дороги «туда-обратно» любой участок с разворотом
+  проходит рядом со своими воротами. Реализовано по спеке (как есть); int-тест `route-ride-check.int.test.ts`
+  («туда-обратно 2 × 15 км») фиксирует текущее поведение (`not_passed` второго участка) с комментарием. Варианты:
+  (a) в `routeSections` дополнительно сливать участок, линия которого после выхода из радиуса `2R + 50` м снова
+  подходит к его началу или концу (до устойчивости) — у «туда-обратно» по одной дороге участков не будет вовсе;
+  (b) оставить как есть (участок с разворотом всегда «Не пройден»); (c) такой участок не показывать (зазор в
+  разбиении); (d) граница — в точке разворота (меняет U1). Рекомендация coder — (a): детерминированно, движок не
+  меняется, «Не пройден» за честный проезд хуже, чем отсутствие участков; затрагивает только `sections.ts` и тесты,
+  `ROUTE_SECTIONS_VERSION` остаётся 1 (заезды с участками есть только на dev, ещё не выкачено).
 
 ## 8.3 Security checklist
 
@@ -345,3 +368,33 @@ PR B (приложение: блок «Участки» в `RideView`, форм�
 миграции и индексы; лёгкий вход `@pokatim/tracks` (`index.ts`); `@rkarakulov/*`.
 
 ## 12. Outcome (заполняет coder)
+
+PR A реализован (ветка `feature/route-rides-sections-api`, не запушена). Приложение — PR B.
+
+- **tracks:** `corridor/sections.ts` (`ROUTE_SECTIONS_VERSION`, `ROUTE_SECTION_POLICY`, `routeSections`,
+  `sectionLine`), `parse.ts` — `analyzeSections`, `RouteSectionResult`, `RouteSectionsAnalysis`, экспорт только из
+  серверного входа (сторож лёгкого входа дополнен). Движок, golden, `CORRIDOR_ENGINE_VERSION` — без изменений
+  (`git diff --stat origin/develop -- …/{match,prepare,project,policy,types}.ts …/__fixtures__` пуст).
+- **API:** `PARSE_FUNCTIONS` + `analyzeSections`; `RouteRideEvaluator.evaluate(ride, { sections })` (+
+  `analyzeSections` — точка подмены), процессоры `always`/`ifPassed`; `RouteRideSectionsDoc`,
+  `RouteRideResult.sections`, `cleared`/`newRideDoc`/`emptyResult` — `sections: null`; `sectionsOf` и
+  `detail.sections`. Хелперы `longCorridorRoute`, `longGeometry`, `longRideGpx` (`apps/api/test/route-rides.ts`).
+- **Контракты/api-client:** `ROUTE_RIDE_SECTION_STATUSES`, `ROUTE_RIDE_SECTIONS_MAX`, `RouteRideSection`,
+  `RouteRideDetail.sections` `.default([])`; тест разбора старого ответа в api-client.
+- **Документация:** `routes.md` (U1, RC-3/RC-4, «до 05 участков нет», ограничение Q1), правила `pokatim-backend`,
+  `-db`, `-contracts`, `-tests`; `pr.md`.
+- **Отклонения и открытый вопрос:** §8.2 (D1–D4, **Q1 — участок с разворотом «туда-обратно» по одной дороге не
+  засчитывается движком; нужно решение**).
+
+Проверки (2026-11-01, локально, node 24, Mongo `pokatim_rr05_test`, Redis db 9):
+
+- `@pokatim/tracks` vitest — 29 файлов / 399 тестов зелёные (бенч `analyzeSections 200 км × 50k: 383–405 мс`);
+  `@pokatim/contracts` — 524; `@pokatim/api-client` — 188.
+- `@pokatim/api` vitest: `src/modules/route-rides`, `src/parse-thread.test.ts`, `src/modules/achievements`,
+  `src/modules/account`, `results-check.int`, `results-attempts.int` — 22 файла / 348 тестов зелёные.
+- typecheck `@pokatim/tracks`, `@pokatim/contracts`, `@pokatim/api-client`, `@pokatim/api` — 0 ошибок;
+  `@pokatim/app` — одна ошибка `src/__tests__/home.test.tsx(809)` (нет `showRouteRides` в фикстуре профиля) — есть и на
+  `origin/develop` (8d41043e), файл не менялся; ошибки от `sections` исправлены фикстурой (D3). jest приложения по
+  файлам с `route-rides-fixtures` — 7 наборов / 155 тестов зелёные.
+- `pnpm format:check` — чисто; `eslint` затронутых пакетов `--max-warnings=0` — 0; `pnpm arch:check` — нарушений нет.
+- Полный `pnpm check` — не гонялся (решение оркестратора); CI — после push.
