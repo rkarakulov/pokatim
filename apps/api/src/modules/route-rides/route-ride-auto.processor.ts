@@ -16,6 +16,7 @@ import {
 } from '../tracks';
 import { RouteRideEvaluator } from './route-ride-evaluator';
 import {
+  type AutoPlanItem,
   autoEligible,
   autoPlan,
   findExisting,
@@ -86,7 +87,9 @@ export class RouteRideAutoProcessor extends WorkerHost {
 
     const planned = await this.plan(userId, primary);
     let passed = 0;
-    for (const routeId of planned) {
+    for (const { routeId, done } of planned) {
+      // уже создан этой автопроверкой (повтор, ретрай после частичного успеха) — слот занят, прогона нет
+      if (done) continue;
       if (await this.checkRoute(userId, routeId, primary, finalAttempt)) passed += 1;
     }
     this.logger.log(
@@ -96,23 +99,29 @@ export class RouteRideAutoProcessor extends WorkerHost {
     return { planned: planned.length, passed };
   }
 
-  /** Маршруты для прогона движка (V2, V4, 8.1 AC-4): пропуски, видимость и рамка — до отсечения 20. */
-  private async plan(userId: string, primary: ActivityRef): Promise<string[]> {
+  /**
+   * План события (V2, V4, 8.1 AC-4): пропуски, видимость и рамка — до отсечения 20; маршруты с автозаездом группы
+   * занимают свои слоты (`done`) — повтор и ретрай получают тот же набор.
+   */
+  private async plan(userId: string, primary: ActivityRef): Promise<AutoPlanItem[]> {
     const ridden = await this.repository.ridesByRoute(
       userId,
       ROUTE_RIDE_AUTO_POLICY.riddenRoutesScan,
     );
     const heads = await this.liveHeads(
       userId,
-      ridden.flatMap((route) => route.activityIds),
+      ridden.flatMap((route) => route.rides.map((ride) => ride.activityId)),
     );
     const own = await this.routes.ownReadyIds(userId, MY_ROUTE_MAX_COUNT);
     const ordered = autoPlan({ primaryId: primary.id, heads, ridden, own });
-    const picked: string[] = [];
+    const picked: AutoPlanItem[] = [];
     const { boundsBatch, maxRoutes } = ROUTE_RIDE_AUTO_POLICY;
     for (let i = 0; i < ordered.length && picked.length < maxRoutes; i += boundsBatch) {
       const batch = ordered.slice(i, i + boundsBatch);
-      const bounds = await this.routes.rideableBounds(batch, userId);
+      const bounds = await this.routes.rideableBounds(
+        batch.map((item) => item.routeId),
+        userId,
+      );
       picked.push(...nearRoutes(batch, bounds, primary.bounds, maxRoutes - picked.length));
     }
     return picked;

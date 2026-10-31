@@ -283,56 +283,131 @@ describe('автопроверка (route-rides-03)', () => {
   const live = (pairs: [string, string][]) =>
     new Map(pairs.map(([activityId, primaryId]) => [activityId, { primaryId }]));
 
-  it('autoPlan: (а) по последнему заезду ↓, затем (б) новые → старые; маршрут в (а) и (б) — один раз; заезд группы и квота — пропуск; без живых заездов — не (а)', () => {
+  /** Заезд маршрута для плана: активность, дата заезда (часы от T0), происхождение. */
+  const r = (activityId: string, hours: number, origin?: 'manual' | 'auto') => ({
+    activityId,
+    startedAt: at(hours * 60),
+    ...(origin ? { origin } : {}),
+  });
+  const ids = (plan: { routeId: string }[]) => plan.map((item) => item.routeId);
+
+  it('autoPlan: (а) по последнему живому заезду ↓, затем (б) новые → старые; маршрут в (а) и (б) — один раз; ручной заезд группы и квота — пропуск', () => {
     const heads = live([
       [id(1), id(1)],
       [id(2), id(2)],
-      [id(3), PRIMARY], // дубль новой активности — заезд группы уже есть
+      [id(3), PRIMARY], // дубль новой активности — ручной заезд группы уже есть
       [id(4), id(4)],
     ]);
     const plan = autoPlan({
       primaryId: PRIMARY,
       heads,
       ridden: [
-        { routeId: route(1), lastStartedAt: at(10), activityIds: [id(1)] },
-        { routeId: route(2), lastStartedAt: at(30), activityIds: [id(2)] },
-        { routeId: route(3), lastStartedAt: at(40), activityIds: [id(4), id(3)] },
-        // активность удалена — заездов «видимых» нет
-        { routeId: route(4), lastStartedAt: at(50), activityIds: [id(99)] },
+        { routeId: route(1), rides: [r(id(1), 10)] },
+        { routeId: route(2), rides: [r(id(2), 30)] },
+        { routeId: route(3), rides: [r(id(4), 40), r(id(3), 41)] },
+        // активность удалена — видимых заездов нет, в (а) не попадает
+        { routeId: route(4), rides: [r(id(99), 50)] },
       ],
       own: [route(6), route(1), route(5), route(3)],
     });
-    expect(plan).toEqual([route(2), route(1), route(6), route(5)]);
+    expect(plan).toEqual([
+      { routeId: route(2), done: false },
+      { routeId: route(1), done: false },
+      { routeId: route(6), done: false },
+      { routeId: route(5), done: false },
+    ]);
   });
 
-  it('autoPlan: квота — 100 живых заездов маршрута пропуск, 99 — да', () => {
-    const ids = (n: number, from: number) => Array.from({ length: n }, (_, i) => id(from + i));
-    const full = ids(ROUTE_RIDE_POLICY.maxPerRoute, 100);
-    const almost = ids(ROUTE_RIDE_POLICY.maxPerRoute - 1, 300);
-    const heads = live([...full, ...almost].map((a) => [a, a]));
+  it('autoPlan: свой маршрут, у которого остались только заезды удалённых активностей, — в (б)', () => {
+    const plan = autoPlan({
+      primaryId: PRIMARY,
+      heads: live([]),
+      ridden: [{ routeId: route(4), rides: [r(id(99), 50)] }],
+      own: [route(5), route(4)],
+    });
+    expect(ids(plan)).toEqual([route(5), route(4)]);
+  });
+
+  it('autoPlan: порядок (а) — по последнему живому заезду, удалённый свежий заезд не поднимает маршрут', () => {
+    const heads = live([
+      [id(1), id(1)],
+      [id(2), id(2)],
+    ]);
     const plan = autoPlan({
       primaryId: PRIMARY,
       heads,
       ridden: [
-        { routeId: route(1), lastStartedAt: at(20), activityIds: full },
-        { routeId: route(2), lastStartedAt: at(10), activityIds: [...almost, id(999)] },
+        // свежий заезд удалён — последний живой 10 ч
+        { routeId: route(1), rides: [r(id(1), 10), r(id(98), 90)] },
+        { routeId: route(2), rides: [r(id(2), 20)] },
+      ],
+      own: [],
+    });
+    expect(ids(plan)).toEqual([route(2), route(1)]);
+  });
+
+  it('autoPlan: автозаезд этой группы — маршрут остаётся на своём месте плана (`done`), не сдвигает (а) и не освобождает слот', () => {
+    const heads = live([
+      [id(1), id(1)],
+      [id(2), id(2)],
+      [id(5), PRIMARY],
+    ]);
+    const plan = autoPlan({
+      primaryId: PRIMARY,
+      heads,
+      ridden: [
+        // автозаезд группы самый свежий — порядок по прочим живым заездам
+        { routeId: route(1), rides: [r(id(1), 10), r(id(5), 99, 'auto')] },
+        { routeId: route(2), rides: [r(id(2), 20)] },
+        // свой маршрут с одним автозаездом группы — в (б) на своём месте
+        { routeId: route(6), rides: [r(id(5), 99, 'auto')] },
+      ],
+      own: [route(7), route(6), route(5)],
+    });
+    expect(plan).toEqual([
+      { routeId: route(2), done: false },
+      { routeId: route(1), done: true },
+      { routeId: route(7), done: false },
+      { routeId: route(6), done: true },
+      { routeId: route(5), done: false },
+    ]);
+  });
+
+  it('autoPlan: квота — 100 живых заездов маршрута (кроме заездов группы) пропуск, 99 — да', () => {
+    const many = (n: number, from: number) => Array.from({ length: n }, (_, i) => id(from + i));
+    const full = many(ROUTE_RIDE_POLICY.maxPerRoute, 100);
+    const almost = many(ROUTE_RIDE_POLICY.maxPerRoute - 1, 300);
+    const heads = live([...full, ...almost].map((a) => [a, a]));
+    heads.set(id(5), { primaryId: PRIMARY });
+    const plan = autoPlan({
+      primaryId: PRIMARY,
+      heads,
+      ridden: [
+        { routeId: route(1), rides: full.map((a) => r(a, 20)) },
+        {
+          routeId: route(2),
+          rides: [...almost.map((a) => r(a, 10)), r(id(999), 1), r(id(5), 30, 'auto')],
+        },
       ],
       own: [route(1)],
     });
-    expect(plan).toEqual([route(2)]);
+    expect(plan).toEqual([{ routeId: route(2), done: true }]);
   });
 
   it('nearRoutes: далёкая рамка — пропуск, пропуски не занимают места, первые `room` по порядку', () => {
     const near: Bounds = [27.5, 53.9, 27.6, 53.95];
     const far: Bounds = [30.0, 55.0, 30.1, 55.05];
-    const ordered = Array.from({ length: 26 }, (_, i) => route(i));
-    const bounds = new Map<string, Bounds>(ordered.map((r, i) => [r, i === 1 ? far : near]));
+    const ordered = Array.from({ length: 26 }, (_, i) => ({ routeId: route(i), done: i === 3 }));
+    const bounds = new Map<string, Bounds>(
+      ordered.map((item, i) => [item.routeId, i === 1 ? far : near]),
+    );
     bounds.delete(route(2)); // невидимый — нет рамки
     const picked = nearRoutes(ordered, bounds, near, ROUTE_RIDE_AUTO_POLICY.maxRoutes);
     expect(picked).toHaveLength(20);
-    expect(picked[0]).toBe(route(0));
-    expect(picked[1]).toBe(route(3));
-    expect(picked.at(-1)).toBe(route(21));
-    expect(nearRoutes(ordered, bounds, near, 2)).toEqual([route(0), route(3)]);
+    expect(picked[0]).toEqual({ routeId: route(0), done: false });
+    // уже проверенный этой автопроверкой — занимает слот
+    expect(picked[1]).toEqual({ routeId: route(3), done: true });
+    expect(picked.at(-1)?.routeId).toBe(route(21));
+    expect(ids(nearRoutes(ordered, bounds, near, 2))).toEqual([route(0), route(3)]);
   });
 });

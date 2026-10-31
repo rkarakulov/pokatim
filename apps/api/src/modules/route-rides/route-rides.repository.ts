@@ -79,8 +79,9 @@ export class RouteRidesRepository {
 
   /**
    * Свои заезды по маршрутам (route-rides-03, план автопроверки): `$match { userId }` — префикс уникального индекса,
-   * группировка по маршруту (id активностей, последняя дата заезда), маршруты с поздним последним заездом первыми, не
-   * больше `limit`. Видимость и живость активностей — у вызывающего.
+   * группировка по маршруту (активность, дата заезда и происхождение каждого заезда), маршруты с поздним последним
+   * заездом первыми (порядок скана; итоговый — по живым заездам в `autoPlan`), не больше `limit`. Видимость и живость
+   * активностей — у вызывающего.
    */
   ridesByRoute(userId: string, limit: number): Promise<RiddenRoute[]> {
     return this.c.rides
@@ -90,12 +91,18 @@ export class RouteRidesRepository {
           $group: {
             _id: '$routeId',
             lastStartedAt: { $max: '$activity.startedAt' },
-            activityIds: { $push: '$activityId' },
+            rides: {
+              $push: {
+                activityId: '$activityId',
+                startedAt: '$activity.startedAt',
+                origin: '$origin',
+              },
+            },
           },
         },
         { $sort: { lastStartedAt: -1, _id: 1 } },
         { $limit: limit },
-        { $project: { _id: 0, routeId: '$_id', lastStartedAt: 1, activityIds: 1 } },
+        { $project: { _id: 0, routeId: '$_id', rides: 1 } },
       ])
       .toArray();
   }

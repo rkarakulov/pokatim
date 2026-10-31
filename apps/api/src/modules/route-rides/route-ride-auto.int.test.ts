@@ -165,7 +165,7 @@ describe('AC1: новая активность → passed по маршрута�
     expect(event).toBeDefined();
     expect(await auto().process(job(event!.type, event!._id))).toEqual({ planned: 1, passed: 1 });
     expect(await auto().process(job(event!.type, event!._id, 1))).toEqual({
-      planned: 0,
+      planned: 1,
       passed: 0,
     });
     expect(await rides().countDocuments({ routeId: own })).toBe(1);
@@ -252,7 +252,8 @@ describe('AC2: что не триггерит', () => {
 
     // заезд группы уже есть — повтор без прогона движка
     evaluate.mockClear();
-    expect(await auto().run(fresh, r.userId)).toEqual({ planned: 0, passed: 0 });
+    // автозаезд занимает слот плана (`done`), прогона нет
+    expect(await auto().run(fresh, r.userId)).toEqual({ planned: 1, passed: 0 });
     expect(evaluate).not.toHaveBeenCalled();
   });
 
@@ -289,6 +290,48 @@ describe('AC2: что не триггерит', () => {
       ...newestFirst.slice(0, 17),
     ]);
     expect(await rides().countDocuments({ activityId: fresh })).toBe(0);
+  });
+});
+
+describe('AC3: план события детерминирован (ревью pass 1, CRITICAL)', () => {
+  it('21 подходящий маршрут: ретрай после частичного успеха и повтор события — те же 20, 21-й не проверяется', async () => {
+    const r = await rider(h);
+    const own: string[] = [];
+    for (let i = 0; i < 21; i += 1) own.push(await ownCorridorRoute(h, r.userId));
+    const fresh = await ride(r.auth, rideGpx('clean.gpx', at(0)));
+    // настоящая сверка один раз — дальше её итог (прогоны движка дорогие)
+    const real = evaluator().evaluate.bind(evaluator());
+    const passed = await real(
+      newRideDoc({
+        userId: r.userId,
+        routeId: own[0]!,
+        activity: (await source().activity(r.userId, fresh))!,
+        origin: 'auto',
+        now: h.clock.now(),
+      }),
+    );
+    expect(passed.status).toBe('passed');
+    let calls = 0;
+    const evaluate = vi.spyOn(evaluator(), 'evaluate').mockImplementation(async () => {
+      calls += 1;
+      // сбой окружения на 6-м маршруте первой попытки
+      if (calls === 6) throw new Error('loader crashed');
+      return passed;
+    });
+    await expect(auto().run(fresh, r.userId)).rejects.toThrow('loader crashed');
+    expect(await rides().countDocuments({ activityId: fresh })).toBe(5);
+
+    evaluate.mockClear();
+    expect(await auto().run(fresh, r.userId)).toEqual({ planned: 20, passed: 15 });
+    expect(evaluate).toHaveBeenCalledTimes(15);
+    evaluate.mockClear();
+    expect(await auto().run(fresh, r.userId)).toEqual({ planned: 20, passed: 0 });
+    expect(evaluate).not.toHaveBeenCalled();
+
+    const checked = await rides().find({ activityId: fresh }).toArray();
+    expect(checked).toHaveLength(20);
+    // самый старый свой маршрут — 21-й по порядку V2(б)
+    expect(checked.map((doc) => doc.routeId)).not.toContain(own[0]);
   });
 });
 

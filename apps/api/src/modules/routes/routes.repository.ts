@@ -871,7 +871,6 @@ export class RoutesRepository {
     return (await this.c.geometries.findOne({ _id: id })) ?? undefined;
   }
 
-  /** Только линия показа (проекция без `matchLine` ≤ 20 000 точек). */
   /** Линии показа маршрутов по id одним `$in` с проекцией `line` (route-rides-03, ≤ 25 у вызывающего). */
   async displayLines(ids: readonly string[]): Promise<Map<string, [number, number][]>> {
     if (ids.length === 0) return new Map();
@@ -881,6 +880,7 @@ export class RoutesRepository {
     return new Map(docs.map((doc) => [doc._id, doc.line.coordinates]));
   }
 
+  /** Только линия показа (проекция без `matchLine` ≤ 20 000 точек). */
   async displayLine(id: string): Promise<[number, number][] | undefined> {
     const doc = await this.c.geometries.findOne({ _id: id }, { projection: { line: 1 } });
     return doc?.line.coordinates;

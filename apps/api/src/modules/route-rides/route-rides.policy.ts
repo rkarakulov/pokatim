@@ -58,53 +58,73 @@ export function autoEligible(
   );
 }
 
-/** Маршрут со своими заездами райдера (`RouteRidesRepository.ridesByRoute`). */
+/** Маршрут со своими заездами райдера (`RouteRidesRepository.ridesByRoute`): активность, дата заезда, происхождение. */
 export interface RiddenRoute {
   routeId: string;
-  lastStartedAt: Date;
-  activityIds: string[];
+  rides: { activityId: string; startedAt: Date; origin?: RouteRideOrigin }[];
+}
+
+/** Маршрут плана автопроверки; `done` — заезд группы уже создан автопроверкой (слот занят, прогона нет). */
+export interface AutoPlanItem {
+  routeId: string;
+  done: boolean;
 }
 
 /**
- * Порядок кандидатов автопроверки (V2, V4, 8.1 AC-4), до видимости и рамки: (а) маршруты со своими живыми заездами по
- * дате последнего заезда ↓, затем (б) свои готовые маршруты в данном порядке (новые → старые) без повторов (а).
- * Пропуск — у маршрута уже есть заезд группы `primaryId` или живых заездов ≥ квоты; пропущенный (а) в (б) не попадает.
+ * Порядок кандидатов автопроверки (V2, V4, 8.1 AC-4), до видимости и рамки: (а) маршруты со своими живыми заездами
+ * (кроме заездов группы `primaryId`) по дате последнего такого заезда ↓, затем (б) свои готовые маршруты в данном
+ * порядке (новые → старые) без повторов (а). Пропуск — ручной заезд группы или живых заездов (кроме группы) ≥ квоты.
+ * Автозаезд группы маршрут не пропускает и не сдвигает: план события детерминирован — повтор и ретрай после частичного
+ * успеха получают тот же набор (ревью pass 1, CRITICAL), такой маршрут — `done`.
  */
 export function autoPlan(input: {
   primaryId: string;
   heads: ReadonlyMap<string, { primaryId: string }>;
   ridden: readonly RiddenRoute[];
   own: readonly string[];
-}): string[] {
+}): AutoPlanItem[] {
   const { heads, primaryId } = input;
-  const seen = new Set<string>();
-  const ridden = input.ridden
-    .map((route) => {
-      seen.add(route.routeId);
-      const alive = route.activityIds.filter((activityId) => heads.has(activityId));
-      const skip =
-        alive.length === 0 ||
-        alive.length >= ROUTE_RIDE_POLICY.maxPerRoute ||
-        alive.some((activityId) => heads.get(activityId)?.primaryId === primaryId);
-      return { route, skip };
-    })
-    .filter(({ skip }) => !skip)
-    .map(({ route }) => route)
-    .sort((a, b) => b.lastStartedAt.getTime() - a.lastStartedAt.getTime());
-  const own = [...new Set(input.own)].filter((routeId) => !seen.has(routeId));
-  return [...ridden.map((route) => route.routeId), ...own];
+  const blocked = new Set<string>();
+  const done = new Set<string>();
+  const ridden: { routeId: string; lastStartedAt: number }[] = [];
+  for (const route of input.ridden) {
+    const alive = route.rides.filter((ride) => heads.has(ride.activityId));
+    const group = alive.filter((ride) => heads.get(ride.activityId)?.primaryId === primaryId);
+    const others = alive.filter((ride) => !group.includes(ride));
+    if (
+      group.some((ride) => (ride.origin ?? 'manual') !== 'auto') ||
+      others.length >= ROUTE_RIDE_POLICY.maxPerRoute
+    ) {
+      blocked.add(route.routeId);
+      continue;
+    }
+    if (group.length > 0) done.add(route.routeId);
+    if (others.length > 0) {
+      const lastStartedAt = Math.max(...others.map((ride) => ride.startedAt.getTime()));
+      ridden.push({ routeId: route.routeId, lastStartedAt });
+    }
+  }
+  ridden.sort((a, b) => b.lastStartedAt - a.lastStartedAt);
+  const inRidden = new Set(ridden.map((route) => route.routeId));
+  const own = [...new Set(input.own)].filter(
+    (routeId) => !inRidden.has(routeId) && !blocked.has(routeId),
+  );
+  return [...ridden.map((route) => route.routeId), ...own].map((routeId) => ({
+    routeId,
+    done: done.has(routeId),
+  }));
 }
 
 /** Первые `room` маршрутов по порядку, видимых (есть рамка) и с рамкой у рамки активности (600 м). */
-export function nearRoutes(
-  ordered: readonly string[],
+export function nearRoutes<T extends { routeId: string }>(
+  ordered: readonly T[],
   bounds: ReadonlyMap<string, Bounds>,
   activityBounds: Bounds,
   room: number,
-): string[] {
+): T[] {
   return ordered
-    .filter((routeId) => {
-      const routeBounds = bounds.get(routeId);
+    .filter((item) => {
+      const routeBounds = bounds.get(item.routeId);
       return (
         routeBounds !== undefined &&
         boundsNear(activityBounds, routeBounds, ROUTE_RIDE_POLICY.boundsMarginM)
