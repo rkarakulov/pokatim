@@ -17,6 +17,8 @@ export interface RideInviteFacts {
   paceMaxKmh: number;
   /** маршрут, который **сейчас в каталоге** (`public`); свой маршрут организатора (`private`) и висячий — `null` */
   routeId: string | null;
+  /** фото организатора (ride-photo, ADR-0028): id текущего фото или `null`; рисует только `night` (4a), OG — нет */
+  photoId: string | null;
 }
 
 export interface RidesForSharing {
@@ -25,6 +27,11 @@ export interface RidesForSharing {
    * опубликованный (отменён, прошёл) — `null`.
    */
   inviteFacts(userId: string, rideId: string): Promise<RideInviteFacts | null>;
+  /**
+   * Байты фото для рендера 4a (только worker): только пока райд не скрыт и `photoId` — его текущее фото; иначе `null`
+   * (вход устарел — картинка не нужна, ретраить нечего).
+   */
+  invitePhoto(rideId: string, photoId: string): Promise<Uint8Array | null>;
   /** Линия показа маршрута, пока он в каталоге (только worker); иначе `null`. */
   inviteLine(routeId: string): Promise<LonLat[] | null>;
   /**

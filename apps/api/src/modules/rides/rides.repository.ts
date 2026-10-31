@@ -55,6 +55,7 @@ const VIEWER_FIELDS = {
   routeId: 1,
   geo: 1,
   startPrecise: 1,
+  photoId: 1,
 } as const satisfies Record<Exclude<keyof RideDoc, '_id' | 'participants' | 'noticeSeq'>, 1>;
 const viewerProjection = (userId: string) => ({
   ...VIEWER_FIELDS,
@@ -757,6 +758,72 @@ export class RidesRepository {
       .sort({ hiddenAt: -1, _id: -1 })
       .limit(limit)
       .toArray();
+  }
+
+  // --- фото организатора (ride-photo, ADR-0028): запись райда — первая в транзакции с `ride_photos` ---
+
+  /**
+   * Новое фото своего будущего опубликованного райда: `photoId`, `updatedAt` (`version` не меняется). Документ **до**
+   * записи (прежний `photoId`) или `null` — условие не выполнено (нет, чужой, не будущий опубликованный).
+   */
+  setPhoto(
+    tx: DbSession,
+    id: string,
+    organizerUserId: string,
+    photoId: string,
+    now: Date,
+  ): Promise<Pick<RideDoc, '_id' | 'photoId'> | null> {
+    return this.rides.findOneAndUpdate(
+      { _id: id, organizerUserId, status: 'published', startsAt: { $gt: now } },
+      { $set: { photoId, updatedAt: now } },
+      { session: tx, returnDocument: 'before', projection: { photoId: 1 } },
+    );
+  }
+
+  /** Снять фото своего райда (любой статус): документ до записи; `null` — нет, чужой или фото уже нет. */
+  clearPhoto(
+    tx: DbSession,
+    id: string,
+    organizerUserId: string,
+    now: Date,
+  ): Promise<Pick<RideDoc, '_id' | 'photoId'> | null> {
+    return this.rides.findOneAndUpdate(
+      { _id: id, organizerUserId, photoId: { $type: 'string' } },
+      { $set: { photoId: null, updatedAt: now } },
+      { session: tx, returnDocument: 'before', projection: { photoId: 1 } },
+    );
+  }
+
+  /** Сброс фото модератором по `photoId` карточки (любой статус): после записи; `null` — фото уже другое или нет. */
+  resetPhoto(
+    tx: DbSession,
+    id: string,
+    photoId: string,
+    now: Date,
+  ): Promise<RideModerationDoc | null> {
+    return this.rides.findOneAndUpdate(
+      { _id: id, photoId },
+      { $set: { photoId: null, updatedAt: now } },
+      { session: tx, returnDocument: 'after', projection: { participants: 0 } },
+    );
+  }
+
+  /** Фото — текущее фото нескрытого райда (отдача байтов и рендер приглашения проверяют на каждом запросе). */
+  async isCurrentPhoto(rideId: string, photoId: string): Promise<boolean> {
+    const doc = await this.rides.findOne(
+      { _id: rideId, photoId, status: { $ne: 'hidden' } },
+      { projection: { _id: 1 } },
+    );
+    return doc !== null;
+  }
+
+  /** Стирание аккаунта (ADR-0015): ссылка на фото снимается во всех райдах организатора (любой статус). */
+  async clearPhotosOf(organizerUserId: string, now: Date): Promise<number> {
+    const result = await this.rides.updateMany(
+      { organizerUserId, photoId: { $type: 'string' } },
+      { $set: { photoId: null, updatedAt: now } },
+    );
+    return result.modifiedCount;
   }
 
   // --- стирание удалённого аккаунта (`RideErasure`, ADR-0015, A6) ---

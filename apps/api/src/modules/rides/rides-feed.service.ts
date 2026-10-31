@@ -77,6 +77,13 @@ const routeView = (ref: RideRouteRef): RideRoute => ({
 });
 
 /**
+ * Фото организатора во view (ride-photo, ADR-0028): у скрытого райда — `null` всем, включая организатора (как 404
+ * отдачи байтов); только id.
+ */
+export const ridePhotoOf = (doc: Pick<RideDoc, 'status' | 'photoId'>) =>
+  doc.status !== 'hidden' && doc.photoId ? { id: doc.photoId } : null;
+
+/**
  * Публичные поля ответа — явным списком (не `...doc`): без организатора, участников, `version`, `createdAt`, точки
  * «Рядом». `start` — старт видимого зрителю маршрута (8.1 RC-1), не снимок из райда.
  */
@@ -99,6 +106,7 @@ function summaryOf(doc: RidePublicDoc, now: Date, route: RideRouteRef | null) {
     rescheduledAt: doc.rescheduledAt?.toISOString() ?? null,
     route: route ? routeView(route) : null,
     start: route ? route.start : null,
+    photo: ridePhotoOf(doc),
   };
 }
 

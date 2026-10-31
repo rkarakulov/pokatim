@@ -29,6 +29,7 @@ function input(
       paceMinKmh: 22,
       paceMaxKmh: 24,
       routeId: null,
+      photoId: null,
       ...facts,
     },
   };

@@ -3,6 +3,7 @@ import { MongoOutboxWriter } from '@rkarakulov/api-kit/mongo';
 
 import { MongoTransactions } from '../../db';
 import { RIDE_ROUTES, type RideRoutes } from '../routes';
+import { RidePhotosRepository } from './ride-photos.repository';
 import { RIDES_RIDE_CANCELLED, type RideEventPayload } from './rides.events';
 import { RidesRepository } from './rides.repository';
 
@@ -15,12 +16,14 @@ export interface RideErasureResult {
   unsigned: number;
   /** райды (любых организаторов) на маршрутах удалённого — точка сброшена на центр города (05c) */
   restarted: number;
+  /** фото организатора удалены (ride-photo, ADR-0028), ссылки на райдах сняты */
+  photos: number;
 }
 
 /**
  * Порт стирания кофе-райдов удалённого аккаунта (модуль `account`, ADR-0015, A6): будущие свои — отменены
  * («Организатор не сможет»; скрытые — в `hiddenFromStatus`), отметки в чужих будущих сняты, подпись организатора
- * стёрта во всех его райдах. Прошедшие чужие с отметкой и жалобы на райды не трогаются (A6). Повторяемо.
+ * стёрта во всех его райдах, фото организатора удалены (ride-photo, ADR-0028). Прошедшие чужие с отметкой и жалобы на райды не трогаются (A6). Повторяемо.
  * Отмена опубликованного — по одному райду: та же условная операция, что у организатора, в транзакции с событием
  * `rides.ride-cancelled` (ADR-0017); повтор фильтр не проходит — второго события нет. Скрытые — без события (RC-8).
  * Точки райдов на маршрутах удалённого (05c, 8.1 RC-1) — центр города: шаг `rides` идёт до шага `routes`, id
@@ -31,6 +34,7 @@ export interface RideErasureResult {
 export class RideErasure {
   constructor(
     private readonly repository: RidesRepository,
+    private readonly photos: RidePhotosRepository,
     private readonly transactions: MongoTransactions,
     private readonly outbox: MongoOutboxWriter,
     @Inject(RIDE_ROUTES) private readonly rideRoutes: RideRoutes,
@@ -44,11 +48,14 @@ export class RideErasure {
     cancelled += await this.repository.cancelHiddenFutureOf(userId, now);
     const left = await this.repository.leaveAllFuture(userId, now);
     const unsigned = await this.repository.clearOrganizerName(userId, now);
+    // фото всех райдов организатора (любой статус): сначала ссылки (view не покажет висячий id), затем документы
+    await this.repository.clearPhotosOf(userId, now);
+    const photos = await this.photos.deleteAllOf(userId);
     const restarted = await this.repository.resetStartsForRoutes(
       await this.rideRoutes.ownedRouteIds(userId),
       now,
     );
-    return { cancelled, left, unsigned, restarted };
+    return { cancelled, left, unsigned, restarted, photos };
   }
 
   /**

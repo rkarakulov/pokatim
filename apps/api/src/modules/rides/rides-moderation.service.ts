@@ -6,6 +6,7 @@ import type {
   ModerationRidePage,
   ModerationRideQuery,
   ModerationRideRow,
+  ResetRidePhotoRequest,
   RestoreRideRequest,
 } from '@pokatim/contracts';
 import { CLOCK, type Clock } from '@rkarakulov/api-kit/core';
@@ -17,6 +18,7 @@ import { domainError } from '../../error-messages';
 import { decodeCursor, encodeCursor } from '../../page-cursor';
 import { PanelAudit } from '../panel';
 import type { RideReportDoc } from './ride-reports.collection';
+import { RidePhotosRepository } from './ride-photos.repository';
 import { RideReportsRepository } from './ride-reports.repository';
 import { RIDES_REPORTS_RESOLVED, type RidesReportsResolved } from './rides.events';
 import { type ModerationAction, moderationTransition, ridePhase } from './rides.policy';
@@ -68,12 +70,14 @@ function detailOf(
       resolution: report.resolution,
       resolvedAt: iso(report.resolvedAt),
     })),
+    // и у скрытого: модератор может удалить фото (ride-photo, R11), байты при этом не отдаются
+    photo: doc.photoId ? { id: doc.photoId } : null,
   };
 }
 
 /**
  * Модерация кофе-райдов в панели (05b, `rides.moderate`): очередь, карточка и действия «Скрыть» / «Вернуть» /
- * «Отклонить жалобы». Действие — одна транзакция: **первой** — условная запись райда (по `version`; 8.1 D2), затем
+ * «Отклонить жалобы», «Удалить фото» (ride-photo). Действие — одна транзакция: **первой** — условная запись райда (по `version`; 8.1 D2), затем
  * закрытие открытых жалоб, событие `rides.reports-resolved` (закрыта хотя бы одна, ADR-0017) и `PanelAudit.append`
  * (откат — ни изменения, ни записи журнала, ни события). Порядок проверок — 8.1 D4.
  */
@@ -82,6 +86,7 @@ export class RidesModerationService {
   constructor(
     private readonly rides: RidesRepository,
     private readonly reports: RideReportsRepository,
+    private readonly photos: RidePhotosRepository,
     private readonly audit: PanelAudit,
     private readonly transactions: MongoTransactions,
     private readonly outbox: MongoOutboxWriter,
@@ -144,6 +149,38 @@ export class RidesModerationService {
     body: DismissRideReportsRequest,
   ): Promise<ModerationRideDetail> {
     return this.act(actorUserId, id, 'dismiss', body);
+  }
+
+  /**
+   * «Удалить фото» (ride-photo, ADR-0028, R10): транзакция «условная запись райда по `photoId` карточки первой →
+   * документ `ride_photos` удалён → `ride.photo_reset` в журнал» (`details: null` — без id фото). Фото нет — успех без
+   * журнала; фото уже другое — 409 `CONFLICT` (модератор не удалит фото, которого не видел). Жалобы, `version` и
+   * уведомления не трогаются.
+   */
+  resetPhoto(
+    actorUserId: string,
+    id: string,
+    body: ResetRidePhotoRequest,
+  ): Promise<ModerationRideDetail> {
+    const now = this.clock.now();
+    return this.transactions.run(async (tx) => {
+      const updated = await this.rides.resetPhoto(tx, id, body.photoId, now);
+      if (!updated) {
+        const current = await this.rides.findForModeration(id, tx);
+        if (!current) throw domainError('NOT_FOUND', 404);
+        if (current.photoId) throw domainError('CONFLICT', 409);
+        return detailOf(current, await this.reports.latest(id, tx), now);
+      }
+      await this.photos.delete(tx, body.photoId, id);
+      await this.audit.append(tx, {
+        action: 'ride.photo_reset',
+        actor: { kind: 'user', userId: actorUserId },
+        subject: { kind: 'ride', id, label: updated.title },
+        reason: body.reason,
+        details: null,
+      });
+      return detailOf(updated, await this.reports.latest(id, tx), now);
+    });
   }
 
   private async act(

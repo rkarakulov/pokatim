@@ -658,6 +658,8 @@ describe('публичная карточка: поля ответа', () => {
         'rescheduledAt',
         'route',
         'start',
+        // ride-photo: только `{ id }` или `null`
+        'photo',
         'description',
       ].sort(),
     );
