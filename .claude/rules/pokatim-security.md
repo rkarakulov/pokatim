@@ -358,8 +358,11 @@ paths:
   сезонных), seasonId (Uuid) }` без повторов (400 `VALIDATION_FAILED`); в фильтр — только примитивы после zod; чужие,
   отозванные и незнакомые адреса (сезонный код в `codes`) — без записи и без ошибки. Лимиты
   `achievements-read:<uid>` 60/мин, `achievements-seen:<uid>` 120/ч (429). GET пишет ≤ 9 документов
-  `achievement_grants` + ≤ 3 `achievement_season_grants` на завершённый сезон райдера; `userId` порту
-  `RIDER_SEASON_STANDINGS` — только от сервиса (из access).
+  `achievement_grants` + ≤ 3 `achievement_season_grants` на завершённый сезон райдера, и по событию outbox
+  `achievements.grant-noticed` на каждую новую выдачу / новый уровень (в одной транзакции с выдачей; payload —
+  `{ grant, grantId, level, origin }`: id и коды, без `userId`, текстов и ПДн; получателя `notifications` берёт из
+  выдачи через порт `ACHIEVEMENT_NOTICES`, не из payload); `userId` порту `RIDER_SEASON_STANDINGS` — только от
+  сервиса (из access).
 - Публично `GET /v1/riders/:publicId/achievements` — `PublicReadGuard`, `public, max-age=60`, `RiderPublicId` pipe;
   только при имени и согласии (`RIDER_PROFILES.findPublic`), иначе один 404; без записи. Только `race_*` и сезонные
   (`final`-сезоны, без чтения выдач; итоги протоколов, S6) — маршруты и райды личные (A7). Id сезона публичен

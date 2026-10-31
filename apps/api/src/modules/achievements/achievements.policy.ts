@@ -241,6 +241,8 @@ export interface StoredGrant {
   revokedAt: Date | null;
   level?: LevelRank | null;
   seenLevel?: LevelRank | null;
+  /** наибольший объявленный ранг (achievements-push); нет у документов до выката — ≡ `storedRank` */
+  notifiedLevel?: LevelRank | null;
 }
 
 /** Сохранённый ранг (документ v1 и разовые — 1). */
@@ -252,6 +254,20 @@ export function isSeen(
   level: LevelRank | null,
 ): boolean {
   return grant.seenAt !== null && (grant.seenLevel ?? 1) >= (level ?? 1);
+}
+
+/**
+ * Нужно ли уведомление при `refresh`/`restore` несезонной выдачи (P1, P3, 5.A): новый ранг `level` выше объявленного
+ * (`notifiedLevel`, нет — сохранённый ранг: документы до выката ретро-уведомлений не дают) и не показан. Понижение, та
+ * же ступень с другим объектом, возврат на показанный или уже объявленный уровень — тихо. По документу **до** записи.
+ * Вставка не в первой сверке уведомляет всегда (это решает сверка, не эта функция). Чистая функция.
+ */
+export function noticeDue(
+  before: Pick<StoredGrant, 'seenAt' | 'seenLevel' | 'level' | 'notifiedLevel'>,
+  level: LevelRank | null,
+): boolean {
+  const rank = level ?? 1;
+  return !isSeen(before, rank) && (before.notifiedLevel ?? storedRank(before)) < rank;
 }
 
 export type ReconcileStep =

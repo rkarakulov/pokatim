@@ -9,6 +9,9 @@ import { RouteRidesCoreModule } from '../route-rides';
 import { StandingsCoreModule } from '../standings';
 import { AchievementErasure } from './achievement-erasure';
 import { AchievementFactsReader } from './achievement-facts.reader';
+import { AchievementNoticesService } from './achievement-notices';
+import { ACHIEVEMENT_NOTICES } from './achievement-notices.port';
+import { AchievementsReconciler } from './achievements-reconciler';
 import { AchievementsSharing } from './achievements-for-sharing';
 import { ACHIEVEMENTS_FOR_SHARING } from './achievements-for-sharing.port';
 import { AchievementsPublicController } from './achievements-public.controller';
@@ -41,20 +44,36 @@ export class AchievementsCoreModule {}
 export class AchievementsReadModule {}
 
 /**
+ * Сверка и уведомления без HTTP (achievements-push): `AchievementsReconciler` (одна сверка для `GET /v1/achievements` и
+ * серверной сверки) и порт `ACHIEVEMENT_NOTICES` (`notifications`, worker). `StandingsCoreModule` — порт
+ * `RIDER_SEASON_STANDINGS`; `MongoTransactions`/`MongoOutboxWriter` — глобальные модули базы.
+ */
+@Module({
+  imports: [AchievementsCoreModule, AchievementsReadModule, StandingsCoreModule],
+  providers: [
+    AchievementsReconciler,
+    { provide: ACHIEVEMENT_NOTICES, useClass: AchievementNoticesService },
+  ],
+  exports: [AchievementsReconciler, ACHIEVEMENT_NOTICES],
+})
+export class AchievementsSyncModule {}
+
+/**
  * Достижения райдера (ADR-0020) — модуль-композиция (образец `riders` + `standings`): факты — только порты через
  * `index.ts` (`results` `RIDER_RESULTS`, `route-rides` `RIDER_ROUTE_RIDES`, `rides` `RIDER_RIDES`, `profile`
  * `RIDER_PROFILES`, `standings` `RIDER_SEASON_STANDINGS` — сезонные; факты — `AchievementsReadModule`); свои коллекции
- * выдач. Worker-модуля, очередей и outbox нет (A2). `achievements` импортируют
- * только `AppModule` (`AchievementsModule`) и `AccountWorkerModule` (`AchievementsCoreModule`, стирание).
+ * выдач. Сверка — `AchievementsSyncModule` (событие outbox `achievements.grant-noticed`, achievements-push).
+ * `achievements` импортируют `AppModule` (`AchievementsModule`), `AccountWorkerModule` (`AchievementsCoreModule`,
+ * стирание), `sharing` (`AchievementsReadModule`) и `NotificationsWorkerModule` (`AchievementsSyncModule`).
  */
 @Module({
   imports: [
     IdentityModule,
     ProfileCoreModule,
     ResultsCoreModule,
-    StandingsCoreModule,
     AchievementsCoreModule,
     AchievementsReadModule,
+    AchievementsSyncModule,
   ],
   controllers: [AchievementsController, AchievementsPublicController],
   providers: [AchievementsService, PublicReadGuard],

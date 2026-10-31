@@ -42,6 +42,7 @@ describe('groupOf: kind → группа настроек (N4)', () => {
       profile_name_reset: 'rides',
       profile_avatar_reset: 'rides',
       profile_club_reset: 'rides',
+      achievement_granted: 'achievements',
     });
   });
 
@@ -52,7 +53,12 @@ describe('groupOf: kind → группа настроек (N4)', () => {
   it('умолчания доставки — основные умолчания контракта + «Мероприятия» и «Маршруты» включены', () => {
     expect(DEFAULT_DELIVERY_SETTINGS.push.routes).toBe(true);
     expect(DEFAULT_DELIVERY_SETTINGS).toEqual({
-      push: { ...DEFAULT_NOTIFICATION_SETTINGS.push, events: true, routes: true },
+      push: {
+        ...DEFAULT_NOTIFICATION_SETTINGS.push,
+        events: true,
+        routes: true,
+        achievements: true,
+      },
       email: { ...DEFAULT_NOTIFICATION_SETTINGS.email, events: true },
       quietHours: DEFAULT_NOTIFICATION_SETTINGS.quietHours,
     });
@@ -193,5 +199,32 @@ describe('initialDelivery: состояние доставки нового ув
     expect(initialDelivery('ride_cancelled', off({ routes: false }), day, true).push.state).toBe(
       'pending',
     );
+  });
+
+  it('новое достижение: push по push.achievements, письма нет; другие группы не влияют (P4)', () => {
+    expect(initialDelivery('achievement_granted', off({ rides: false }), day, true)).toMatchObject({
+      push: { state: 'pending', reason: null },
+      email: null,
+    });
+    expect(
+      initialDelivery('achievement_granted', off({ achievements: false }), day, true),
+    ).toMatchObject({ push: { state: 'skipped', reason: 'disabled' }, email: null });
+    expect(initialDelivery('achievement_granted', settings, night, true).push.notBefore).toEqual(
+      minsk('2026-10-23T08:00'),
+    );
+  });
+
+  it('inApp (сверка при чтении, P1) — в центр без push: skipped/in_app при любых настройках', () => {
+    for (const pushEnabled of [true, false]) {
+      expect(
+        initialDelivery('achievement_granted', settings, night, pushEnabled, { inApp: true }),
+      ).toMatchObject({
+        push: { state: 'skipped', reason: 'in_app', notBefore: night },
+        email: null,
+      });
+    }
+    expect(
+      initialDelivery('achievement_granted', settings, day, true, { inApp: false }).push.state,
+    ).toBe('pending');
   });
 });

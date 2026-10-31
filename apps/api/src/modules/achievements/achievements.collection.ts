@@ -34,6 +34,12 @@ export interface AchievementGrantDoc {
   level?: LevelRank | null;
   /** наибольший показанный ранг (монотонен, `$max`); нет у документов v1 — ≡ 1 (L3) */
   seenLevel?: LevelRank | null;
+  /**
+   * наибольший ранг, о котором создано событие `achievements.grant-noticed` (achievements-push, монотонен, `$max`);
+   * ставится каждой вставкой (`= level`) и каждым `refresh`/`restore`; нет у документов до выката — ≡ `level ?? 1`
+   * (ретро-уведомлений нет)
+   */
+  notifiedLevel?: LevelRank | null;
   updatedAt: Date;
 }
 

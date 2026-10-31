@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { AchievementCode } from '../achievements/achievement.schema.ts';
 import { fieldError, tolerantEnum, Uuid } from '../common.ts';
 import { PageCursor } from '../races/race.schema.ts';
 import { TicketCodeCanonical } from '../tickets/ticket.schema.ts';
@@ -9,7 +10,15 @@ import { TicketCodeCanonical } from '../tickets/ticket.schema.ts';
  * уведомления. Тексты и цели считает сервер при создании (снимок); клиент присылает только намерение (прочитать,
  * настройки, токен). Справочники — только в конец: ответы приложения разбирают их `tolerantEnum`.
  */
-export const NOTIFICATION_GROUPS = ['races', 'disputes', 'rides', 'events', 'routes'] as const;
+export const NOTIFICATION_GROUPS = [
+  'races',
+  'disputes',
+  'rides',
+  'events',
+  'routes',
+  // achievements-push: новое достижение или уровень (только push)
+  'achievements',
+] as const;
 export type NotificationGroup = (typeof NOTIFICATION_GROUPS)[number];
 
 export const NOTIFICATION_KINDS = [
@@ -35,6 +44,8 @@ export const NOTIFICATION_KINDS = [
   'profile_name_reset',
   'profile_avatar_reset',
   'profile_club_reset',
+  // achievements-push: новое достижение, новый уровень или сезонное (группа `achievements`)
+  'achievement_granted',
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
@@ -51,6 +62,11 @@ export const NotificationTarget = z.discriminatedUnion('type', [
   z.object({ type: z.literal('ticket'), code: TicketCodeCanonical }),
   /** свой профиль («Редактировать профиль», `/settings/profile`): модератор сбросил имя, фото или клуб */
   z.object({ type: z.literal('profile-edit') }),
+  /**
+   * своё достижение (`/achievements/<code>`, сезонное — `?season=<id>`); строгий код — незнакомый будущий код у старой
+   * сборки уходит в `unknown` (без перехода)
+   */
+  z.object({ type: z.literal('achievement'), code: AchievementCode, seasonId: Uuid.optional() }),
 ]);
 export type NotificationTarget = z.infer<typeof NotificationTarget>;
 
@@ -156,6 +172,25 @@ export type UpdateRouteNotificationSettings = z.infer<typeof UpdateRouteNotifica
 
 /** Нет документа настроек — включено (N4); нет сохранённого тумблера — значение «Райдов» (сервер). */
 export const DEFAULT_ROUTE_NOTIFICATION_SETTINGS: RouteNotificationSettingsView = { push: true };
+
+/**
+ * Группа «Достижения» (новое достижение, уровень, сезонное) — подресурс `GET|PUT /v1/notifications/settings/achievements`,
+ * как «Маршруты» (RC-D1); писем нет — только push. Ответ терпит новые ключи, запрос — строгий.
+ */
+export const AchievementNotificationSettingsView = z.object({ push: z.boolean() });
+export type AchievementNotificationSettingsView = z.infer<
+  typeof AchievementNotificationSettingsView
+>;
+
+export const UpdateAchievementNotificationSettings = z.strictObject({ push: Toggle });
+export type UpdateAchievementNotificationSettings = z.infer<
+  typeof UpdateAchievementNotificationSettings
+>;
+
+/** Нет сохранённого тумблера — включено (P4, без наследования от других групп). */
+export const DEFAULT_ACHIEVEMENT_NOTIFICATION_SETTINGS: AchievementNotificationSettingsView = {
+  push: true,
+};
 
 export const PUSH_PLATFORMS = ['ios', 'android'] as const;
 export type PushPlatform = (typeof PUSH_PLATFORMS)[number];

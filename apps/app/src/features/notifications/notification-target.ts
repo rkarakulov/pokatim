@@ -1,6 +1,8 @@
 import { NotificationTarget } from '@pokatim/contracts';
 import type { Href } from 'expo-router';
 
+import { achievementPath } from '@/features/achievements/achievement-catalog';
+
 /** Центр уведомлений — куда ведёт push без цели (сводка тихих часов) или с незнакомой целью. */
 export const NOTIFICATIONS_PATH = '/notifications' as const;
 
@@ -25,6 +27,8 @@ export function notificationTargetPath(target: unknown): Href | null {
       return `/tickets/${value.code}`;
     case 'profile-edit':
       return '/settings/profile';
+    case 'achievement':
+      return achievementPath(value.code, value.seasonId ?? null) as Href;
   }
 }
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import type { AchievementNotice, AchievementNotices } from '../achievements';
 import type { DisputeNotices } from '../disputes';
 import type { RaceRegistry } from '../races';
 import type { ResultsNotices } from '../results';
@@ -42,6 +43,7 @@ function intakeWith(notice: Partial<RoutePublicationNotice> | null) {
     routes,
     unused as RaceRegistry,
     unused as TicketNotices,
+    unused as AchievementNotices,
   );
 }
 
@@ -109,7 +111,7 @@ describe('NotificationIntake: напоминание о событии (PR D)', 
       },
     };
     const unused = {} as never;
-    const intake = new NotificationIntake(unused, unused, unused, unused, unused, tickets);
+    const intake = new NotificationIntake(unused, unused, unused, unused, unused, tickets, unused);
     return { intake, calls };
   }
 
@@ -199,5 +201,84 @@ describe('NotificationIntake: сброс поля профиля (profile-modera
     ['битый userId', { ...payload('name'), userId: 'x' }],
   ])('%s — invalid_payload', async (_name, bad) => {
     expect(await intakeWith(null).drafts(RESET, bad, NOW)).toBe('invalid_payload');
+  });
+});
+
+describe('NotificationIntake: новое достижение (achievements-push, 5.B)', () => {
+  const GRANTED = 'achievements.grant-noticed';
+  const GRANT = '0190a6f4-0000-7000-8000-000000000011';
+  const RIDER = '0190a6f4-0000-7000-8000-000000000012';
+  const SEASON = '0190a6f4-0000-7000-8000-000000000013';
+  const payload = (overrides: Record<string, unknown> = {}) => ({
+    grant: 'fact',
+    grantId: GRANT,
+    level: 2,
+    origin: 'server',
+    ...overrides,
+  });
+
+  function intakeWithAchievements(result: AchievementNotice | 'gone' | 'state') {
+    const achievements: AchievementNotices = { notice: async () => result };
+    const unused = {} as never;
+    return new NotificationIntake(unused, unused, unused, unused, unused, unused, achievements);
+  }
+  const notice: AchievementNotice = {
+    userId: RIDER,
+    code: 'races_5',
+    level: 2,
+    object: { kind: 'race', title: 'Гран-при' },
+    seasonId: null,
+  };
+
+  it('битый payload — invalid_payload; gone/state порта — как есть', async () => {
+    const intake = intakeWithAchievements(notice);
+    for (const bad of [
+      {},
+      payload({ origin: 'panel' }),
+      payload({ level: 4 }),
+      payload({ grantId: 'x' }),
+    ]) {
+      expect(await intake.drafts(GRANTED, bad, NOW)).toBe('invalid_payload');
+    }
+    expect(await intakeWithAchievements('gone').drafts(GRANTED, payload(), NOW)).toBe('gone');
+    expect(await intakeWithAchievements('state').drafts(GRANTED, payload(), NOW)).toBe('state');
+  });
+
+  it('владельцу выдачи: текст, цель achievement, схлопывание по выдаче и рангу; server — с push', async () => {
+    expect(await intakeWithAchievements(notice).drafts(GRANTED, payload(), NOW)).toEqual([
+      {
+        text: {
+          kind: 'achievement_granted',
+          code: 'races_5',
+          level: 2,
+          objectKind: 'race',
+          objectTitle: 'Гран-при',
+        },
+        target: { type: 'achievement', code: 'races_5' },
+        collapse: { key: `achievement:${GRANT}`, seq: 2 },
+        recipients: [RIDER],
+        inApp: false,
+      },
+    ]);
+  });
+
+  it('read — в центр без push (inApp); сезонное — цель с seasonId, ранг схлопывания 1', async () => {
+    const seasonal: AchievementNotice = {
+      userId: RIDER,
+      code: 'season_champion',
+      level: null,
+      object: { kind: 'season', title: 'Сезон 2026' },
+      seasonId: SEASON,
+    };
+    const [draft] = (await intakeWithAchievements(seasonal).drafts(
+      GRANTED,
+      payload({ grant: 'season', level: null, origin: 'read' }),
+      NOW,
+    )) as Exclude<Awaited<ReturnType<NotificationIntake['drafts']>>, string>;
+    expect(draft).toMatchObject({
+      target: { type: 'achievement', code: 'season_champion', seasonId: SEASON },
+      collapse: { key: `achievement:${GRANT}`, seq: 1 },
+      inApp: true,
+    });
   });
 });

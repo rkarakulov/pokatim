@@ -456,6 +456,11 @@ paths:
   необязательные: у документов v1 нет — ≡ 1 (без миграции и бэкфилла, индексы прежние). «Показано» — `updateMany`
   update pipeline одной условной операцией: фильтр `$expr` (`seenAt` нет или `seenLevel < level`, `$ifNull` → 1),
   `$set` `seenAt: $ifNull(seenAt, now)`, `seenLevel: $max(seenLevel, level)` — уровень из документа, монотонно.
+- Уведомления (achievements-push): `achievement_grants.notifiedLevel` (ранг 1–3, монотонно `$max`) — наибольший
+  объявленный уровень; пишут вставка (`= level`, и в первой сверке) и `restoreOrRefresh` (`$max(notifiedLevel ?? level
+  ?? 1, ранг)`, pipeline со значениями `$literal`); нет поля — ≡ `level ?? 1` (ретро нет). Без миграции и индекса.
+  Шаги с событием — транзакция с outbox, первой операцией — сама запись выдачи (исключение из «без транзакции» выше);
+  `findGrant(kind, _id)` — чтение порта уведомлений.
 - Сезонные (achievements-seasonal, HG-S1): `achievement_season_grants { _id (uuidv7), userId, code, seasonId, factAt
   (endsBefore − 1 мс), grantedAt, seenAt, revokedAt, updatedAt }` — единственный писатель тот же
   `AchievementsRepository`; миграция `0043_achievements_seasonal` (только expand): уникальный

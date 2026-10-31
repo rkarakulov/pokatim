@@ -15,6 +15,7 @@ import {
   isSeen,
   type LevelRank,
   levelName,
+  noticeDue,
   raceAchievements,
   reconcilePlan,
   SEASONAL_RULES,
@@ -326,6 +327,44 @@ describe('isSeen (L3)', () => {
   it('null-уровни ≡ 1 (разовые и v1)', () => {
     expect(isSeen({ seenAt: day(1), seenLevel: null }, null)).toBe(true);
     expect(isSeen({ seenAt: day(1), seenLevel: null }, 2)).toBe(false);
+  });
+});
+
+describe('noticeDue (P1, P3, L3)', () => {
+  const at = day(1);
+
+  it('новый уровень выше объявленного и не показан — уведомление', () => {
+    // вставлено после первой сверки на бронзе (объявлено 1), бронза ещё не показана → серебро
+    expect(noticeDue({ seenAt: null, level: 1, notifiedLevel: 1 }, 2)).toBe(true);
+    // бронза показана → серебро
+    expect(noticeDue({ seenAt: at, seenLevel: 1, level: 1, notifiedLevel: 1 }, 2)).toBe(true);
+    expect(noticeDue({ seenAt: at, seenLevel: 2, level: 2, notifiedLevel: 2 }, 3)).toBe(true);
+  });
+
+  it('понижение, тот же уровень (смена объекта или даты) — тихо', () => {
+    expect(noticeDue({ seenAt: at, seenLevel: 2, level: 2, notifiedLevel: 2 }, 1)).toBe(false);
+    expect(noticeDue({ seenAt: null, level: 2, notifiedLevel: 2 }, 2)).toBe(false);
+  });
+
+  it('возврат на показанный уровень — тихо (L3)', () => {
+    // серебро показано, понижено до бронзы (объявлено 2 нет — первая сверка на серебре), снова серебро
+    expect(noticeDue({ seenAt: at, seenLevel: 2, level: 1, notifiedLevel: 1 }, 2)).toBe(false);
+  });
+
+  it('возврат на уже объявленный уровень — тихо (бронза → серебро → бронза → серебро)', () => {
+    expect(noticeDue({ seenAt: null, level: 1, notifiedLevel: 2 }, 2)).toBe(false);
+  });
+
+  it('документ до выката без notifiedLevel ≡ сохранённый уровень (ретро нет)', () => {
+    expect(noticeDue({ seenAt: null, level: 2 }, 2)).toBe(false);
+    expect(noticeDue({ seenAt: null }, 1)).toBe(false);
+    expect(noticeDue({ seenAt: at, seenLevel: 1, level: 1 }, 2)).toBe(true);
+    expect(noticeDue({ seenAt: null, level: 2, notifiedLevel: null }, 3)).toBe(true);
+  });
+
+  it('разовые (уровень null) — восстановление тихое', () => {
+    expect(noticeDue({ seenAt: null, level: null, notifiedLevel: null }, null)).toBe(false);
+    expect(noticeDue({ seenAt: at, level: null }, null)).toBe(false);
   });
 });
 

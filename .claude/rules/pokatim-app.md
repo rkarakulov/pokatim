@@ -45,7 +45,12 @@ paths:
   сохранение и баннер; 404 старого API — группы нет, `isSettingsResourceMissing`), её push-тумблер — с тем же
   `usePushPermission`; группа «Маршруты» — так же (`useRouteNotificationSettings({ enabled: push })`, ключ
   `['notifications','settings','routes']`), только push, после «Райдов»; без push — блока и запроса нет; после
-  `PUT settings` её запрос инвалидируется (нет своего тумблера — сервер отдаёт значение «Райдов»); цель `ticket` → `/tickets/<код>` (и в SW); выход — снятие на
+  `PUT settings` её запрос инвалидируется (нет своего тумблера — сервер отдаёт значение «Райдов»); группа «Достижения»
+  (achievements-push) — так же (`useAchievementNotificationSettings({ enabled: push })`, ключ
+  `['notifications','settings','achievements']`), только push, последней среди групп; общая разметка групп только с push
+  — `PushOnlyGroup` экрана; цель `ticket` → `/tickets/<код>` (и в SW); цель `achievement` → `achievementPath(code,
+  seasonId)` (`features/achievements/achievement-catalog.ts`, им же собирается `achievementItemPath`; в SW — копия
+  кодов `SW_ACHIEVEMENT_CODES`, равенство с `ACHIEVEMENT_CODES` держит тест); выход — снятие на
   сервере и `unsubscribe()` в браузере; нажатие на уведомление — сообщение SW `pokatim:open` → `onOpen(target)`): разрешение — только по нажатию строки
   «Включить push-уведомления» (N5), токен — при наличии `extra.eas.projectId` и на устройстве, регистрация —
   `PushNotifications` рядом со `Stack` корневого layout после входа и онбординга, снятие — `useSignOut` до отзыва сессии (кроме

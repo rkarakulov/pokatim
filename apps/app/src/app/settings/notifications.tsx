@@ -3,6 +3,7 @@ import type {
   NotificationSettings,
   RouteNotificationSettingsView,
 } from '@pokatim/contracts';
+import type { UseMutationResult, UseQueryResult } from '@tanstack/react-query';
 import { size, space, stroke } from '@pokatim/design-tokens';
 import { t, type MessageKey } from '@pokatim/i18n';
 import {
@@ -32,9 +33,11 @@ import {
   isSettingsResourceMissing,
   useEventNotificationSettings,
   useNotificationSettings,
+  useAchievementNotificationSettings,
   useRouteNotificationSettings,
   useUpdateEventNotificationSettings,
   useUpdateNotificationSettings,
+  useUpdateAchievementNotificationSettings,
   useUpdateRouteNotificationSettings,
 } from '@/features/notifications/queries';
 
@@ -42,6 +45,8 @@ const DOCUMENT_TITLE = `${t('notifications.settings.title')} — ${t('app.name')
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
 
 type PushGroup = keyof NotificationSettings['push'];
+/** Подресурс группы только с push («Маршруты», «Достижения» — одна форма `{ push }`). */
+type PushOnlySettings = RouteNotificationSettingsView;
 type EmailGroup = keyof NotificationSettings['email'];
 
 const ALL_GROUPS: readonly { id: PushGroup; email: EmailGroup | null }[] = [
@@ -211,6 +216,7 @@ function SettingsForm({
       ))}
       <RoutesGroup push={push} control={control} />
       <EventsGroup push={push} control={control} />
+      <AchievementsGroup push={push} control={control} />
       {push ? (
         <View style={[styles.group, { borderTopColor: theme.border.subtle }]}>
           {groupTitle(t('notifications.settings.quiet.title'))}
@@ -320,9 +326,49 @@ function EventsGroup({ push, control }: { push: boolean; control?: PushPermissio
  * блока нет (без push и запроса нет).
  */
 function RoutesGroup({ push, control }: { push: boolean; control?: PushPermissionControl }) {
-  const theme = useTheme();
   const query = useRouteNotificationSettings({ enabled: push });
   const update = useUpdateRouteNotificationSettings();
+  return (
+    <PushOnlyGroup
+      title={t('notifications.settings.group.routes')}
+      push={push}
+      control={control}
+      query={query}
+      update={update}
+    />
+  );
+}
+
+/** «Достижения» (achievements-push, P4): только push, последней среди групп; как «Маршруты». */
+function AchievementsGroup({ push, control }: { push: boolean; control?: PushPermissionControl }) {
+  const query = useAchievementNotificationSettings({ enabled: push });
+  const update = useUpdateAchievementNotificationSettings();
+  return (
+    <PushOnlyGroup
+      title={t('notifications.settings.group.achievements')}
+      push={push}
+      control={control}
+      query={query}
+      update={update}
+    />
+  );
+}
+
+/** Группа подресурса только с push-тумблером («Маршруты», «Достижения»). */
+function PushOnlyGroup({
+  title,
+  push,
+  control,
+  query,
+  update,
+}: {
+  title: string;
+  push: boolean;
+  control?: PushPermissionControl;
+  query: UseQueryResult<PushOnlySettings>;
+  update: UseMutationResult<PushOnlySettings, unknown, PushOnlySettings>;
+}) {
+  const theme = useTheme();
   if (!push || isSettingsResourceMissing(query.error)) return null;
   return (
     <View style={[styles.group, { borderTopColor: theme.border.subtle }]}>
@@ -330,11 +376,11 @@ function RoutesGroup({ push, control }: { push: boolean; control?: PushPermissio
         accessibilityRole="header"
         style={[textStyle('label'), { color: theme.text.secondary }]}
       >
-        {t('notifications.settings.group.routes')}
+        {title}
       </Text>
       <AsyncContent query={query} skeleton={<SkeletonListRow />}>
         {(saved) => {
-          const value: RouteNotificationSettingsView =
+          const value: PushOnlySettings =
             update.isPending && update.variables ? update.variables : saved;
           const busy = update.isPending;
           return (

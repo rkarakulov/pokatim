@@ -46,6 +46,12 @@ import {
   TicketsReminderDue,
 } from '../tickets';
 import { PROFILE_FIELD_RESET, ProfileFieldReset } from '../profile';
+import {
+  ACHIEVEMENT_NOTICES,
+  type AchievementNotices,
+  ACHIEVEMENTS_GRANT_NOTICED,
+  AchievementsGrantNoticed,
+} from '../achievements';
 import type { NoticeText } from './notification-texts';
 import type { NotificationSourceEvent } from './notifications.events';
 
@@ -61,6 +67,8 @@ export interface NoticeDraft {
    */
   collapse?: { key: string; seq?: number };
   recipients: string[];
+  /** в центр без push (`reason: 'in_app'`): райдер сейчас в приложении (achievements-push, P1) */
+  inApp?: boolean;
 }
 
 /** Почему событие не даёт уведомлений: payload не читается, объекта нет, объект не в ожидаемом статусе. */
@@ -87,6 +95,7 @@ export class NotificationIntake {
     @Inject(ROUTE_NOTICES) private readonly routes: RouteNotices,
     @Inject(RACE_REGISTRY) private readonly races: RaceRegistry,
     @Inject(TICKET_NOTICES) private readonly tickets: TicketNotices,
+    @Inject(ACHIEVEMENT_NOTICES) private readonly achievements: AchievementNotices,
   ) {}
 
   async drafts(
@@ -118,7 +127,44 @@ export class NotificationIntake {
         return this.eventReminder(payload, now);
       case PROFILE_FIELD_RESET:
         return this.profileFieldReset(payload);
+      case ACHIEVEMENTS_GRANT_NOTICED:
+        return this.achievementGranted(payload, now);
     }
+  }
+
+  /**
+   * Новое достижение или уровень (achievements-push, 5.B) — владельцу выдачи (порт `ACHIEVEMENT_NOTICES`, не payload).
+   * Выдача стёрта — `gone`; отозвана, ранг ниже объявленного, факт пропал — `state`. Выдача, найденная сверкой при
+   * чтении (`origin: 'read'`), — в центр без push (P1). Схлопывание по выдаче и рангу (N7): одно уведомление на
+   * (выдача, уровень) и при двух событиях; новый уровень заменяет непрочитанный прежний.
+   */
+  private async achievementGranted(
+    payload: unknown,
+    now: Date,
+  ): Promise<NoticeDraft[] | IntakeSkip> {
+    const event = AchievementsGrantNoticed.safeParse(payload);
+    if (!event.success) return 'invalid_payload';
+    const notice = await this.achievements.notice(event.data, now);
+    if (typeof notice === 'string') return notice;
+    const target: NotificationTarget =
+      notice.seasonId === null
+        ? { type: 'achievement', code: notice.code }
+        : { type: 'achievement', code: notice.code, seasonId: notice.seasonId };
+    return [
+      {
+        text: {
+          kind: 'achievement_granted',
+          code: notice.code,
+          level: notice.level,
+          objectKind: notice.object.kind,
+          objectTitle: notice.object.title,
+        },
+        target,
+        collapse: { key: `achievement:${event.data.grantId}`, seq: event.data.level ?? 1 },
+        recipients: [notice.userId],
+        inApp: event.data.origin === 'read',
+      },
+    ];
   }
 
   /**

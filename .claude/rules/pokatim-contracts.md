@@ -162,7 +162,12 @@ paths:
   `getEventNotificationSettings`, `updateEventNotificationSettings`. Группа `routes` — в конце `NOTIFICATION_GROUPS`
   (старые сборки — `unknown`); подресурс «Маршруты» — `RouteNotificationSettingsView` (`{ push }`, терпит ключи),
   `UpdateRouteNotificationSettings` (`strictObject({ push })`), `DEFAULT_ROUTE_NOTIFICATION_SETTINGS`; api-client —
-  `getRouteNotificationSettings`, `updateRouteNotificationSettings`.
+  `getRouteNotificationSettings`, `updateRouteNotificationSettings`. achievements-push — в конец: группа
+  `achievements`, kind `achievement_granted`, цель `{ type: 'achievement', code: AchievementCode, seasonId?: Uuid }`
+  (строгий код — незнакомый у старой сборки → `unknown`); подресурс «Достижения» —
+  `AchievementNotificationSettingsView`, `UpdateAchievementNotificationSettings`,
+  `DEFAULT_ACHIEVEMENT_NOTIFICATION_SETTINGS` (`{ push: true }`); api-client — `getAchievementNotificationSettings`,
+  `updateAchievementNotificationSettings`.
 - Web Push (ADR-0022): там же — `WebPushEndpoint` (https ≤ 2048, хост — push-сервис из белого списка
   `isWebPushEndpoint`: FCM, Mozilla, WNS, Apple; адрес вызывает сервер — SSRF), `RegisterWebPushSubscription`
   (`strictObject`: endpoint + `keys.p256dh` 65 байт `B…`/`keys.auth` 16 байт base64url, без `expirationTime`),

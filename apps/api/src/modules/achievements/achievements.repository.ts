@@ -7,6 +7,7 @@ import {
 import { isDuplicateKey, MONGO_DB, uuidv7 } from '@rkarakulov/api-kit/mongo';
 import type { Db } from 'mongodb';
 
+import type { DbSession } from '../../db';
 import {
   type AchievementGrantDoc,
   type AchievementSeasonGrantDoc,
@@ -35,13 +36,28 @@ export type StoredSeasonGrantDoc = Pick<
 /** Выдача без служебных полей записи. */
 export type StoredGrantDoc = Pick<
   AchievementGrantDoc,
-  'code' | 'object' | 'factAt' | 'seenAt' | 'revokedAt' | 'level' | 'seenLevel'
+  'code' | 'object' | 'factAt' | 'seenAt' | 'revokedAt' | 'level' | 'seenLevel' | 'notifiedLevel'
 >;
 
+/** Документ выдачи до записи `refresh`/`restore` — по нему решается, нужно ли уведомление (`noticeDue`). */
+export type GrantBefore = Pick<
+  AchievementGrantDoc,
+  '_id' | 'revokedAt' | 'seenAt' | 'seenLevel' | 'level' | 'notifiedLevel'
+>;
+
+/** Выдача по id для порта уведомлений (`ACHIEVEMENT_NOTICES`): несезонная или сезонная. */
+export type NoticeGrant =
+  | ({ grant: 'fact' } & Pick<AchievementGrantDoc, 'userId' | 'code' | 'revokedAt' | 'level'>)
+  | ({ grant: 'season' } & Pick<
+      AchievementSeasonGrantDoc,
+      'userId' | 'code' | 'seasonId' | 'revokedAt'
+    >);
+
 /**
- * Единственный писатель `achievement_grants`, `achievement_season_grants`, `achievement_syncs` (ADR-0020). Каждый фильтр — с `userId`; каждая
- * запись — одна условная операция над одним документом, без транзакций (RC-2): параллельные сверки одного райдера
- * сходятся к одному состоянию.
+ * Единственный писатель `achievement_grants`, `achievement_season_grants`, `achievement_syncs` (ADR-0020). Каждый фильтр
+ * — с `userId` или `_id` своей коллекции; каждая запись — одна условная операция над одним документом (RC-2):
+ * параллельные сверки одного райдера сходятся к одному состоянию. Шаги, которые могут дать уведомление
+ * (achievements-push), сверка выполняет в транзакции с outbox — методы с `session` (`*InTx`, `restoreOrRefresh`).
  */
 @Injectable()
 export class AchievementsRepository {
@@ -66,6 +82,7 @@ export class AchievementsRepository {
             revokedAt: 1,
             level: 1,
             seenLevel: 1,
+            notifiedLevel: 1,
           },
         },
       )
@@ -78,8 +95,9 @@ export class AchievementsRepository {
   }
 
   /**
-   * Вставка выдачи с уровнем; просмотренная (первая сверка, A3) — показан и текущий уровень (`seenLevel`). Дубль
-   * уникального индекса (проигравший параллельный GET) — `false`, не ошибка.
+   * Вставка выдачи с уровнем; просмотренная (первая сверка, A3) — показан и текущий уровень (`seenLevel`); объявлен —
+   * текущий уровень (`notifiedLevel`: первая сверка тихая, о нём уже не сообщаем). Дубль уникального индекса
+   * (проигравший параллельный GET) — `false`, не ошибка.
    */
   async insertGrant(
     userId: string,
@@ -89,24 +107,28 @@ export class AchievementsRepository {
     now: Date,
   ): Promise<boolean> {
     try {
-      await this.c.grants.insertOne({
-        _id: uuidv7(),
-        userId,
-        code,
-        object: earned.object,
-        factAt: earned.factAt,
-        grantedAt: now,
-        seenAt,
-        revokedAt: null,
-        level: earned.level,
-        seenLevel: seenAt === null ? null : earned.level,
-        updatedAt: now,
-      });
+      await this.c.grants.insertOne(grantDoc(uuidv7(), userId, code, earned, seenAt, now));
       return true;
     } catch (error) {
       if (isDuplicateKey(error, ACHIEVEMENT_GRANTS_UNIQUE_INDEX)) return false;
       throw error;
     }
+  }
+
+  /**
+   * Вставка выдачи в транзакции сверки (не первая сверка, `seenAt: null`) с заранее выданным `_id` (он же — в событии).
+   * Дубль уникального индекса **не** перехватывается: внутри транзакции он её обрывает — сверка ловит
+   * `isDuplicateKey(…, ACHIEVEMENT_GRANTS_UNIQUE_INDEX)` снаружи `MongoTransactions.run` (откат, события нет).
+   */
+  async insertGrantInTx(
+    tx: DbSession,
+    id: string,
+    userId: string,
+    code: FactAchievementCode,
+    earned: Earned,
+    now: Date,
+  ): Promise<void> {
+    await this.c.grants.insertOne(grantDoc(id, userId, code, earned, null, now), { session: tx });
   }
 
   /** Отзыв видимой выдачи (A4); уже отозванная — без записи. */
@@ -121,7 +143,10 @@ export class AchievementsRepository {
   /**
    * Восстановление отозванной (`restore`) или обновление объекта и уровня видимой (`refresh`): `seenAt`, `seenLevel` и
    * `grantedAt` не трогаются (A4: «вернулся — `seen` прежний»; L3: возврат на показанный уровень не вспыхивает).
-   * Условие на `revokedAt` — устаревший параллельный план не снимает свежий отзыв (ревью PR A, LOW-1).
+   * Условие на `revokedAt` — устаревший параллельный план не снимает свежий отзыв (ревью PR A, LOW-1). Одна условная
+   * операция (`findOneAndUpdate`, pipeline): `notifiedLevel = $max(notifiedLevel ?? level ?? 1, новый ранг)` (поля v1 —
+   * `$ifNull`); возвращает документ **до** записи (по нему `noticeDue`) или `null` — условие не выполнено. В транзакции
+   * сверки — с `session`: конфликт с параллельной сверкой повторяет колбэк, повтор видит закоммиченный `notifiedLevel`.
    */
   async restoreOrRefresh(
     userId: string,
@@ -129,20 +154,31 @@ export class AchievementsRepository {
     earned: Earned,
     revoked: boolean,
     now: Date,
-  ): Promise<boolean> {
-    const result = await this.c.grants.updateOne(
+    tx?: DbSession,
+  ): Promise<GrantBefore | null> {
+    const rank = earned.level ?? 1;
+    return this.c.grants.findOneAndUpdate(
       { userId, code, revokedAt: revoked ? { $ne: null } : null },
-      {
-        $set: {
-          object: earned.object,
-          factAt: earned.factAt,
-          level: earned.level,
-          revokedAt: null,
-          updatedAt: now,
+      [
+        {
+          $set: {
+            object: { $literal: earned.object },
+            factAt: { $literal: earned.factAt },
+            level: { $literal: earned.level },
+            revokedAt: null,
+            updatedAt: { $literal: now },
+            notifiedLevel: {
+              $max: [{ $ifNull: ['$notifiedLevel', { $ifNull: ['$level', 1] }] }, rank],
+            },
+          },
         },
+      ],
+      {
+        returnDocument: 'before',
+        projection: { _id: 1, revokedAt: 1, seenAt: 1, seenLevel: 1, level: 1, notifiedLevel: 1 },
+        ...(tx ? { session: tx } : {}),
       },
     );
-    return result.modifiedCount === 1;
   }
 
   /** Сезонные выдачи пользователя, включая отозванные (префикс `userId` уникального индекса). */
@@ -163,22 +199,41 @@ export class AchievementsRepository {
     now: Date,
   ): Promise<boolean> {
     try {
-      await this.c.seasonGrants.insertOne({
-        _id: uuidv7(),
-        userId,
-        code: earned.code,
-        seasonId: earned.seasonId,
-        factAt: earned.factAt,
-        grantedAt: now,
-        seenAt,
-        revokedAt: null,
-        updatedAt: now,
-      });
+      await this.c.seasonGrants.insertOne(seasonGrantDoc(uuidv7(), userId, earned, seenAt, now));
       return true;
     } catch (error) {
       if (isDuplicateKey(error, ACHIEVEMENT_SEASON_GRANTS_UNIQUE_INDEX)) return false;
       throw error;
     }
+  }
+
+  /** Вставка сезонной выдачи в транзакции сверки — как `insertGrantInTx` (дубль ловит сверка снаружи транзакции). */
+  async insertSeasonalInTx(
+    tx: DbSession,
+    id: string,
+    userId: string,
+    earned: SeasonalEarned,
+    now: Date,
+  ): Promise<void> {
+    await this.c.seasonGrants.insertOne(seasonGrantDoc(id, userId, earned, null, now), {
+      session: tx,
+    });
+  }
+
+  /** Выдача по `_id` для порта уведомлений; стёрта (удалённый аккаунт) или неизвестна — `null`. */
+  async findGrant(kind: 'fact' | 'season', id: string): Promise<NoticeGrant | null> {
+    if (kind === 'fact') {
+      const doc = await this.c.grants.findOne(
+        { _id: id },
+        { projection: { _id: 0, userId: 1, code: 1, revokedAt: 1, level: 1 } },
+      );
+      return doc && { grant: 'fact', ...doc };
+    }
+    const doc = await this.c.seasonGrants.findOne(
+      { _id: id },
+      { projection: { _id: 0, userId: 1, code: 1, seasonId: 1, revokedAt: 1 } },
+    );
+    return doc && { grant: 'season', ...doc };
   }
 
   /** Отзыв видимой сезонной выдачи (S4); уже отозванная — без записи. */
@@ -285,4 +340,48 @@ export class AchievementsRepository {
       syncs: syncs.deletedCount,
     };
   }
+}
+
+function grantDoc(
+  id: string,
+  userId: string,
+  code: FactAchievementCode,
+  earned: Earned,
+  seenAt: Date | null,
+  now: Date,
+): AchievementGrantDoc {
+  return {
+    _id: id,
+    userId,
+    code,
+    object: earned.object,
+    factAt: earned.factAt,
+    grantedAt: now,
+    seenAt,
+    revokedAt: null,
+    level: earned.level,
+    seenLevel: seenAt === null ? null : earned.level,
+    notifiedLevel: earned.level,
+    updatedAt: now,
+  };
+}
+
+function seasonGrantDoc(
+  id: string,
+  userId: string,
+  earned: SeasonalEarned,
+  seenAt: Date | null,
+  now: Date,
+): AchievementSeasonGrantDoc {
+  return {
+    _id: id,
+    userId,
+    code: earned.code,
+    seasonId: earned.seasonId,
+    factAt: earned.factAt,
+    grantedAt: now,
+    seenAt,
+    revokedAt: null,
+    updatedAt: now,
+  };
 }

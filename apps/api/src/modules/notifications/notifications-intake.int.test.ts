@@ -60,6 +60,9 @@ import {
 import { NOTIFICATIONS_POLICY } from './notifications.policy';
 import { NotificationsRepository } from './notifications.repository';
 import { RIDES_PARTICIPANT_JOINED, RIDES_RIDE_RESCHEDULED } from '../rides';
+import { ACHIEVEMENTS_GRANT_NOTICED } from '../achievements';
+import { ACHIEVEMENTS, achievementsDb, daysAgo, raceAt } from '../../../test/achievements';
+import { placedRow, seedSeason } from '../../../test/standings';
 
 /**
  * Приём событий для уведомлений (шаг B, AC1, AC2, AC5 — центр, AC7): каждое событие N3 — нужным получателям с текстом
@@ -1247,6 +1250,93 @@ describe('сброс поля профиля модератором (profile-mod
 
     const bad = await appendEvent(h, RESET, { userId: target.userId, field: 'theme' });
     expect(await runIntake(h, RESET, bad)).toBe('skipped');
+    expect(await total()).toBe(0);
+  });
+});
+
+describe('новое достижение (achievements-push, AC1, AC4, P1)', () => {
+  /** Райдер после первой сверки с «Подиумом» (тихо, без события) — id выдачи для событий теста. */
+  async function podiumGrant(who: Rider): Promise<string> {
+    const season = await seedSeason(h);
+    await raceAt(h, season, [placedRow(who.userId, 2)], daysAgo(h, 1), 'Осенняя');
+    expect((await authed(h, who, 'GET', ACHIEVEMENTS)).status).toBe(200);
+    expect(await eventsOfType(h, ACHIEVEMENTS_GRANT_NOTICED)).toEqual([]);
+    return (await achievementsDb(h).grants.findOne({ userId: who.userId, code: 'race_podium' }))!
+      ._id;
+  }
+  const event = (grantId: string, origin: 'read' | 'server') =>
+    appendEvent(h, ACHIEVEMENTS_GRANT_NOTICED, { grant: 'fact', grantId, level: null, origin });
+
+  it('server — владельцу: группа achievements, цель achievement, текст; push pending; два события одной выдачи — одно уведомление', async () => {
+    const grantId = await podiumGrant(a);
+    const first = await event(grantId, 'server');
+    expect(await runIntake(h, ACHIEVEMENTS_GRANT_NOTICED, first)).toBe('written');
+    const second = await event(grantId, 'server');
+    expect(await runIntake(h, ACHIEVEMENTS_GRANT_NOTICED, second)).toBe('unchanged');
+
+    const docs = await notificationsOf(h, a.userId);
+    expect(docs).toHaveLength(1);
+    expect(docs[0]).toMatchObject({
+      kind: 'achievement_granted',
+      group: 'achievements',
+      title: 'Новое достижение: Подиум',
+      body: 'Гонка «Осенняя»',
+      target: { type: 'achievement', code: 'race_podium' },
+      collapseKey: `achievement:${grantId}`,
+      collapseSeq: 1,
+      readAt: null,
+      push: { state: 'pending', reason: null },
+      email: null,
+    });
+    expect(await notificationsOf(h, b.userId)).toEqual([]);
+  });
+
+  it('read — в центр без push (in_app), непрочитано (RC-P6)', async () => {
+    const grantId = await podiumGrant(a);
+    expect(await runIntake(h, ACHIEVEMENTS_GRANT_NOTICED, await event(grantId, 'read'))).toBe(
+      'written',
+    );
+    expect((await notificationsOf(h, a.userId))[0]).toMatchObject({
+      readAt: null,
+      push: { state: 'skipped', reason: 'in_app' },
+    });
+  });
+
+  it('AC4: группа «Достижения» выключена — server: в центре есть, push нет (disabled)', async () => {
+    const grantId = await podiumGrant(a);
+    const res = await call(
+      h,
+      'PUT',
+      '/v1/notifications/settings/achievements',
+      { push: false },
+      bearer(a.token),
+    );
+    expect(res.status).toBe(200);
+    expect(await runIntake(h, ACHIEVEMENTS_GRANT_NOTICED, await event(grantId, 'server'))).toBe(
+      'written',
+    );
+    expect((await notificationsOf(h, a.userId))[0]).toMatchObject({
+      group: 'achievements',
+      push: { state: 'skipped', reason: 'disabled' },
+    });
+    expect(await deliveryJobs(h)).toEqual([]);
+  });
+
+  it('отозвана — skip (state); стёрта — skip (gone); битый payload — skip', async () => {
+    const grantId = await podiumGrant(a);
+    await achievementsDb(h).grants.updateOne(
+      { _id: grantId },
+      { $set: { revokedAt: h.clock.now() } },
+    );
+    expect(await runIntake(h, ACHIEVEMENTS_GRANT_NOTICED, await event(grantId, 'server'))).toBe(
+      'skipped',
+    );
+    await achievementsDb(h).grants.deleteMany({ userId: a.userId });
+    expect(await runIntake(h, ACHIEVEMENTS_GRANT_NOTICED, await event(grantId, 'server'))).toBe(
+      'skipped',
+    );
+    const bad = await appendEvent(h, ACHIEVEMENTS_GRANT_NOTICED, { grantId, origin: 'panel' });
+    expect(await runIntake(h, ACHIEVEMENTS_GRANT_NOTICED, bad)).toBe('skipped');
     expect(await total()).toBe(0);
   });
 });
