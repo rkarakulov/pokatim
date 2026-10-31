@@ -32,6 +32,11 @@ export type RouteRideStatus = (typeof ROUTE_RIDE_STATUSES)[number];
 /** Происхождение заезда (route-rides-03): ручная проверка / автопроверка новой активности. Только в конец. */
 export const ROUTE_RIDE_ORIGINS = ['manual', 'auto'] as const;
 export type RouteRideOrigin = (typeof ROUTE_RIDE_ORIGINS)[number];
+/** Статус участка маршрута (route-rides-05): пройден / не пройден. Только в конец. */
+export const ROUTE_RIDE_SECTION_STATUSES = ['passed', 'not_passed'] as const;
+export type RouteRideSectionStatus = (typeof ROUTE_RIDE_SECTION_STATUSES)[number];
+/** Предел участков заезда (= `ROUTE_SECTION_POLICY.maxSections` разбиения; равенство сторожит unit-тест API). */
+export const ROUTE_RIDE_SECTIONS_MAX = 30;
 /** Квота заездов райдера на маршрут (и предел строк списка). */
 export const ROUTE_RIDE_MAX_PER_ROUTE = 100;
 /** Предел кандидатов «выбрать свой заезд». */
@@ -104,9 +109,26 @@ export const RouteRideCandidates = z.object({
 export type RouteRideCandidates = z.infer<typeof RouteRideCandidates>;
 
 /**
+ * Участок маршрута в заезде (route-rides-05): метры по маршруту от старта (не координаты), время — только у
+ * `passed`; лучший и дельта — среди своих заездов с тем же разбиением (считает сервер). `bestElapsedSec` — лучшее
+ * время участка среди своих (есть и у `not_passed`); `deltaToBestSec` — только у `passed` (0 — этот лучший).
+ */
+export const RouteRideSection = z.object({
+  fromM: int,
+  toM: int,
+  status: tolerantEnum(ROUTE_RIDE_SECTION_STATUSES),
+  elapsedSec: int.nullable(),
+  isBest: z.boolean(),
+  bestElapsedSec: int.nullable(),
+  deltaToBestSec: int.nullable(),
+});
+export type RouteRideSection = z.infer<typeof RouteRideSection>;
+
+/**
  * Заезд по маршруту: статус, вердикт, время и сравнение со своими пройденными заездами (дельты — знаковые целые,
  * отрицательная — быстрее; только у `passed`). `activityId` — своя основная активность группы сейчас («Проверить
- * снова»; старый API — `null`), `origin` — происхождение (route-rides-03; старый API — `manual`).
+ * снова»; старый API — `null`), `origin` — происхождение (route-rides-03; старый API — `manual`), `sections` —
+ * участки маршрута (route-rides-05; нет участков и старый API — `[]`).
  */
 export const RouteRideDetail = z.object({
   id: Uuid,
@@ -131,6 +153,7 @@ export const RouteRideDetail = z.object({
   }),
   createdAt: iso,
   checkedAt: iso.nullable(),
+  sections: z.array(RouteRideSection).max(ROUTE_RIDE_SECTIONS_MAX).default([]),
 });
 export type RouteRideDetail = z.infer<typeof RouteRideDetail>;
 
