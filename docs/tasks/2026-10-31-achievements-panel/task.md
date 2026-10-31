@@ -412,6 +412,19 @@ M1–M8 не меняются; ниже — уточнения и недоопр
 - **RC-14 (лимит панели).** M-решения лимита не задают; `achievements-panel:<actorUid>` 60/ч (как
   `results-panel-user`) — рекомендация.
 
+## 8.2 Отклонения при реализации (PR A, coder)
+
+- **D1 — подписи действий журнала в PR A.** `admin.audit.action.achievement.{granted_manually,revoked_manually,
+  override_cleared}` (`packages/i18n/src/ru.ts`) добавлены уже в PR A: `AuditScreen` панели строит ключ по каждому
+  `AuditAction`, без подписей `pnpm typecheck` панели красный. Подписи деталей и экраны — PR B.
+- **D2 — порт сезонов в `AchievementsPanelService` напрямую.** `AchievementsModule` импортирует `StandingsCoreModule`
+  (ребро `achievements → standings` уже есть), сервис панели держит `RIDER_SEASON_STANDINGS`: ручной выдаче нужен
+  отказ при сбое порта (а не «сезона нет» → 400), GET панели — отличить сбой (`seasonsAvailable: false`) от «сезонов
+  нет»; `reconciler.seasonOutcomes` сбой глотает. Публичный список — по-прежнему `seasonOutcomes` (мягко).
+- **D3 — GET панели без проверки живости аккаунта** (5.G её не требует): удалённому райдеру — пустой или остаточный
+  список; мутации — 404.
+- **D4 — `progressBeyondManual`** — имя чистой функции фильтра `progress` (RC-9) в `achievements.policy.ts`.
+
 ## 9. Acceptance Criteria
 
 - AC1. Без `achievements.manage` — 403 (сторож `admin-routes.test.ts`); moderator — блока нет.
@@ -474,3 +487,31 @@ TESTS — §7.6.
 
 OUT OF SCOPE — статистика достижений, массовые операции, выбор объекта из списка (RC-7), поиск райдеров без жалоб,
 новые коды и произвольный текст, вход в блок без документа профиля (RC-8), отдельный `origin` события (RC-4).
+
+## 12. Outcome
+
+### PR A (контракты, API, api-client, правила, документы) — 2026-10-31
+
+- **Контракты:** `ACHIEVEMENT_OBJECT_KIND_BY_CODE`, `achievement-admin.schema.ts` (запросы grant/revoke/clear, итог
+  снятия, `RiderAchievementsAdmin`, `AchievementInvalidStateDetails`), право `achievements.manage`, три действия и
+  четыре детали журнала, `ACHIEVEMENT_INVALID_STATE` — в конце списков. Ответы приложения без изменений.
+- **API:** `AchievementsAdminController` → `AchievementsPanelService` (лимит 60/ч, живость, объект портом владельца,
+  транзакция «запись выдачи первой → outbox `origin: 'server'` → журнал», 409 снаружи `run`, немедленная сверка после
+  снятия при маркере); поле `override` на документах обеих коллекций; планы пропускают ручные; фильтр `override: null` в
+  `revoke`/`restoreOrRefresh`/`revokeSeasonal`/`restoreSeasonal`; `AchievementObjects`; ручные ветки в `sync`,
+  `publicList` (`overridesOf`), `cardFacts`, `ACHIEVEMENT_NOTICES`; порты `RIDER_RIDES.ridesOf`,
+  `RIDER_ROUTE_RIDES.routeTitles`, `endsBefore` у `pending`. Миграции нет.
+- **Тесты:** unit — схемы панели, таблица видов, права, политика (пропуск `override`, `adminStatus`,
+  `progressBeyondManual`, вид каждого правила); int — `achievements-panel.int.test.ts` (12: доступ, 400/404, выдача и
+  ответ райдера, событие, журнал, лог, 409, сверка не трогает ручное, выдача поверх отозванного, снятие с маркером и без,
+  маршрут/райд, список панели и деградация сезонов, публичный список и карточка, сезонные, стирание),
+  `achievements-panel-locks.int.test.ts` (9), `achievements-notices.int.test.ts` (+2), порты владельцев (+2 и
+  `endsBefore`), api-client (+2). Сторож `admin-routes.test.ts` — новый контроллер под `PanelGuard`.
+- **Отрицательное доказательство (M8, AC4):** (а) в тесте — запись сверки прежним фильтром без `override` (подмена
+  `revoke` и `restoreSeasonal` прямым вызовом коллекции) → ручная выдача стала отозванной / ручной отзыв восстановлен —
+  оба теста фиксируют перезапись по результату; (б) прогон ворот с `AUTOMATIC = {}` в репозитории (условие убрано
+  целиком) — 5 из 9 тестов `achievements-panel-locks` красные по результату (сценарии 1 read, 1 server, 2, 3, 5),
+  зелёные остаются вставка (уникальный индекс), параллельные ×6 и сами отрицательные доказательства.
+- **Проверки:** `MONGO_URL_TEST=… REDIS_URL_TEST=… TURBO_CONCURRENCY=1 pnpm check` — exit 0, `Tasks: 15 successful, 15
+  total` (api 224 файла / 2534 теста, admin 489, contracts 482, api-client 169).
+- **Отклонения:** 8.2 D1–D4.

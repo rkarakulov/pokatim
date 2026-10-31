@@ -95,6 +95,11 @@ import {
   type ResetRiderNameRequest,
   RiderNameResetResult,
   type DismissRiderProfileReportsRequest,
+  ClearRiderAchievementOverrideResult,
+  type ClearRiderAchievementOverrideRequest,
+  type GrantRiderAchievementRequest,
+  type RevokeRiderAchievementRequest,
+  RiderAchievementsAdmin,
   RiderProfileModerationDetail,
   RiderProfileModerationPage,
   type RiderProfileModerationQuery,
@@ -197,6 +202,8 @@ export function createAdminApiClient({ baseUrl, fetchImpl }: AdminApiClientOptio
   const moderationRide = (id: string) => `/v1/admin/rides/${encodeURIComponent(id)}`;
   const riderRoute = (id: string) => `/v1/admin/rider-routes/${encodeURIComponent(id)}`;
   const riderProfile = (userId: string) => `/v1/admin/rider-profiles/${encodeURIComponent(userId)}`;
+  const riderAchievements = (userId: string) =>
+    `/v1/admin/rider-achievements/${encodeURIComponent(userId)}`;
   const dispute = (id: string) => `/v1/admin/disputes/${encodeURIComponent(id)}`;
   const adminEvent = (kind: TicketEventKind, eventId: string) =>
     `/v1/admin/events/${encodeURIComponent(kind)}/${encodeURIComponent(eventId)}`;
@@ -410,6 +417,18 @@ export function createAdminApiClient({ baseUrl, fetchImpl }: AdminApiClientOptio
     /** «Снять запрет» загрузки фото; запрета нет — `{ unblocked: false }` (profile-moderation-followups). */
     unblockRiderAvatar: (userId: string, body: UnblockRiderAvatarRequest) =>
       post(`${riderProfile(userId)}/avatar-unblock`, RiderAvatarUnblockResult, body),
+    // achievements-panel: достижения райдера (`achievements.manage`, только admin)
+    getRiderAchievements: (userId: string) =>
+      get(riderAchievements(userId), RiderAchievementsAdmin),
+    /** Ручная выдача: 204; видимая уже есть — 409 `ACHIEVEMENT_INVALID_STATE` `already_granted`. */
+    grantRiderAchievement: (userId: string, body: GrantRiderAchievementRequest) =>
+      post(`${riderAchievements(userId)}/grant`, z.undefined(), body),
+    /** Ручной отзыв видимой выдачи: 204; видимой нет — 409 `not_granted`. */
+    revokeRiderAchievement: (userId: string, body: RevokeRiderAchievementRequest) =>
+      post(`${riderAchievements(userId)}/revoke`, z.undefined(), body),
+    /** «Вернуть автоматике»: решения нет — `{ cleared: false }`; `reconciled` — сверка по фактам выполнена сразу. */
+    clearRiderAchievementOverride: (userId: string, body: ClearRiderAchievementOverrideRequest) =>
+      post(`${riderAchievements(userId)}/clear`, ClearRiderAchievementOverrideResult, body),
     /** Адрес фото райдера для карточки (тот же origin, без запроса). */
     riderAvatarUrl: (id: string) => `${baseUrl}/v1/avatars/${encodeURIComponent(id)}`,
     // erasure-failures: зависшие удаления аккаунтов и повтор очистки (platform.stats, только admin)

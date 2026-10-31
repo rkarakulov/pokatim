@@ -28,7 +28,13 @@ export type RiderSeasonOutcome =
       endsBefore: Date;
       rows: RiderSeasonRow[];
     }
-  | { seasonId: string; status: 'pending'; title: string };
+  | {
+      seasonId: string;
+      status: 'pending';
+      title: string;
+      /** граница сезона — дата факта ручной выдачи сезонного в `pending` (achievements-panel, RC-11) */
+      endsBefore: Date;
+    };
 
 export interface RiderSeasonStandings {
   /**

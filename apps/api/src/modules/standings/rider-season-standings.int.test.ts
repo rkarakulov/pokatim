@@ -70,7 +70,13 @@ describe('RIDER_SEASON_STANDINGS.outcomesOf', () => {
 
     await addRevision(h, race, 2, [placedRow(other, 1), placedRow(me, 2)]);
     expect(await outcomes(me)).toEqual([
-      { seasonId: past, status: 'pending', title: 'Сезон 2025' },
+      {
+        seasonId: past,
+        status: 'pending',
+        title: 'Сезон 2025',
+        // achievements-panel (RC-11): дата факта ручной выдачи в `pending`
+        endsBefore: new Date('2025-10-31T21:00:00Z'),
+      },
     ]);
 
     await syncStandings(h);
@@ -92,7 +98,13 @@ describe('RIDER_SEASON_STANDINGS.outcomesOf', () => {
 
     await seedProtocolRace(h, past, [], { protocol: false, corridor: CORRIDOR });
     expect(await outcomes(me)).toEqual([
-      { seasonId: past, status: 'pending', title: 'Сезон 2025' },
+      {
+        seasonId: past,
+        status: 'pending',
+        title: 'Сезон 2025',
+        // achievements-panel (RC-11): дата факта ручной выдачи в `pending`
+        endsBefore: new Date('2025-10-31T21:00:00Z'),
+      },
     ]);
   });
 

@@ -25,6 +25,7 @@ describe('PanelRole и Permission', () => {
       'routes.moderate',
       'platform.stats',
       'tickets.checkin',
+      'achievements.manage',
     ]);
   });
 

@@ -104,6 +104,7 @@ describe('коды ошибок', () => {
       'PANEL_INVITATION_INVALID',
       'PANEL_INVITATION_EMAIL_MISMATCH',
       'PANEL_INVITATIONS_UNAVAILABLE',
+      'ACHIEVEMENT_INVALID_STATE',
     ]);
     expect(FieldErrorCode.options).toEqual([
       'REQUIRED',

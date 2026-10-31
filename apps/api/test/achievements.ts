@@ -2,6 +2,7 @@ import { uuidv7 } from '@rkarakulov/api-kit/mongo';
 
 import { achievementsCollections } from '../src/modules/achievements/achievements.collection';
 import { DAY, type Harness } from './harness';
+import { panelCall } from './panel';
 import { routeRidesDb } from './route-rides';
 import { resultsDb } from './results';
 import { createRide, join, type Rider, ridesDb } from './rides';
@@ -150,3 +151,20 @@ export async function racesAt(
   }
   return ids;
 }
+
+/** Достижения райдера в панели (achievements-panel). */
+export const RIDER_ACHIEVEMENTS_ADMIN = '/v1/admin/rider-achievements';
+export const MANUAL_REASON = 'Заезд не засчитался из-за сбоя';
+
+/** Действие панели над достижением райдера (`grant` / `revoke` / `clear`); причина по умолчанию. */
+export const panelAchievement = (
+  h: Harness,
+  token: string | undefined,
+  userId: string,
+  action: 'grant' | 'revoke' | 'clear',
+  body: Record<string, unknown>,
+) =>
+  panelCall(h, token, 'POST', `${RIDER_ACHIEVEMENTS_ADMIN}/${userId}/${action}`, {
+    reason: MANUAL_REASON,
+    ...body,
+  });

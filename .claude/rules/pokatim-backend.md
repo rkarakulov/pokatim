@@ -332,7 +332,7 @@ paths:
 ## Достижения (`achievements`, ADR-0020 Proposed)
 
 - Модуль-композиция (образец `riders` + `standings`): `achievements → identity, profile, results, rides, route-rides,
-  standings` только через `index.ts` (`standings` — порт `RIDER_SEASON_STANDINGS`, `StandingsCoreModule` импортирует
+  standings, panel` только через `index.ts` (`panel` — achievements-panel, `panel` об `achievements` не знает) (`standings` — порт `RIDER_SEASON_STANDINGS`, `StandingsCoreModule` импортирует
   только `AchievementsSyncModule` и `AchievementsWorkerModule`; `AchievementsReadModule` и `sharing` его не получают); на `achievements` ссылаются только `AppModule` (`AchievementsModule`), `WorkerModule` (`AchievementsWorkerModule`, N2),
   `AccountWorkerModule` (`AchievementsCoreModule`, порт стирания), `sharing` (`AchievementsReadModule`, порт
   `ACHIEVEMENTS_FOR_SHARING`) и `NotificationsWorkerModule` (`AchievementsSyncModule`, порт `ACHIEVEMENT_NOTICES`,
@@ -343,7 +343,8 @@ paths:
   `AchievementsSyncModule` (achievements-push) — `AchievementsReconciler` и порт `ACHIEVEMENT_NOTICES`
   (`AchievementsCoreModule`, `AchievementsReadModule`, `StandingsCoreModule`; транзакции и outbox — глобальные модули
   базы); `AchievementsModule` — + `IdentityModule`, `ProfileCoreModule`, `ResultsCoreModule`, `AchievementsReadModule`,
-  `AchievementsSyncModule`. `AchievementsWorkerModule` (`WorkerModule`, achievements-push N2) — серверная сверка:
+  `AchievementsSyncModule`, а для панели (achievements-panel) — `PanelModule`, `IdentityAccountsModule`,
+  `StandingsCoreModule`. `AchievementsWorkerModule` (`WorkerModule`, achievements-push N2) — серверная сверка:
   очередь `achievements-sync`, `AchievementsSchedules` (`achievements.sweep` `* * * * *` Минск +
   `achievements.sweep.boot`), `AchievementsSweep` (курсоры Redis `achievements:cursor:<source>` и замок-аренда прогона —
   `AchievementsSyncState`: `extend` своим токеном перед каждым шагом, `setCursors` — проверка токена и запись одним
@@ -392,6 +393,20 @@ paths:
   `final`-исходу или сезон `pending` — `state` (без ложного «Новое достижение»), название — из исхода. `POST /v1/achievements/seen` — лимит `achievements-seen:<uid>` 120/ч, `updateMany` pipeline своих
   видимых с непоказанным уровнем (`seenLevel = max(seenLevel, level)` из документа), сверку не запускает. Публично — `AchievementsPublicController` (`riders/:publicId/achievements`, `PublicReadGuard`)
   → `publicList`: `findPublic` (нет — 404) → `raceAchievements` + сезонные по `final` → без записи.
+- Ручные решения (achievements-panel, ADR-0020 «Дополнение: ручные решения»): `AchievementsAdminController`
+  (`admin/rider-achievements`, `PanelGuard` + `achievements.manage`: `GET :userId`, `POST :userId/{grant,revoke,clear}`)
+  → `AchievementsPanelService`: лимит `achievements-panel:<actor>` 60/ч (`consumeUserLimit`) → `IdentityAccounts
+  .liveUserIds` (404) → (выдача) объект вне транзакции → `MongoTransactions.run` { запись выдачи **первой** (замок) →
+  (выдача) outbox `achievements.grant-noticed` `origin: 'server'` → `PanelAudit.append` } → дубль индекса снаружи `run`
+  (409 `ACHIEVEMENT_INVALID_STATE`); снятие → после коммита `reconcile(userId, 'server')` при маркере первой сверки
+  (сбой — `reconciled: false`, лог `achievements.override_reconcile_failed`). Лог `achievements.manual action by
+  outcome`. Объекты несезонных — `AchievementObjects` (`AchievementsReadModule`: `resolve` — годность и дата, `titles` —
+  названия пачкой; порты `RIDER_RESULTS.racesOf`, `RIDER_ROUTE_RIDES.routeTitles`, `RIDER_RIDES.ridesOf`), сезон —
+  `RIDER_SEASON_STANDINGS.outcomesOf` (`pending` тоже, с `endsBefore`); вид — `ACHIEVEMENT_OBJECT_KIND_BY_CODE`.
+  Политика: планы пропускают код/ключ с `override`, `adminStatus`, `progressBeyondManual` (RC-9). Ответы: `sync` —
+  фактовые видимые ∩ факты + ручные из документа (нет названия — лог `achievements.manual_object_missing`), сезонная
+  ручная — при любом исходе; `publicList` — `overridesOf` (ручной отзыв убирает, ручная `race_*`/`season_*`
+  добавляет); `cardFacts` — ручная из документа; `ACHIEVEMENT_NOTICES` — ручная без перепроверки фактами.
 - Сезонные (achievements-seasonal, ADR-0020 «Дополнение: сезонные»): факты — порт `RIDER_SEASON_STANDINGS.outcomesOf
   (userId, alsoSeasonIds, now)` (`standings/rider-season-standings.ts`, `StandingsCoreModule`): `SEASON_RACES
   .finishedSeasons(now)` → одна snapshot-сессия `rowsOfUserIn` + `headersOf` (нужные сезоны — строк ∪ сохранённых

@@ -21,6 +21,7 @@ export {
   RIDER_RIDES,
   RIDER_RIDES_MAX_ROWS,
   type RiderRideFact,
+  type RiderRideInfo,
   type RiderRides,
 } from './rider-rides.port';
 /** Порт «Обзора» панели (admin-overview): райды с открытыми жалобами и активные райды. */

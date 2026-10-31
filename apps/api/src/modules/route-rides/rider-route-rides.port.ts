@@ -27,4 +27,10 @@ export interface RiderRouteRides {
    * курсор — последний прочитанный заезд.
    */
   passedRidersAfter(after: ChangedCursor, until: Date, limit: number): Promise<RiderChanges>;
+  /**
+   * Текущие названия маршрутов из `routeIds`, видимых райдеру сейчас (каталог или свой готовый — та же видимость, что у
+   * `passedOf`, RC-4): объект ручной выдачи достижения и его название в ответах (achievements-panel). Нет в карте — не
+   * виден.
+   */
+  routeTitles(userId: string, routeIds: readonly string[]): Promise<Map<string, string>>;
 }

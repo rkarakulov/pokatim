@@ -29,4 +29,14 @@ export interface RiderRides {
    * последний прочитанный райд.
    */
   startedRidersAfter(after: ChangedCursor, until: Date, limit: number): Promise<RiderChanges>;
+  /**
+   * Райды из `rideIds`, годные объектом ручной выдачи достижения (achievements-panel, 5.C): опубликован (не скрыт, не
+   * отменён) и старт прошёл — то же условие «прошёл», что `pastOf`, без участия райдера. Нет в карте — не годен.
+   */
+  ridesOf(rideIds: readonly string[]): Promise<Map<string, RiderRideInfo>>;
+}
+
+export interface RiderRideInfo {
+  title: string;
+  startsAt: Date;
 }

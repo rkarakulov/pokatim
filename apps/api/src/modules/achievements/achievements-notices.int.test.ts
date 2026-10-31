@@ -2,9 +2,17 @@ import { Logger } from '@nestjs/common';
 import { MongoOutboxWriter } from '@rkarakulov/api-kit/mongo';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ACHIEVEMENTS, achievementsDb, daysAgo, raceAt, racesAt } from '../../../test/achievements';
+import {
+  ACHIEVEMENTS,
+  achievementsDb,
+  daysAgo,
+  panelAchievement,
+  raceAt,
+  racesAt,
+} from '../../../test/achievements';
 import { createHarness, type Harness } from '../../../test/harness';
 import { eventsOfType, notificationsIntake, notificationsOf } from '../../../test/notifications';
+import { staff } from '../../../test/races';
 import { authed, rider, type Rider } from '../../../test/rides';
 import {
   addRevision,
@@ -339,5 +347,77 @@ describe('порт ACHIEVEMENT_NOTICES', () => {
     const titles = (await notificationsOf(h, me.userId)).map((doc) => doc.title);
     expect(titles.some((title) => title.includes('Призёр сезона'))).toBe(true);
     expect(titles.filter((title) => title.includes('Чемпион сезона'))).toEqual([]);
+  });
+});
+
+describe('порт ACHIEVEMENT_NOTICES — ручные решения (achievements-panel, 5.E)', () => {
+  it('ручная выдача без факта — уведомление с названием объекта из порта; ручной отзыв до доставки — state; решение снято и факта нет — state', async () => {
+    const me = await rider(h, 'me@example.com');
+    const other = await rider(h, 'other@example.com');
+    const { token } = await staff(h, 'admin@example.com', 'admin');
+    const season = await seedSeason(h);
+    expect((await get(me)).status).toBe(200);
+    const race = await raceAt(h, season, [placedRow(other.userId, 1)], daysAgo(h, 3), 'Весенняя');
+    expect(
+      (
+        await panelAchievement(h, token, me.userId, 'grant', {
+          code: 'races_5',
+          objectId: race,
+          level: 'gold',
+        })
+      ).status,
+    ).toBe(204);
+    const [event] = await noticed();
+    expect(event).toMatchObject({ grant: 'fact', level: 3, origin: 'server' });
+    expect(await notices().notice(event!, h.clock.now())).toEqual({
+      userId: me.userId,
+      code: 'races_5',
+      level: 3,
+      object: { kind: 'race', title: 'Весенняя' },
+      seasonId: null,
+    });
+    await notificationsIntake(h).drain();
+    expect((await notificationsOf(h, me.userId)).map((doc) => doc.title)).toHaveLength(1);
+
+    expect(
+      (await panelAchievement(h, token, me.userId, 'revoke', { code: 'races_5' })).status,
+    ).toBe(204);
+    expect(await notices().notice(event!, h.clock.now())).toBe('state');
+
+    // решение снято, факта нет: снятие со сверкой отзывает документ — подготовка видимого документа без решения прямо в
+    // БД (как до немедленной сверки)
+    await panelAchievement(h, token, me.userId, 'clear', { code: 'races_5' });
+    await achievementsDb(h).grants.updateOne(
+      { _id: event!.grantId },
+      { $set: { revokedAt: null, override: null } },
+    );
+    expect(await notices().notice(event!, h.clock.now())).toBe('state');
+  });
+
+  it('ручной сезон в `pending` — уведомление с названием исхода', async () => {
+    const me = await rider(h, 'me@example.com');
+    const other = await rider(h, 'other@example.com');
+    const { token } = await staff(h, 'admin@example.com', 'admin');
+    expect((await get(me)).status).toBe(200);
+    const season = await seedSeason(h, 'Сезон 2025', { year: 2025 });
+    const race = await seedProtocolRace(h, season, [placedRow(other.userId, 1)]);
+    await syncStandings(h);
+    await addRevision(h, race, 2, [placedRow(other.userId, 1)]); // `pending`
+    expect(
+      (
+        await panelAchievement(h, token, me.userId, 'grant', {
+          code: 'season_regular',
+          objectId: season,
+        })
+      ).status,
+    ).toBe(204);
+    const [event] = await noticed();
+    expect(await notices().notice(event!, h.clock.now())).toEqual({
+      userId: me.userId,
+      code: 'season_regular',
+      level: null,
+      object: { kind: 'season', title: 'Сезон 2025' },
+      seasonId: season,
+    });
   });
 });
