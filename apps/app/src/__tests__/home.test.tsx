@@ -816,7 +816,6 @@ describe('Главная: подсказка имени K3 (P3, RC-P3-7)', () =>
       publicId: 'r'.repeat(43),
       themeId: 'classic',
       avatarUploadBlockedUntil: null,
-      showRouteRides: false,
     });
     await openHome();
     await waitFor(() => expect(getProfile).toHaveBeenCalled());
