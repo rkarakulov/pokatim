@@ -521,3 +521,13 @@ Coder, 2026-10-31. Отклонения — §8.2.
 `notifications-social` + `notifications-delivery` → 2 файла, 53 теста, pass; unit `src/modules/notifications` → 10
 файлов, 157 тестов, pass; api `tsc --noEmit` — exit 0; eslint по затронутым файлам — exit 0. Web Push payload с целью
 `rider` и полный `AccountErasure` (LOW, пробелы тестов) — без изменений, как в «Не проверено».
+
+**Ревью и гейты оркестратора (2026-10-31):**
+- Независимое ревью (`independent-reviewer`): pass 1 — APPROVE (MEDIUM + 2 LOW, `findings.md`); MEDIUM и LOW-2
+  исправлены; pass 2 — APPROVE, новых замечаний нет.
+- Полный `pnpm check` (`TURBO_CONCURRENCY=4`, Mongo `pokatim_social_p1_test`, Redis db 8) после слияния develop:
+  format, lint, arch, typecheck — зелёные; test — contracts 499, design-tokens 609, api-client 176, i18n 16,
+  route-view 51, admin 520, app 2584, api 2716 passed. Под нагрузкой машины (load ≈ 25–30) красными были только
+  тайминговые бенчмарки `packages/tracks` и три файла api вне diff (`races-for-sharing` — Mongo server selection
+  timeout, `ride-invite.png` — таймаут 60 с, `cleanup-unverified` — ворота по таймеру); отдельным прогоном — api 3/3
+  файла (14 тестов) и tracks 27/27 файлов (374 теста) зелёные. CI — полный.

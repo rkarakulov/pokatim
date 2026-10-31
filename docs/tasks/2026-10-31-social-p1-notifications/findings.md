@@ -76,3 +76,32 @@ ADR-0017/0027 и правила обновлены (`pr.md` — артефакт
 - **[LOW] потолок `params.object` — исправлено.** `socialParamsOf` — `oneLine(...).slice(0, 200)`; unit-тест в
   `social-notices.test.ts`.
 - **[LOW] пробелы тестов Web Push / `AccountErasure` — не менялось** (признано в §12 task.md).
+
+# Findings — social-p1-notifications — pass 2 — reviewer: claude
+base: origin/develop   commits: исправления 9d6e0f41 (поверх — merge develop 5abcb732, чужие изменения не ревьюились)
+verdict: APPROVE
+
+Проверено руками: `vitest run --no-file-parallelism src/modules/notifications` на Mongo `:27117`
+(`pokatim_social_p1r_test`) и Redis db 13 — 16 файлов / 333 теста pass (unit + int, в том числе новый кейс «сбой
+запроса имён…»). `tsc --noEmit` в `apps/api` — чисто. Полный `pnpm check` — NOT VERIFIED (за оркестратором).
+
+**[MEDIUM] pass 1 (сбой `publicRiders` в push) — закрыто.** `PushDelivery.socialCards` ловит сбой: пустая карта,
+`contentOf` отдаёт запасной текст («Райдер», `target: null`). После этого `deliver` идёт обычным путём. Захват
+закрывается в `sent`/`failed` или через `sendFailed` (`pending` + `limitCharged: true`). Документ в `sending` больше
+не остаётся, второго списания лимита нет. Вариант лучше переноса вызова до `consume`: исключение после `claimPush`
+всё равно оставило бы захват висеть. Лог `notifications.push_names_failed uid=… error=<error.name>` без
+`message`, имён и `userId` действующих лиц нет. Условие выбора лиц (`due.length === 1 && group === 'social'`)
+эквивалентно прежнему. Регрессий нет: лимит, тихие часы, токены и ветки sent/failed/sendFailed не менялись. Тест
+честный. `vi.spyOn` подменяет экземпляр `RIDER_NAMES` из worker-контейнера, тот же, что внедрён в `PushDelivery`.
+Без `try/catch` reject дошёл бы до `runPush`, и тест упал бы. Проверяются тело, `data.target`, `state: 'sent'`,
+`claimId: null` и то, что повторный прогон ничего не захватывает (`none`).
+
+**[LOW] pass 1 (потолок `params.object`) — закрыто.** `socialParamsOf` теперь даёт `oneLine(...).slice(0, 200)`.
+Это та же нормализация, что в `socialNoticeDraft`, поэтому значение для `SocialNoticeParams.max(200)` совпадает на
+прямом пути и в пачке. Для черновиков из `socialNoticeDraft` повторная нормализация идемпотентна. Unit-тест
+проверяет перевод строки, обрезку и отсутствие `object`.
+
+**[LOW] pass 1 (Web Push payload с `rider`, полный `AccountErasure`)** — без изменений, признано в §12 task.md. Не
+блокирует.
+
+Новых замечаний нет.
