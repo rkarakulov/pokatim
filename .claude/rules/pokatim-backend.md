@@ -371,7 +371,8 @@ paths:
   `progress` — из той же `Evaluation`). Лог `achievements.sync uid first granted revoked restored refreshed … origin
   noticed` — только если план не пуст. Порт `ACHIEVEMENT_NOTICES` (`achievement-notices.ts`): выдача по `_id`
   (`findGrant`; нет — `gone`; отозвана, ранг ниже события, код не заработан по фактам — `state`), название — `evaluate`
-  + `titled` или `RIDER_SEASON_STANDINGS.seasonTitles` (без снимка). `POST /v1/achievements/seen` — лимит `achievements-seen:<uid>` 120/ч, `updateMany` pipeline своих
+  + `titled`; сезонная — `RIDER_SEASON_STANDINGS.outcomesOf` + `seasonalAchievements`: ключ не заработан по
+  `final`-исходу или сезон `pending` — `state` (без ложного «Новое достижение»), название — из исхода. `POST /v1/achievements/seen` — лимит `achievements-seen:<uid>` 120/ч, `updateMany` pipeline своих
   видимых с непоказанным уровнем (`seenLevel = max(seenLevel, level)` из документа), сверку не запускает. Публично — `AchievementsPublicController` (`riders/:publicId/achievements`, `PublicReadGuard`)
   → `publicList`: `findPublic` (нет — 404) → `raceAchievements` + сезонные по `final` → без записи.
 - Сезонные (achievements-seasonal, ADR-0020 «Дополнение: сезонные»): факты — порт `RIDER_SEASON_STANDINGS.outcomesOf

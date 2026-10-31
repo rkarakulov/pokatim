@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 
 import { tolerantEnum } from '../common.ts';
 
@@ -15,6 +16,7 @@ import {
   NotificationListQuery,
   NotificationPage,
   NotificationSettings,
+  NotificationTarget,
   NotificationTargetView,
   NotificationView,
   PUSH_PLATFORMS,
@@ -164,9 +166,18 @@ describe('ответы (tolerantEnum, неизвестная цель)', () => {
     // справочник видов сборки до achievements-push: всё, кроме последнего значения
     const [first, ...rest] = NOTIFICATION_KINDS.filter((kind) => kind !== 'achievement_granted');
     const OLD_KINDS = [first!, ...rest] as const;
+    // белый список целей сборки до achievements-push (без `achievement`) с прежним структурным fallback
+    const [firstTarget, ...restTargets] = NotificationTarget.options.filter(
+      (option) => option.shape.type.value !== 'achievement',
+    );
+    const OLD_TARGETS = z.union([
+      z.discriminatedUnion('type', [firstTarget!, ...restTargets]),
+      z.object({ type: z.string() }).transform(() => ({ type: 'unknown' as const })),
+    ]);
     const old = NotificationView.extend({
       group: tolerantEnum(OLD_GROUPS),
       kind: tolerantEnum(OLD_KINDS),
+      target: OLD_TARGETS.nullable(),
     });
     const item = view({
       kind: 'achievement_granted',
@@ -178,7 +189,14 @@ describe('ответы (tolerantEnum, неизвестная цель)', () => {
     expect(parsed.group).toBe('unknown');
     expect(parsed.kind).toBe('unknown');
     expect(parsed.title).toBe('Новое достижение: Подиум');
+    expect(parsed.body).toBe(item.body);
+    expect(parsed.target).toEqual({ type: 'unknown' });
+    expect(old.parse(view()).target).toEqual(view().target);
     expect(NotificationView.parse(item).group).toBe('achievements');
+    expect(NotificationView.parse(item).target).toEqual({
+      type: 'achievement',
+      code: 'race_podium',
+    });
   });
 
   it('страница и счётчик', () => {

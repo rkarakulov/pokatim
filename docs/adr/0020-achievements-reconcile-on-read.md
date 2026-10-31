@@ -127,7 +127,7 @@ worker — PR N2, дополнится здесь же).
   маркер и `POST seen` — прежние одиночные операции без транзакции (RC-2 для них в силе).
 - **Событие** `achievements.grant-noticed` (`{ grant: 'fact' | 'season', grantId, level, origin }` — без `userId` и
   текстов); маршрут объявляет `notifications`, поля уведомления — порт `ACHIEVEMENT_NOTICES` (выдача по `_id`: стёрта —
-  `gone`; отозвана, ранг ниже, факт пропал — `state`; название — факты `AchievementFactsReader` или
-  `RIDER_SEASON_STANDINGS.seasonTitles`). Вторая линия идемпотентности — схлопывание `achievement:<grantId>` по рангу.
+  `gone`; отозвана, ранг ниже, факт пропал, сезонный код не заработан по `final`-исходу или сезон в `pending` — `state`;
+  название — факты `AchievementFactsReader` или итог `RIDER_SEASON_STANDINGS.outcomesOf`). Вторая линия идемпотентности — схлопывание `achievement:<grantId>` по рангу.
 - **Канал:** `origin: 'read'` — запись в центре без push (райдер видит вспышку; уведомление непрочитано, RC-P6);
   `'server'` — центр и push по группе «Достижения» (ADR-0017). Вспышка push-ем не отменяется (A5).

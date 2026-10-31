@@ -76,13 +76,4 @@ export class RiderSeasonStandingsService implements RiderSeasonStandings {
     }
     return outcomes;
   }
-
-  async seasonTitles(seasonIds: readonly string[], now: Date): Promise<Map<string, string>> {
-    if (seasonIds.length === 0) return new Map();
-    const wanted = new Set(seasonIds);
-    const finished = await this.seasons.finishedSeasons(now);
-    return new Map(
-      finished.filter((season) => wanted.has(season.id)).map((season) => [season.id, season.name]),
-    );
-  }
 }

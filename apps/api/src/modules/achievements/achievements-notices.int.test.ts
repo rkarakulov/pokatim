@@ -304,4 +304,40 @@ describe('порт ACHIEVEMENT_NOTICES', () => {
     );
     expect(await notices().notice(event, h.clock.now())).toBe('state');
   });
+
+  it('сезонная: пересчёт снимка отнял место до приёма события (без промежуточного GET) — state, уведомления нет; ревизия без пересчёта (`pending`) — state', async () => {
+    const me = await rider(h, 'me@example.com');
+    const other = await rider(h, 'other@example.com');
+    expect((await get(me)).status).toBe(200);
+    const season = await seedSeason(h, 'Сезон 2025', { year: 2025 });
+    const race = await seedProtocolRace(h, season, [
+      placedRow(me.userId, 1),
+      placedRow(other.userId, 2),
+    ]);
+    await syncStandings(h);
+    expect((await get(me)).status).toBe(200);
+    const grant = await achievementsDb(h).seasonGrants.findOne({
+      userId: me.userId,
+      code: 'season_champion',
+    });
+    expect((await noticed()).map((one) => one.grantId)).toContain(grant!._id);
+    const event = {
+      grant: 'season' as const,
+      grantId: grant!._id,
+      level: null,
+      origin: 'read' as const,
+    };
+
+    await addRevision(h, race, 2, [placedRow(other.userId, 1), placedRow(me.userId, 2)]);
+    // снимок устарел (`pending`): чемпионство не подтверждено — не объявляем
+    expect(await notices().notice(event, h.clock.now())).toBe('state');
+
+    await syncStandings(h);
+    expect(await notices().notice(event, h.clock.now())).toBe('state');
+    await notificationsIntake(h).drain();
+    // «Призёр сезона» остался заработан — его уведомление есть (приём событий отработал); «Чемпиона» — нет
+    const titles = (await notificationsOf(h, me.userId)).map((doc) => doc.title);
+    expect(titles.some((title) => title.includes('Призёр сезона'))).toBe(true);
+    expect(titles.filter((title) => title.includes('Чемпион сезона'))).toEqual([]);
+  });
 });

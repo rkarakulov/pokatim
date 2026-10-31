@@ -109,8 +109,8 @@ Architecture Review (architect, 2026-10-31) — **Status: CONCERNS** (блоке
   - читает выдачу по `_id` (свой репозиторий); нет — `gone` (стёрт аккаунт);
   - отозвана, или (несезонная) сохранённый ранг < `event.level`, или код больше не заработан по фактам — `state`;
   - название объекта: несезонное — `AchievementFactsReader.evaluate` + `titled` (тот же источник, что у GET; заодно
-    подтверждает факт); сезонное — новое лёгкое `RiderSeasonStandings.seasonTitles(seasonIds, now)` (через
-    `SEASON_RACES.finishedSeasons`, без `StandingsSource.load`);
+    подтверждает факт); сезонное — актуальный итог `RiderSeasonStandings.outcomesOf(userId, [seasonId], now)` +
+    `seasonalAchievements` (ключ заработан по `final`-исходу; `pending` — `state`; фикс ревью pass 1);
   - возвращает `{ userId, code, level, object: { kind, title }, seasonId | null }`.
 - `NotificationIntake.achievementGranted`: черновик `{ text: { kind: 'achievement_granted', code, level, objectKind,
   objectTitle }, target: { type: 'achievement', code, seasonId? }, collapse, recipients: [userId], inApp: origin ===
@@ -212,7 +212,7 @@ API — `apps/api/src/`:
 - PR N2: `modules/results/rider-results.port.ts` + `rider-results.ts` + `results.repository.ts`;
   `modules/rides/rider-rides.port.ts` + `rider-rides.ts` + `rides.repository.ts`;
   `modules/route-rides/rider-route-rides.port.ts` + `rider-route-rides.ts` + `route-rides.repository.ts`;
-  `modules/standings/rider-season-standings.port.ts` + `rider-season-standings.ts` (+ `seasonTitles` — уже в N1);
+  `modules/standings/rider-season-standings.port.ts` + `rider-season-standings.ts` (`seasonTitles` из N1 удалён фиксом ревью pass 1);
   `changed-since.ts`; `queues.ts`; `worker.module.ts`; `db/migrations/0044_route_rides_passed_idx.ts` + `index.ts` +
   `migrations.int.test.ts`.
 
@@ -365,7 +365,8 @@ RC-P8, RC-P9 (a), RC-P10 — два PR).
 - **`noticeDue` — только для `refresh`/`restore`** (формула 7.2); вставка не в первой сверке уведомляет всегда — это
   решает сверка (`AchievementsReconciler.apply`), не функция.
 - **Порт `ACHIEVEMENT_NOTICES` строже 5.B:** несезонная — `state` и тогда, когда ранг по фактам ниже ранга события;
-  сезонная — `state`, если сезона нет среди завершённых (`seasonTitles` пуст).
+  сезонная — `state`, если ключ `code:seasonId` не заработан по `final`-исходу `outcomesOf` или сезон `pending` (фикс
+  ревью pass 1; было — «сезона нет среди завершённых», `seasonTitles`).
 - **`inApp` важнее `push_off`:** `reason: 'in_app'` при любом состоянии канала (в центр без push по замыслу P1).
 - **Service worker:** цель `achievement` добавлена и в копию белого списка SW (`scripts/service-worker.ts`) — иначе
   Web Push открывал бы центр; коды — `SW_ACHIEVEMENT_CODES` (генератор SW запускается Node без сборки пакетов),
@@ -439,7 +440,7 @@ PR N1
 3. `AchievementsReconciler` вынести из сервиса без смены поведения — существующий `achievements.int.test.ts` зелёный.
 4. Транзакция + outbox в шагах `insert/refresh/restore` (int AC1/AC2/уровни; параллель N × GET + `server`);
    отрицательные доказательства (а)–(в) — красные на подменах.
-5. Порт `ACHIEVEMENT_NOTICES` (+ `seasonTitles` в `standings`), `gone/state` (int).
+5. Порт `ACHIEVEMENT_NOTICES` (сезонная — `outcomesOf` + `seasonalAchievements`), `gone/state` (int).
 6. notifications: маршрут, `achievementGranted`, тексты (unit), `initialDelivery` `inApp`, группа, подресурс (int AC4).
 7. Приложение: цель → экран, секция настроек, i18n, api-client.
 8. Документы (раздел 10, без частей N2), `pnpm check`.
@@ -464,7 +465,7 @@ PR N2
   `restoreOrRefresh` → `findOneAndUpdate` pipeline (`returnDocument: 'before'`), `findGrant`; `AchievementsReconciler`
   (`reconcile(userId, origin)`, транзакция + outbox только у шагов с событием; `origin: 'server'` готов для N2, вызывающего
   пока нет); `AchievementsService` — лимит + ответ; событие `achievements.grant-noticed`; порт `ACHIEVEMENT_NOTICES`;
-  `AchievementsSyncModule`. `standings`: `RIDER_SEASON_STANDINGS.seasonTitles`.
+  `AchievementsSyncModule`. `standings`: `RIDER_SEASON_STANDINGS.seasonTitles` (удалён фиксом ревью pass 1).
 - `notifications`: маршрут события, `achievementGranted` (цель, схлопывание `achievement:<grantId>` по рангу, `inApp`
   при `origin: 'read'`), `initialDelivery(…, { inApp })` → `skipped/in_app`, группа и `KIND_GROUPS`, тексты (заголовок
   — функция, имена из каталога), подресурс `GET|PUT settings/achievements` (`push.achievements`, нет поля — включено).
@@ -487,3 +488,22 @@ PR N2
 
 Не входит в N1 (N2): worker и регламент `achievements.sweep`, методы портов источников, миграция `0044`, push без
 открытия приложения (AC3, AC5).
+
+### Фиксы ревью pass 1 (2026-10-31; `findings-claude.md`, `findings-codex.md`)
+
+- **MEDIUM (оба ревьюера) — сезонная выдача перепроверяется по актуальному итогу.** `AchievementNoticesService.notice`:
+  сезонная ветка — `RIDER_SEASON_STANDINGS.outcomesOf(userId, [seasonId], now)` → `seasonalAchievements`; ключ
+  `code:seasonId` не заработан по `final`-исходу — `state`; сезон `pending` (ревизия протокола без пересчёта снимка) —
+  тоже `state` (решение: безопасная сторона, без ложного «Новое достижение»; приём события не повторяется — если
+  чемпионство подтвердится, сверка уже держит выдачу, а уведомление не придёт — допустимо: экран покажет достижение).
+  Название — из исхода. `RiderSeasonStandings.seasonTitles` стал мёртвым — удалён (порт, реализация, int-тест).
+  TDD: int «сезонная: пересчёт снимка отнял место до приёма события (без промежуточного GET) — state, уведомления нет;
+  ревизия без пересчёта (`pending`) — state» (`achievements-notices.int.test.ts`) — до правки красный (порт вернул
+  уведомление на `pending`), после — зелёный; положительный контроль — «Призёр сезона» уведомлён.
+- **LOW — тест «старая сборка» проверяет цель:** имитация подменяет и `target` на белый список без `achievement` +
+  прежний структурный fallback; `parsed.target` → `{ type: 'unknown' }`, заголовок и тело сервера сохранены.
+- **LOW — `inApp` через пачки:** unit `planFanout` — флаг в каждой пачке, проходит `FanoutJobData` и план
+  `IntakeJobData`; без флага ключа нет.
+- **LOW — `pokatim-security.md` («Достижения»):** GET пишет и события outbox `achievements.grant-noticed` (payload —
+  id и коды, без `userId` и ПДн; получатель — из выдачи через порт). Также `pokatim-backend.md` и ADR-0020 — сезонная
+  перепроверка вместо `seasonTitles`.

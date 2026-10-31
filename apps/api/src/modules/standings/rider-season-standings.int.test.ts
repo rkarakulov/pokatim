@@ -133,16 +133,3 @@ describe('RIDER_SEASON_STANDINGS.outcomesOf', () => {
     expect(await outcomes(me, [current])).toEqual([]);
   });
 });
-
-describe('RIDER_SEASON_STANDINGS.seasonTitles (achievements-push)', () => {
-  it('названия только завершённых сезонов из набора; незавершённые и неизвестные — нет; снимок не читается', async () => {
-    const past = await seedSeason(h, 'Сезон 2025', { year: 2025 });
-    const current = await seedSeason(h, 'Сезон 2026');
-    const load = vi.spyOn(h.app.get(StandingsSource, { strict: false }), 'load');
-
-    const titles = await port().seasonTitles([past, current, uuidv7()], h.clock.now());
-    expect([...titles]).toEqual([[past, 'Сезон 2025']]);
-    expect(await port().seasonTitles([], h.clock.now())).toEqual(new Map());
-    expect(load).not.toHaveBeenCalled();
-  });
-});
