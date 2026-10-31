@@ -1,12 +1,16 @@
 import { Worker } from 'node:worker_threads';
 
-/** Функции серверного входа `@pokatim/tracks/parse`, которые можно запустить в потоке (белый список). */
+/**
+ * Функции серверного входа `@pokatim/tracks/parse`, которые можно запустить в потоке (белый список, новые — в конец).
+ * `analyzeSections` — участки маршрута (route-rides-05): второй вызов потока после основной сверки заезда.
+ */
 export const PARSE_FUNCTIONS = [
   'analyzeTrack',
   'analyzeRoute',
   'analyzeAttempt',
   'analyzeSeries',
   'deriveRoute',
+  'analyzeSections',
 ] as const;
 export type ParseFunction = (typeof PARSE_FUNCTIONS)[number];
 
