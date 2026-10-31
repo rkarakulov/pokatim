@@ -46,6 +46,7 @@ import MyRoutePublishRoute from '../app/routes/mine/publish/[id]';
 import ReportRouteRoute from '../app/routes/report/[id]';
 import RouteStoryRoute from '../app/routes/story/[id]';
 import RouteRidePickRoute from '../app/routes/pick/[routeId]';
+import RouteRideOthersRoute from '../app/routes/others/[routeId]';
 import RouteRideRoute from '../app/routes/rides/[routeId]/[rideId]';
 import RacePickRoute from '../app/races/pick/[id]';
 import DisputeResponseRoute from '../app/races/dispute-response/[id]/[disputeId]';
@@ -123,6 +124,7 @@ export const appRoutes = {
   'routes/story/[id]': RouteStoryRoute,
   'riders/report/[id]': ReportRiderRoute,
   'routes/pick/[routeId]': RouteRidePickRoute,
+  'routes/others/[routeId]': RouteRideOthersRoute,
   'routes/rides/[routeId]/[rideId]': RouteRideRoute,
   'seasons/[id]': SeasonRoute,
   'calendar/[id]': CalendarStartRoute,

@@ -145,10 +145,11 @@ describe('«Выбрать свой заезд» для маршрута (route-
     expect(checkRide).not.toHaveBeenCalled();
   });
 
-  it('кандидат → POST { activityId } → результат из кэша ответа (без GET), список устарел', async () => {
+  it('кандидат → POST { activityId } → результат из кэша ответа (без GET), список и таблица «Другие» устарели', async () => {
     signedIn();
     const client = createTestQueryClient();
     client.setQueryData(routeRidesKeys.list(ROUTE_ID), null);
+    client.setQueryData(routeRidesKeys.leaderboard(ROUTE_ID, 100), null);
     let resolve: (value: ReturnType<typeof rideDetail>) => void = () => undefined;
     checkRide.mockReturnValue(new Promise((done) => (resolve = done)));
     const router = await openPick(ROUTE_ID, client);
@@ -165,6 +166,10 @@ describe('«Выбрать свой заезд» для маршрута (route-
     expect(await screen.findByText('Проверяем заезд…')).toBeOnTheScreen();
     expect(getRide).not.toHaveBeenCalled();
     expect(client.getQueryState(routeRidesKeys.list(ROUTE_ID))?.isInvalidated).toBe(true);
+    // route-rides-04 (RC-B6)
+    expect(client.getQueryState(routeRidesKeys.leaderboard(ROUTE_ID, 100))?.isInvalidated).toBe(
+      true,
+    );
   });
 
   it('свой маршрут (?mine=1) — результат тоже с ?mine=1', async () => {

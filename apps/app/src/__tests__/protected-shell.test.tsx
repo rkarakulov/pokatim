@@ -27,6 +27,7 @@ import RideRoutePickRoute from '../app/rides/route-pick';
 import MyRouteRoute from '../app/routes/mine/[id]';
 import MyRoutePublishRoute from '../app/routes/mine/publish/[id]';
 import RouteRidePickRoute from '../app/routes/pick/[routeId]';
+import RouteRideOthersRoute from '../app/routes/others/[routeId]';
 import ReportRouteRoute from '../app/routes/report/[id]';
 import RouteRideRoute from '../app/routes/rides/[routeId]/[rideId]';
 import RouteStoryRoute from '../app/routes/story/[id]';
@@ -76,6 +77,7 @@ const PROTECTED: [string, ComponentType, string][] = [
   ['routes/report/[id]', ReportRouteRoute, `/routes/report/${ID}`],
   ['riders/report/[id]', ReportRiderRoute, `/riders/report/${RIDER}`],
   ['routes/pick/[routeId]', RouteRidePickRoute, `/routes/pick/${ID}`],
+  ['routes/others/[routeId]', RouteRideOthersRoute, `/routes/others/${ID}`],
   ['routes/rides/[routeId]/[rideId]', RouteRideRoute, `/routes/rides/${ID}/${ID}`],
   ['routes/story/[id]', RouteStoryRoute, `/routes/story/${ID}`],
   ['races/pick/[id]', RacePickRoute, `/races/pick/${ID}`],

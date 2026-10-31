@@ -1,5 +1,8 @@
 import type {
   RouteRideDetail,
+  RouteRideLeaderboard,
+  RouteRideLeaderboardMe,
+  RouteRideLeaderboardRow,
   RouteRidePage,
   RouteRideRow,
   RouteRideTrack,
@@ -9,8 +12,9 @@ import type { PillTone } from '@rkarakulov/ui';
 import type { Href } from 'expo-router';
 
 import { formatMinskDateTime } from '@/features/devices/format';
+import { profileWho } from '@/features/races/participation-format';
 import { formatCountdown } from '@/lib/countdown';
-import { meta } from '@/lib/minsk-format';
+import { formatLocalRange, heroDateText, meta } from '@/lib/minsk-format';
 
 /**
  * Заезд по маршруту (route-rides-02) — чистая логика показа. Вердикт, время, «лучший» и дельты — только с сервера
@@ -177,3 +181,82 @@ export const routeCardPath = (routeId: string, mine: boolean): Href =>
   (mine
     ? `/routes/mine/${encodeURIComponent(routeId)}`
     : `/routes/${encodeURIComponent(routeId)}`) as Href;
+
+/** Полный список «Другие на маршруте» (route-rides-04). */
+export const routeRideOthersPath = (routeId: string): Href =>
+  `/routes/others/${encodeURIComponent(routeId)}` as Href;
+
+/** Строк таблицы «Другие» на карточке маршрута (смысл — свой, не `VISIBLE_ROWS`; RC-B7). */
+export const OTHERS_CARD_ROWS = 5;
+
+/** День заезда (`LocalDate` Минска) без времени суток: «4 октября»; не текущий год и `now = null` — с годом. */
+export const rideDayText = (rideDate: string, now: Date | null) =>
+  heroDateText(formatLocalRange(rideDate, rideDate, now));
+
+export interface OthersRowView {
+  /** своя строка — «Вы», нажатие ведёт к своему заезду */
+  own: boolean;
+  place: string;
+  who: string;
+  time: string;
+  day: string;
+  /** подпись строки без действия */
+  a11y: string;
+  /** метка ссылки на публичный профиль — только при `riderPublicId` */
+  profileA11y: string | null;
+  /** метка перехода к своему заезду — только у своей строки */
+  ownA11y: string | null;
+}
+
+function othersRowView(
+  row: { place: number; elapsedSec: number; rideDate: string },
+  own: boolean,
+  who: string,
+  named: string | null,
+  now: Date | null,
+): OthersRowView {
+  const place = String(row.place);
+  const time = formatElapsed(row.elapsedSec);
+  const day = rideDayText(row.rideDate, now);
+  return {
+    own,
+    place,
+    who,
+    time,
+    day,
+    a11y: t('routes.others.rowA11y', { place, who, time, date: day }),
+    profileA11y:
+      named === null
+        ? null
+        : t('routes.others.profileA11y', { who: named, place, time, date: day }),
+    ownA11y: own ? t('routes.others.ownA11y', { place, time, date: day }) : null,
+  };
+}
+
+/**
+ * Строка таблицы «Другие» (route-rides-04, O3): место, кто, время и день — только из ответа сервера (места и ничьи
+ * клиент не считает). Своя — по `rideId` («Вы»); чужая — имя или «Участник».
+ */
+export function leaderboardRowView(row: RouteRideLeaderboardRow, now: Date | null): OthersRowView {
+  const own = row.rideId !== null;
+  const who = own ? t('races.results.you') : (row.riderName ?? t('races.results.rider'));
+  return othersRowView(row, own, who, profileWho(row, who), now);
+}
+
+/** Своя строка вне списка (`me`, O4): «Вы» со своим местом; ссылки на профиль нет. */
+export const leaderboardMeView = (me: RouteRideLeaderboardMe, now: Date | null): OthersRowView =>
+  othersRowView(me, true, t('races.results.you'), null, now);
+
+/** Своя строка уже в списке (RC-B1): отдельная строка `me` не нужна. */
+export const ownInRows = (rows: readonly RouteRideLeaderboardRow[]) =>
+  rows.some((row) => row.rideId !== null);
+
+/** Показано строк: `rows` и своя, показанная отдельно (`me` вне `rows`) — число «Показаны лучшие N из M». */
+export const othersShown = (board: RouteRideLeaderboard) =>
+  board.rows.length + (board.me !== null && !ownInRows(board.rows) ? 1 : 0);
+
+/**
+ * Сервер отдал не все строки (RC-B2): `total` включает зрителя — своя строка, показанная отдельно, тоже видна, поэтому
+ * «Все (N)» и сноска — только если скрыт кто-то ещё.
+ */
+export const othersTruncated = (board: RouteRideLeaderboard) => board.total > othersShown(board);

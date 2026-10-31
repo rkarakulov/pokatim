@@ -22,6 +22,9 @@ const NAME = 'Как вас показывать в результатах';
 const CLUB = 'Клуб';
 const AVATAR_ID = 'r'.repeat(43);
 const SHOW = 'Показывать имя в таблицах результатов';
+const SHOW_RIDES = 'Показывать мои заезды в таблицах маршрутов';
+const RIDES_HINT =
+  'Другие райдеры увидят ваше время и день заезда на маршрутах каталога. Имя и фото — только если включён показ имени.';
 const never = () => new Promise<never>(() => undefined);
 const profile = (overrides: Partial<ProfileView> = {}): ProfileView => ({
   rideReasons: [],
@@ -37,6 +40,9 @@ const profile = (overrides: Partial<ProfileView> = {}): ProfileView => ({
 });
 const RESULTS_KEY = ['races', 'results', 'race-1', 'page'];
 const RIDER_KEY = ['riders', 'detail', 'x'];
+const ROUTE_ID = '0190a6f4-0000-7000-8000-000000000001';
+const LEADERBOARD_KEY = ['route-rides', ROUTE_ID, 'leaderboard', 5];
+const RIDES_LIST_KEY = ['route-rides', ROUTE_ID, 'list'];
 
 let client: QueryClient;
 
@@ -133,6 +139,7 @@ describe('«Профиль»: сохранение (AC9)', () => {
         publicName: 'Анна К.',
         club: null,
         showNameInResults: true,
+        showRouteRides: false,
       }),
     );
     expect(save()).toBeDisabled();
@@ -157,6 +164,7 @@ describe('«Профиль»: сохранение (AC9)', () => {
         publicName: null,
         club: null,
         showNameInResults: true,
+        showRouteRides: false,
       }),
     );
   });
@@ -199,6 +207,65 @@ describe('«Профиль»: сохранение (AC9)', () => {
   });
 });
 
+describe('«Редактировать профиль»: показ заездов в таблицах маршрутов (route-rides-04)', () => {
+  it('переключатель под «Показывать имя…» с пояснением; начальное значение — из профиля', async () => {
+    getProfile.mockResolvedValue(profile({ showRouteRides: true }));
+    await openProfile();
+    const rides = await screen.findByRole('switch', { name: SHOW_RIDES });
+    expect(rides).toHaveProp('accessibilityState', expect.objectContaining({ checked: true }));
+    expect(screen.getByText(RIDES_HINT)).toBeOnTheScreen();
+    const switches = screen.getAllByRole('switch').map((node) => node.props.accessibilityLabel);
+    expect(switches.indexOf(SHOW_RIDES)).toBe(switches.indexOf(SHOW) + 1);
+  });
+
+  it('«Сохранить» шлёт showRouteRides; таблицы «Другие» устарели, «Мои заезды» — нет', async () => {
+    updateProfile.mockResolvedValue(profile({ showRouteRides: true }));
+    client.setQueryData(LEADERBOARD_KEY, null);
+    client.setQueryData(RIDES_LIST_KEY, null);
+    await openProfile();
+    await fireEvent.press(await screen.findByRole('switch', { name: SHOW_RIDES }));
+    await fireEvent.press(save());
+    await waitFor(() =>
+      expect(updateProfile).toHaveBeenCalledWith(liveSession.accessToken, {
+        publicName: null,
+        club: null,
+        showNameInResults: false,
+        showRouteRides: true,
+      }),
+    );
+    expect(await screen.findByText('Сохранено')).toBeOnTheScreen();
+    expect(client.getQueryState(LEADERBOARD_KEY)?.isInvalidated).toBe(true);
+    expect(client.getQueryState(RIDES_LIST_KEY)?.isInvalidated).toBe(false);
+  });
+
+  it('после сохранения — значение из ответа сервера', async () => {
+    updateProfile.mockResolvedValue(profile({ showRouteRides: false }));
+    await openProfile();
+    await fireEvent.press(await screen.findByRole('switch', { name: SHOW_RIDES }));
+    await fireEvent.press(save());
+    expect(await screen.findByText('Сохранено')).toBeOnTheScreen();
+    expect(screen.getByRole('switch', { name: SHOW_RIDES })).toHaveProp(
+      'accessibilityState',
+      expect.objectContaining({ checked: false }),
+    );
+  });
+
+  it('серверная ошибка поля showRouteRides — текст под переключателем', async () => {
+    updateProfile.mockRejectedValue(
+      new ApiHttpError(400, {
+        code: 'VALIDATION_FAILED',
+        message: 'x',
+        details: { fields: [{ path: 'showRouteRides', code: 'INVALID' }] },
+      }),
+    );
+    await openProfile();
+    await fireEvent.press(await screen.findByRole('switch', { name: SHOW_RIDES }));
+    await fireEvent.press(save());
+    expect(await screen.findByText('Проверьте значение.')).toBeOnTheScreen();
+    expect(screen.queryByText('Сохранено')).toBeNull();
+  });
+});
+
 describe('«Редактировать профиль»: клуб (rider-profile, AC14)', () => {
   it('клуб в поле; сохранение — в теле PATCH; пустой — null', async () => {
     getProfile.mockResolvedValue(profile({ club: 'Velo Club Minsk' }));
@@ -217,6 +284,7 @@ describe('«Редактировать профиль»: клуб (rider-profile
         publicName: null,
         club: 'Минск Вело',
         showNameInResults: false,
+        showRouteRides: false,
       }),
     );
   });

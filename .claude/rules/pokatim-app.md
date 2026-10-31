@@ -383,6 +383,9 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   `name-consent-storage(.web).ts`). Согласие — только «Сохранить» с включённым переключателем (`useUpdateProfile`);
   «Не сейчас», закрытие и сохранение без показа — пауза. Подпись строки таблицы гонки — только `raceRowWho`
   (`participation-format.ts`: имя → «Райдер #N» по `riderNo` → «Участник»).
+- Показ своих заездов в таблицах маршрутов (route-rides-04): переключатель `showRouteRides` в `ProfileFormView` сразу
+  под «Показывать имя…» (схема формы, `FIELDS`, `valuesOf`); тексты `profile.routeRides.*` = версия
+  `ROUTE_RIDES_CONSENT_VERSION` — сменили текст, поднять версию в contracts.
 - Аватар — только `components/rider-avatar.tsx` (`expo-image`, `cachePolicy: memory-disk` — URL `immutable`; нет фото
   или ошибка — иконка человека); размер шапки — `layout.avatarProfile` (`@pokatim/design-tokens`, follow-up
   `size.avatarLg` в базе), верхней панели — `size.avatarTopBar`.
@@ -553,7 +556,8 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   жалобы — название своим `AsyncContent`); мета — `robots: noindex` (RC-6), OG без имени автора.
 - Заезд по маршруту (route-rides-02, `docs/product/routes.md`): всё — `features/route-rides/` (зависимость
   односторонняя: карточки `routes/route-detail.tsx`, `my-route-detail.tsx` → `route-rides-block.tsx`; `route-rides/*` →
-  `routes/{route-line-map,queries,my-routes-queries,format,detail-row}`). Ключи `['route-rides', routeId, …]` (`list`,
+  `routes/{route-line-map,queries,my-routes-queries,format,detail-row}`, `races/{table-row,results-table,participation-format}`;
+  `profile/queries.ts` → `route-rides/queries.ts` — только инвалидация таблиц «Другие»). Ключи `['route-rides', routeId, …]` (`list`,
   `candidates`, `ride`, `track` с ревизией, `upload`) — через `withAccessToken`, только клиент; блок «Мои заезды» —
   только `signedIn` (SSR без блока), запрос списка — в экране карточки (pull-to-refresh). Адреса `routes/pick/
   [routeId]`, `routes/rides/[routeId]/[rideId]` — в `Stack.Protected` (выбор — не под `routes/rides/`: манифест SSR
@@ -567,6 +571,15 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   route-rides-03: «Проверить снова» шлёт `POST { activityId }` из детали (кандидаты не запрашиваются; `404` — баннер
   `recheckMissing`; `activityId: null` — старый API, кнопки нет); у `origin: 'auto'` — строка «Проверен
   автоматически» (`routeRideOriginText`) под вердиктом экрана результата, в списке — нет.
+  route-rides-04 (PR B): блок «Другие на маршруте» (`route-ride-others-block.tsx`) — только карточка каталога, только
+  `signedIn` (SSR и гость — без блока и запроса), после «Моих заездов»; ключ `['route-rides', id, 'leaderboard', limit]`
+  (`useRouteRideLeaderboard`, 404 → `null` → блока нет, без опроса); строки — общие `route-ride-others-rows.tsx` на
+  `TableRow`/`RiderWho`/`useRowAction` (`races/table-row.tsx`), скелетон и ошибка — `RowsSkeleton`/`TabFailure`; своя в
+  `rows` — по `rideId`, `me` — отдельно только вне `rows`; «Все (N)» и сноска — `othersTruncated`. Места, `me`,
+  `shared`, имена — только сервер. Инвалидация: `invalidateRouteRideLeaderboards` в `useUpdateProfile.onSuccess`,
+  `leaderboardAll(routeId)` — после «Проверить заезд», финального статуса результата и смены лучшего заезда в
+  «Моих заездах» карточки. Экран `routes/others/[routeId]` (`route-ride-others.tsx`) — в `Stack.Protected`,
+  `useSettingsShell`, `SEO_DISALLOW`, строка сторожа манифеста SSR (чанк `[routeId]` — тот же, что у выбора).
 
 ## Календарь стартов (блок 04, `docs/product/races-and-seasons.md`)
 
