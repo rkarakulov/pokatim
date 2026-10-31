@@ -192,7 +192,7 @@ export class RouteRideAutoProcessor extends WorkerHost {
     });
     let result: RouteRideResult;
     try {
-      result = await this.evaluator.evaluate(draft);
+      result = await this.evaluator.evaluate(draft, { sections: 'ifPassed' });
     } catch (error) {
       // сбой окружения — ретрай всей задачи; на последней попытке — тихий пропуск маршрута
       if (!finalAttempt) throw error;

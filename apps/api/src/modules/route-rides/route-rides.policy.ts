@@ -369,6 +369,7 @@ export function newRideDoc(input: {
     engineVersion: null,
     trackMap: null,
     checkedAt: null,
+    sections: null,
     ...result,
     createdAt: now,
     updatedAt: now,

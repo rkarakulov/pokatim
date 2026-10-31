@@ -29,6 +29,7 @@ const cleared = (): RouteRideResult => ({
   engineVersion: null,
   trackMap: null,
   checkedAt: null,
+  sections: null,
 });
 
 /**

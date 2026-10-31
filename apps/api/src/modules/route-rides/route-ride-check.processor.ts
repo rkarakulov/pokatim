@@ -57,7 +57,7 @@ export class RouteRideCheckProcessor extends WorkerHost {
     if (!ride) return 'skipped';
     let result: RouteRideResult;
     try {
-      result = await this.evaluator.evaluate(ride);
+      result = await this.evaluator.evaluate(ride, { sections: 'always' });
     } catch (error) {
       // сбой окружения (загрузчик потока, БД, хранилище не ENOENT) — ретрай; на последней попытке — видимый провал
       if (!finalAttempt) throw error;

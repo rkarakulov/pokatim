@@ -113,6 +113,7 @@ export class RouteRidesReadService {
       comparison: comparisonOf(rides, ride),
       createdAt: ride.createdAt.toISOString(),
       checkedAt: ride.checkedAt?.toISOString() ?? null,
+      sections: [],
     };
   }
 

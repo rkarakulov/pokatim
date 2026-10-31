@@ -9,6 +9,8 @@ import { call } from '../../../test/identity';
 import {
   autoEvents,
   catalogCorridorRoute,
+  longCorridorRoute,
+  longRideGpx,
   outboxJob,
   ownCorridorRoute,
   ridesUrl,
@@ -114,7 +116,9 @@ describe('AC1: новая активность → passed по маршрута�
     // прошлый заезд по маршруту каталога: пройден (сравнение)
     const earlier = await ride(r.auth, rideGpx('clean.gpx', at(-24)));
     const previousId = await seedRide(r.userId, ridden, earlier, 'not_passed');
-    const counted = await evaluator().evaluate((await rides().findOne({ _id: previousId }))!);
+    const counted = await evaluator().evaluate((await rides().findOne({ _id: previousId }))!, {
+      sections: 'always',
+    });
     await rides().updateOne({ _id: previousId }, { $set: { ...counted } });
     expect(counted.status).toBe('passed');
 
@@ -279,6 +283,7 @@ describe('AC2: что не триггерит', () => {
       engineVersion: 1,
       trackMap: null,
       checkedAt: h.clock.now(),
+      sections: null,
     }));
     const fresh = await ride(r.auth, rideGpx('clean.gpx', at(0)));
     expect(await auto().run(fresh, r.userId)).toEqual({ planned: 20, passed: 0 });
@@ -314,6 +319,7 @@ const verdict = (passed: boolean) => ({
   engineVersion: 1,
   trackMap: null,
   checkedAt: RECENT,
+  sections: null,
 });
 
 describe('AC3: план события детерминирован (ревью pass 1–2, CRITICAL)', () => {
@@ -505,6 +511,7 @@ describe('AC3: план события детерминирован (ревью 
         origin: 'auto',
         now: h.clock.now(),
       }),
+      { sections: 'ifPassed' },
     );
     expect(passed.status).toBe('passed');
     let calls = 0;
@@ -612,9 +619,9 @@ describe('AC3: гонки и сбои', () => {
     await seedRide(r.userId, routeA, earlier);
     const fresh = await ride(r.auth, rideGpx('clean.gpx', at(0)));
     const evaluate = evaluator().evaluate.bind(evaluator());
-    vi.spyOn(evaluator(), 'evaluate').mockImplementationOnce(async (doc) => {
+    vi.spyOn(evaluator(), 'evaluate').mockImplementationOnce(async (doc, mode) => {
       await routesDb(h).routes.updateOne({ _id: routeA }, { $set: { catalog: null } });
-      return evaluate(doc);
+      return evaluate(doc, mode);
     });
     expect(await auto().run(fresh, r.userId)).toEqual({ planned: 1, passed: 0 });
     expect(await rides().countDocuments({ activityId: fresh })).toBe(0);
@@ -622,12 +629,35 @@ describe('AC3: гонки и сбои', () => {
     // AC-12: активность удалена (стирание аккаунта) между сверкой и вставкой
     const own = await ownCorridorRoute(h, r.userId);
     const second = await uploadRide(h, r.auth, rideGpx('clean.gpx', at(12)));
-    vi.spyOn(evaluator(), 'evaluate').mockImplementationOnce(async (doc) => {
-      const result = await evaluate(doc);
+    vi.spyOn(evaluator(), 'evaluate').mockImplementationOnce(async (doc, mode) => {
+      const result = await evaluate(doc, mode);
       await call(h, 'POST', `/v1/tracks/uploads/${second.uploadId}/delete`, {}, r.auth);
       return result;
     });
     expect(await auto().run(second.activityId!, r.userId)).toEqual({ planned: 1, passed: 0 });
     expect(await rides().countDocuments({ routeId: own })).toBe(0);
+  });
+});
+
+describe('участки маршрута (route-rides-05): автопроверка — только после «Пройден»', () => {
+  it('passed по длинному маршруту — у автозаезда участки; не пройден — второго потока нет, заезда нет', async () => {
+    const r = await rider(h);
+    const routeId = await longCorridorRoute(h, OTHER, 'line');
+    const earlier = await ride(r.auth, longRideGpx('line', at(-24)));
+    await seedRide(r.userId, routeId, earlier);
+
+    const analyzeSections = vi.spyOn(evaluator(), 'analyzeSections');
+    const stopped = await ride(r.auth, longRideGpx('line', at(-12), { stopAtM: 18_000 }));
+    expect(await auto().run(stopped, r.userId)).toEqual({ planned: 1, passed: 0 });
+    expect(analyzeSections).not.toHaveBeenCalled();
+    expect(await rides().countDocuments({ activityId: stopped })).toBe(0);
+
+    const fresh = await ride(r.auth, longRideGpx('line', at(0)));
+    expect(await auto().run(fresh, r.userId)).toEqual({ planned: 1, passed: 1 });
+    expect(analyzeSections).toHaveBeenCalledTimes(1);
+    const doc = await rides().findOne({ activityId: fresh });
+    expect(doc).toMatchObject({ origin: 'auto', status: 'passed' });
+    expect(doc!.sections).toMatchObject({ version: 1, failure: null });
+    expect(doc!.sections!.items.map((item) => item.status)).toEqual(['passed', 'passed', 'passed']);
   });
 });

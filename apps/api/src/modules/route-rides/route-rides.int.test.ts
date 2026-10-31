@@ -502,6 +502,7 @@ describe('AC9: ответы — явный список полей, no-store, Au
       'reason',
       'route',
       'routeDistanceM',
+      'sections',
       'status',
     ];
     const activityKeys = ['distanceM', 'elapsedSec', 'source', 'startedAt'];
