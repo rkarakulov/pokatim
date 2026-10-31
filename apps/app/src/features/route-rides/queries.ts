@@ -1,10 +1,17 @@
 import type {
   RouteRideDetail,
+  RouteRideLeaderboard,
   RouteRidePage,
   RouteRideRequest,
   RouteRideTrack,
 } from '@pokatim/contracts';
-import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  queryOptions,
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from '@tanstack/react-query';
 import { useIsFocused } from 'expo-router';
 import { useEffect, useRef } from 'react';
 
@@ -30,6 +37,10 @@ export const routeRidesKeys = {
     ['route-rides', routeId, 'track', rideId, status, checkedAt] as const,
   upload: (routeId: string, uploadId: string) =>
     ['route-rides', routeId, 'upload', uploadId] as const,
+  // таблица «Другие» (route-rides-04): блок карточки и полный список — разные `limit`
+  leaderboardAll: (routeId: string) => ['route-rides', routeId, 'leaderboard'] as const,
+  leaderboard: (routeId: string, limit: number) =>
+    ['route-rides', routeId, 'leaderboard', limit] as const,
 };
 
 /** Опрос списка и детали, пока проверка идёт (`queued | checking`). */
@@ -88,6 +99,35 @@ export function useRouteRides(routeId: string, enabled: boolean) {
   });
 }
 
+/**
+ * Таблица «Другие на маршруте» (route-rides-04, O3): лучшие заезды райдеров с согласием и своя строка — только с
+ * сервера (места, `me`, `shared`, имена). 404 (маршрут не каталога, стал невидим, без длины) — `null` (блока нет, RC-B3).
+ * Опроса нет: обновление — фокус, pull-to-refresh и инвалидации (профиль, проверка заезда).
+ */
+export function useRouteRideLeaderboard(routeId: string, limit: number, enabled: boolean) {
+  return useQuery({
+    queryKey: routeRidesKeys.leaderboard(routeId, limit),
+    queryFn: async (): Promise<RouteRideLeaderboard | null> => {
+      try {
+        return await withAccessToken((token) =>
+          api.getRouteRideLeaderboard(token, routeId, { limit }),
+        );
+      } catch (error) {
+        if (isNotFound(error)) return null;
+        throw error;
+      }
+    },
+    staleTime: DEFAULT_STALE_MS,
+    enabled,
+  });
+}
+
+/** Все таблицы «Другие» (любой маршрут и `limit`) устарели: после `PATCH` профиля сменились `shared` и своё имя (RC-B6). */
+export const invalidateRouteRideLeaderboards = (queryClient: QueryClient) =>
+  queryClient.invalidateQueries({
+    predicate: ({ queryKey }) => queryKey[0] === 'route-rides' && queryKey[2] === 'leaderboard',
+  });
+
 /** Кандидаты «Выбрать свой заезд» («Проверить снова» шлёт `activityId` детали, route-rides-03). */
 export const routeRideCandidatesOptions = (routeId: string) =>
   queryOptions({
@@ -103,7 +143,7 @@ export function useRouteRideCandidates(routeId: string, enabled: boolean) {
 /**
  * Заезд по маршруту. 404 — ошибка (экран «Заезд не найден»). Опрос, пока проверка идёт: 3 с первые 2 мин от первого
  * показа незавершённого статуса, затем 15 с (RC-6); в фоне не опрашивается. Статус стал финальным — список блока
- * карточки устарел (RC-5).
+ * карточки (RC-5) и таблица «Другие» (route-rides-04, RC-B6) устарели.
  */
 export function useRouteRide(routeId: string, rideId: string, enabled: boolean) {
   const queryClient = useQueryClient();
@@ -133,6 +173,7 @@ export function useRouteRide(routeId: string, rideId: string, enabled: boolean) 
       !isPendingCheck(status)
     ) {
       void queryClient.invalidateQueries({ queryKey: routeRidesKeys.list(routeId) });
+      void queryClient.invalidateQueries({ queryKey: routeRidesKeys.leaderboardAll(routeId) });
     }
   }, [status, queryClient, routeId]);
 
@@ -169,8 +210,8 @@ export function useRouteRideTrack(
 }
 
 /**
- * «Проверить заезд» (`201` и `200` одинаково): ответ — в кеш детали (экран результата открывается без GET), список и
- * кандидаты устаревают.
+ * «Проверить заезд» (`201` и `200` одинаково): ответ — в кеш детали (экран результата открывается без GET), список,
+ * кандидаты и таблица «Другие» устаревают.
  */
 export function useCheckRouteRide(routeId: string) {
   const queryClient = useQueryClient();
@@ -186,6 +227,7 @@ export function useCheckRouteRide(routeId: string) {
       // без ожидания: переход на результат не ждёт перезапроса списка и кандидатов
       void queryClient.invalidateQueries({ queryKey: routeRidesKeys.list(routeId) });
       void queryClient.invalidateQueries({ queryKey: routeRidesKeys.candidates(routeId) });
+      void queryClient.invalidateQueries({ queryKey: routeRidesKeys.leaderboardAll(routeId) });
     },
   });
 }

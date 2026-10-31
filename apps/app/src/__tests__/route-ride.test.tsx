@@ -134,10 +134,11 @@ describe('«Заезд по маршруту» (route-rides-02, A4)', () => {
     expect(screen.queryByText('Лучший')).toBeNull();
   });
 
-  it('проверка идёт — «Проверяем заезд…», опрос 3 с; финал — время и список блока устарел', async () => {
+  it('проверка идёт — «Проверяем заезд…», опрос 3 с; финал — время, список блока и таблица «Другие» устарели', async () => {
     signedIn();
     const client = createTestQueryClient();
     client.setQueryData(routeRidesKeys.list(ROUTE_ID), null);
+    client.setQueryData(routeRidesKeys.leaderboard(ROUTE_ID, 5), null);
     getRide.mockResolvedValueOnce(queued()).mockResolvedValueOnce(queued());
     await open(undefined, client);
     expect(await screen.findByText('Проверяем заезд…')).toBeOnTheScreen();
@@ -148,9 +149,14 @@ describe('«Заезд по маршруту» (route-rides-02, A4)', () => {
     await advance(3000);
     expect(getRide).toHaveBeenCalledTimes(2);
     expect(client.getQueryState(routeRidesKeys.list(ROUTE_ID))?.isInvalidated).toBe(false);
+    expect(client.getQueryState(routeRidesKeys.leaderboard(ROUTE_ID, 5))?.isInvalidated).toBe(
+      false,
+    );
     await advance(3000);
     expect(await screen.findByText('2:04:37')).toBeOnTheScreen();
     expect(client.getQueryState(routeRidesKeys.list(ROUTE_ID))?.isInvalidated).toBe(true);
+    // route-rides-04 (RC-B6): своя строка таблицы «Другие» могла смениться
+    expect(client.getQueryState(routeRidesKeys.leaderboard(ROUTE_ID, 5))?.isInvalidated).toBe(true);
     await advance(30_000);
     expect(getRide).toHaveBeenCalledTimes(3);
   });
