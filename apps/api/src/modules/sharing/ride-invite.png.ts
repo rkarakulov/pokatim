@@ -51,6 +51,7 @@ export function rideInviteRenderInput(
       photo && input.template === 'night' ? onPhotoColors(colors, scheme.text.onPhoto) : colors,
     texts: rideInviteTexts(input),
     track: line ? storyCardTrack(line, cardTrackView(input.template)) : null,
+    address: input.address,
   };
 }
 

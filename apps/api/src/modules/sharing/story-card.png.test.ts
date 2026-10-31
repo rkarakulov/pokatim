@@ -9,6 +9,7 @@ const input: StoryCardInput = {
   template: 'night',
   themeId: 'atlas',
   riderName: 'Анна',
+  address: 'pokatim.by/i/K7M2PQX',
   facts: {
     entryId: 'entry',
     race: {

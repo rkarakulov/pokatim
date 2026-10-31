@@ -17,6 +17,8 @@ import { useReturnTarget } from '@/features/auth/return-target';
 import { isSessionPending, isSignedIn, useSessionStore } from '@/features/auth/session-store';
 import { PushNotifications } from '@/features/notifications/push-registration';
 import { useActiveThemeId } from '@/features/appearance/use-active-theme-id';
+import { InviteCapture } from '@/features/invites/invite-capture';
+import { InviteShareSync } from '@/features/invites/invite-share-sync';
 import { onboardingStep, useOnboardingStore } from '@/features/onboarding/onboarding-store';
 import { restoreLocale } from '@/features/settings/locale-preference';
 import { clearOfflineTickets } from '@/features/tickets/offline-store';
@@ -246,6 +248,8 @@ function RootShell() {
               <Stack.Screen name="rides/[id]" />
               {/* публичный профиль райдера (rider-profile) — так же: открывается гостем по ссылке «Как вас видят другие» */}
               <Stack.Screen name="riders/[id]" />
+              {/* короткая ссылка приглашения с карточки для сторис (P6, K9): сохраняет код и ведёт на главную */}
+              <Stack.Screen name="i/[code]" />
             </Stack>
             {/* push (ADR-0017): токен устройства и нажатия на push — после входа и онбординга; рядом со `Stack`, чтобы
           переход по нажатию при холодном старте шёл после монтирования навигатора; web — no-op */}
@@ -253,6 +257,9 @@ function RootShell() {
             {/* «Вспышка достижения» (achievements, A5): тот же `ready`, что у push; рядом со `Stack` — переход после
           монтирования навигатора */}
             <AchievementFlashHost ready={signedIn && step === 'done'} />
+            {/* приглашения (P6, K9): код из `?invite=` — до регистрации, свой код — в ссылки «Поделиться» */}
+            <InviteCapture />
+            <InviteShareSync />
           </>
         )}
       </ThemedRoot>

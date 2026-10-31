@@ -8,6 +8,7 @@ import { panelOutboxRoutes } from './modules/panel';
 import { resultsOutboxRoutes } from './modules/results';
 import { routeRidesOutboxRoutes } from './modules/route-rides';
 import { routesOutboxRoutes } from './modules/routes';
+import { socialOutboxRoutes } from './modules/social';
 import { standingsOutboxRoutes } from './modules/standings';
 import { ticketsOutboxRoutes } from './modules/tickets';
 import { tracksOutboxRoutes } from './modules/tracks';
@@ -29,6 +30,8 @@ export const subscriberOutboxRoutes: readonly OutboxRoutes[] = [
   notificationsOutboxRoutes,
   // results.protocol-published / result-revised — вторым подписчиком после notifications (fan-out)
   standingsOutboxRoutes,
+  // identity.account-confirmed — связь по приглашению (P6); маршрут объявляет подписчик (ADR-0027 п. 5)
+  socialOutboxRoutes,
 ];
 
 /**

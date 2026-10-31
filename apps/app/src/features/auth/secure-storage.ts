@@ -12,7 +12,9 @@ export type SecureKey =
   | 'pokatim.pushSoftPrompt'
   | 'pokatim.locale'
   // QR офлайн-копий билетов (event-tickets, plan-B §5): только токены QR и владелец — остальное в файле
-  | 'pokatim.ticketQr';
+  | 'pokatim.ticketQr'
+  // код приглашения до регистрации (P6, K9; не секрет, как `pokatim.pushSoftPrompt`)
+  | 'pokatim.invite';
 
 /**
  * Единственная точка доступа к защищённому хранилищу: экраны и сторы не знают о нативном модуле;

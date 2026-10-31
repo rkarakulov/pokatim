@@ -451,6 +451,12 @@ paths:
   `trackMap.segment` или линия маршрута), `profile` (`RIDER_NAMES`; `RIDER_THEMES` — тема запрашивающего карточку,
   user-theme: владелец заявки для сторис, зритель для приглашения), `races`, `routes`, `calendar` (OG-картинки),
   `identity` — только `index.ts`; на `sharing` не ссылается никто.
+- Адрес приглашения (P6, K9): `InviteAddress.of(userId)` (только `SharingModule`, порт `social` `InviteCodes.ensureOf`)
+  — `<host APP_WEB_ORIGIN>/i/<код>`; нет env или сбой — `null` (лог `sharing.invite_address_failed`). HTTP-сервисы
+  четырёх карточек считают его после `consumeRead`, передают в `*Inputs.resolve(…, template, address)` и в данные
+  задачи (`address`, `.nullable().default(null)` — задачи в полёте); worker берёт адрес из задачи, хэш включает его —
+  карточки райда и маршрута стали личными (RC-P6-5, `renderVersion` 5). Рендер — `brandRow` (`story-card.render.ts`):
+  бренд слева, адрес справа (токен `storyCard.text.address`, высота строки — бренда); без адреса — прежний узел.
 - Входы — `StoryCardInputs.resolve` (одна реализация для HTTP и worker), ключ — `storyCardHash`; кэш — Redis
   (`StoryCardCache`: `token:<hash>`, `png:<token>`, `pending:<hash>` NX, `failed:<hash>` `GETDEL`). Worker сверяет
   хэш (не совпал — `skipped`). Рендер — чистые `storyCardTree` (satori-узлы, только flex) → `renderStoryCardSvg`
@@ -722,7 +728,7 @@ RC-A1, ADR-0019).
   фаза — `ridePhase` внутри `rides`, участники «Иду» с организатором первым, точная точка старта при `startPrecise`),
   `RIDER_NAMES.publicRiders` (публичность — при чтении, K3; ручное добавление — только к публичному). Коллекции
   `rides`, `profiles`, `activities` `social` не читает. На `social` ссылаются только `notifications`, `account`,
-  `AppModule`, `WorkerModule` (dependency-cruiser `social-consumers-only`).
+  `sharing` (порт `InviteCodes`, P6), `AppModule`, `WorkerModule` (dependency-cruiser `social-consumers-only`).
 - Композиция (RC-13): `SocialCoreModule` (репозитории, `SocialConnectionsService`, `SocialAttendanceService`,
   `SocialReactionsService`, `SocialErasure`), `SocialModule` (`AppModule`, контроллеры — P2–P4, P7),
   `SocialWorkerModule` (`WorkerModule`, процессоры `social-intake` / `social-maintenance` — P5, P7). Дальше правки —
@@ -731,6 +737,18 @@ RC-A1, ADR-0019).
   явки 7 дн, пороги автоявки, `bulkBatch`; `attendanceCheck`, `rideConnectionDiff`, `connectionSources`). Отказы —
   `409 SOCIAL_ACTION_BLOCKED { reason }` (`socialBlocked`), райда нет и непубличный профиль — `404 NOT_FOUND`, лимит —
   `429 RATE_LIMITED` (проверяется первым, на каждую попытку).
+- Приглашения (P6, K9, ADR-0027 п. 5): код — `InviteCodes` (`invite-codes.service.ts`, экспорт `SocialCoreModule` и
+  `index.ts`): `ensureOf` — выдача лениво (`_id` = userId, дубль `_id_` — перечитать, дубль `invite_codes_code_unique` —
+  новый код, ≤ 5 попыток; генератор `generateInviteCode` внедряемый `INVITE_CODE_GENERATOR`), `ownerOf`.
+  `GET /v1/social/invite-code` (`InviteCodeController`, `AuthGuard`, `no-store`). Событие `identity.account-confirmed
+  {userId, invite}` пишет `identity` (`AccountConfirmation.confirmEmail` — общий шаг подтверждения по ссылке и сбросом
+  пароля, только при первом подтверждении аккаунта с кодом); маршрут → `social-intake` объявляет `socialOutboxRoutes`
+  (`social.events.ts`, новые типы — в конец). `SocialIntakeProcessor` — таблица `тип → { схема, обработчик }` (P5
+  дописывает строку): неизвестное имя — бросок, payload не по схеме — `skipped`. `InviteIntake.handle`: код → владелец
+  (`unknown_code`), свой (`self`), живость обоих — `IdentityAccounts.liveUserIds` (`inviter_deleted` /
+  `invitee_deleted`), `linkInvite` (`linked` / `already_linked`); точка уведомления P7 — после `linkInvite`. Логи — id
+  события и итог, без кода. `linkInvite` → `boolean`: `invite-registered` (`userId` пригласившего) — когда у стороны
+  пригласившего `inviteAt` впервые стал не-`null` (`upsertInvite` → `inserted | invited | unchanged`, RC-P6-8).
 - Явка (RC-2a) — транзакция: условная запись документа явки райда → явившиеся → `rideConnectionDiff` с парами райда
   → `bulkWrite` связей → удаление пар без источников (надгробие `removedAt` остаётся, RC-6) → события. Повтор — no-op
   без событий. «Меня не было» ставит `declinedAt` (RC-3a), явка по треку его не перекрывает.

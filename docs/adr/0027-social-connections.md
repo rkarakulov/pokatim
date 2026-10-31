@@ -22,8 +22,9 @@
 
 1. **Модуль `social` — потребитель.** `social → rides, results, routes, tracks, profile, identity` только через
    `index.ts` и порты `*_FOR_SOCIAL` (по образцу `RESULTS_FOR_TICKETS`). На `social` ссылаются `notifications`
-   (порт аудитории и имён для группы «Свои»), `account` (порт стирания), `AppModule`, `WorkerModule`. Производители
-   о `social` не знают.
+   (порт аудитории и имён для группы «Свои»), `account` (порт стирания), `sharing` (порт `InviteCodes` — адрес
+   приглашения `<домен>/i/<код>` на карточках для сторис, P6; только HTTP-модуль, worker берёт адрес из задачи),
+   `AppModule`, `WorkerModule`. Производители о `social` не знают; цикла нет — `social` не знает `sharing`.
 2. **Коллекции** (миграция `0045_social`, только expand; после `0043_achievements_seasonal` и
    `0044_route_rides_passed_idx` из develop):
    - `rider_connections` — направленная связь `ownerId → otherId`, уникальный `{ownerId, otherId}`; источники
@@ -50,9 +51,13 @@
    и `results-intake` не меняются. Регламент `social-maintenance` раз в 30 минут шлёт «Как прошёл райд?» через 4 ч
    после старта.
 5. **Атрибуция приглашения — в `identity`.** `RegisterRequest.invite` (необязательное поле, старые сборки
-   совместимы) сохраняется на `users`; при подтверждении e-mail `identity` пишет `identity.account-confirmed
-   {userId, invite?}` → `social-intake`, `social` разрешает код в пригласившего и создаёт связь `invite`. `identity`
-   о `social` не знает.
+   совместимы; неверный формат отбрасывается, не 400) сохраняется на `users.invite`; при **первом** подтверждении
+   e-mail аккаунта **с кодом** — по ссылке из письма или сбросом пароля (общий шаг `AccountConfirmation`, условная
+   запись `emailVerifiedAt: null`) — `identity` в той же транзакции пишет `identity.account-confirmed {userId,
+   invite}` (`invite` обязателен; аккаунт без кода события не порождает). Маршрут `→ social-intake` объявляет
+   подписчик (`socialOutboxRoutes`), `social` разрешает код в пригласившего (`InviteCodes.ownerOf`), проверяет живость
+   обоих портом `IdentityAccounts.liveUserIds` и создаёт связь `invite` (`linkInvite`; `invite-registered` — при
+   первом `inviteAt` стороны пригласившего). `identity` о `social` не знает. Уточнено в P6 (2026-10-31).
 6. **Уведомления группы «Свои» — имена при чтении** (поправка к ADR-0017 «текст — снимок» и N12). `NotificationDoc`
    получает `actors: userId[]` и `params`; для группы `social` `title/body` собираются при чтении списка и при
    отправке push из текущих публичных имён (`RIDER_NAMES.publicRiders`), нет имени — «Райдер». Схлопывание копит

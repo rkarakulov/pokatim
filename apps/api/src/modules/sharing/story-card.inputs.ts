@@ -14,6 +14,8 @@ export interface StoryCardInput {
   facts: StoryCardFacts;
   /** имя только с согласием (`RIDER_NAMES.publicNames`); нет — `null` */
   riderName: string | null;
+  /** короткая ссылка приглашения владельца карточки (`InviteAddress`, P6); считает HTTP, worker берёт из задачи */
+  address: string | null;
 }
 
 /**
@@ -26,6 +28,7 @@ export function storyCardHash(input: StoryCardInput): string {
   const canonical = [
     STORY_CARD_POLICY.renderVersion,
     input.template,
+    input.address,
     input.themeId,
     input.riderName,
     facts.entryId,
@@ -65,6 +68,7 @@ export class StoryCardInputs {
     userId: string,
     raceId: string,
     template: StoryCardTemplate,
+    address: string | null,
   ): Promise<{ input: StoryCardInput; hash: string } | null> {
     const facts = await this.results.storyCardFacts(userId, raceId);
     if (!facts) return null;
@@ -77,6 +81,7 @@ export class StoryCardInputs {
       themeId,
       facts,
       riderName: names.get(userId) ?? null,
+      address,
     };
     return { input, hash: storyCardHash(input) };
   }

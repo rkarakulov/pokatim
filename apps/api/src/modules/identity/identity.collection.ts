@@ -48,6 +48,8 @@ export interface UserDoc {
   erasureFailedAttempts?: number;
   erasureLastFailure?: ErasureFailureDoc | null;
   erasureRetryRequestedAt?: Date | null;
+  /** Код пригласившего из регистрации (K9, P6): не ПДн, стирается вместе с аккаунтом. Нет поля — как `null`. */
+  invite?: string | null;
 }
 
 /** Последний провал шага очистки: `code` — только безопасный токен (`erasureErrorCode`). */

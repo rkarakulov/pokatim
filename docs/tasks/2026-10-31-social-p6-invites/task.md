@@ -148,6 +148,25 @@ ADR-0027 п. 5: `identity` о `social` не знает; событие `identity
 ADR-0027 (п. 1 — ребро `sharing → social`; п. 5 — событие только при наличии кода, оба пути подтверждения, маршрут
 объявляет `social`) — записать в ADR в этом PR.
 
+## 8.2 Отклонения от плана (coder, 2026-10-31)
+
+Мелкие, по конвенциям проекта; решений по требованиям не меняют.
+
+- api-client: `getInviteCode(accessToken)` (явный access-токен, как у всех методов под `AuthGuard`, R2), а не `() =>`.
+- Итог `InviteIntake.handle` при связи — `linked` (впервые) / `already_linked` (повтор); прочие — как в §11.3.
+- `brandRow` без адреса возвращает прежний узел бренда (дерево карточек и снимки без адреса не меняются); у строки с
+  адресом `flexGrow: 1` — колонтитул «Линии» строчный контейнер.
+- `Disallow: /i/` — в `lib/seo.ts` (`SEO_DISALLOW`, источник `robots.txt+api.ts` и сторож `seo-routes.test.ts`).
+- `/i/[code]` объявлен `Stack.Screen` в публичной части корневого layout (в конце списка).
+- `takeInvite(now = Date.now())` — время по умолчанию в хранилище: `react-hooks/purity` запрещает `Date.now()` в
+  обработчике экрана регистрации.
+- Int-тесты карточек: новый `sharing/invite-address.int.test.ts` (с `APP_WEB_ORIGIN`, образец — карточка маршрута:
+  общий путь `InviteAddress` у всех четырёх видов) + проверка `address: null` без env в `route-card.int.test.ts`;
+  остальные `*-card.int.test.ts` — только новая сигнатура `resolve(…, address)`. Деревья и хэши всех 4 видов × 2 шаблона —
+  unit `invite-address.render.test.ts`.
+- SSR-тест `invite-storage.web.ts` без `window` не добавлен: server-проект jest не грузит ESM `@rkarakulov/contracts-core`
+  (через `@pokatim/contracts`); защита — `try/catch` вокруг `localStorage`.
+
 ## 9. Acceptance Criteria
 
 - AC1. `GET /v1/social/invite-code` вошедшему возвращает один и тот же код; без входа — 401.
@@ -361,3 +380,46 @@ Architecture Review — social-p6-invites, 2026-10-31. Status: **CONCERNS (READY
   `pokatim.invite`, `withInvite` в `shareLink`. `pokatim-contracts.md` — `InviteCode`, `RegisterRequest.invite` с `catch`.
 
 ## 12. Outcome
+
+Coder, 2026-10-31. Реализовано по §11 и RC-P6-1…13; отклонения — §8.2.
+
+**AC**
+
+- AC1 — `GET /v1/social/invite-code` (`InviteCodeController`, `InviteCodes.ensureOf`): 401 без входа, тот же код,
+  `no-store`, параллельная выдача — один код, коллизия — новый (`social-invites.int.test.ts`).
+- AC2 — `withInvite` в `shareLink(.web)` (`lib/share-invite.ts`, `InviteShareSync`): у вошедшего `?invite=<код>`, у
+  гостя — без (`share-link(.web).test.ts`, `share-invite.test.ts`).
+- AC3 — `InviteFriendsAction` последним в `ProfileActions`: `/riders/<publicId>` или `/`, кнопка только при origin и
+  коде (`invite-friends-action.test.tsx`).
+- AC4 — `InviteAddress` → адрес `<host>/i/<код>` в данных задачи и хэше, `brandRow` на 4 карточках × 2 шаблона,
+  `renderVersion` 5 (`invite-address.render.test.ts`, `invite-address.int.test.ts`, превью карточек просмотрено);
+  `/i/[code]` сохраняет код и ведёт на `/` (manifest-тест, `Disallow: /i/`; e2e добавлен, не запускался).
+- AC5 — хранилище 7 дней (`invite-storage(.web).test.ts`: 7 дн — код, 7 дн + 1 мин — `null` и стёрт), регистрация
+  передаёт `invite` и стирает после успеха, ошибка — код остаётся (`register.test.tsx`); сервер — `users.invite`,
+  мусор — 201 и `null` (`registration.int.test.ts`, `registration.schema.test.ts`).
+- AC6 — `AccountConfirmation` (ссылка и сброс пароля) → `identity.account-confirmed` → `socialOutboxRoutes` →
+  `SocialIntakeProcessor` → `InviteIntake` → `linkInvite`: 2 связи, 2 `connection-created`, 1 `invite-registered`;
+  повтор — без изменений (`social-invites.int.test.ts`, `verification/password-reset.int.test.ts`).
+- AC7 — неизвестный код, свой, пригласивший с `deletedAt`, удалённый приглашённый, неверный формат, payload не по
+  схеме — связей нет (`social-invites.int.test.ts`).
+- AC8 — неподтверждённый и повторно подтверждённый аккаунт — события нет (`verification.int.test.ts`).
+- AC9 — `eraseDeleted` ставит `users.invite = null`, код в `invite_codes` стирает шаг `social`
+  (`account-erasure.int.test.ts`).
+
+**Проверки** (изолированные `pokatim_social_p6_test` / Redis db 11)
+
+- `pnpm --filter @pokatim/contracts test` — 54 файла, 499 тестов, зелёные; `api-client` — 177; `design-tokens` — 610;
+  `i18n` — 16.
+- `apps/api` vitest `src/modules/{sharing,identity,social,account} src/outbox-routes.test.ts` — первый полный прогон
+  61 файл / 565 тестов **зелёный**. Повторные прогоны после финальных правок (типы теста, `flexGrow` в `brandRow`,
+  превью-скрипт) — 7–12 падений в разных тестах на лимитах и ключах Redis (лимиты `sign-in`, «ожидалась картинка» в
+  `story-card`/`og-card`/`ride-invite`, лимит `social-connections`): db 11 одновременно использует vitest другой сессии
+  (`worktrees/name-consent-prompt-e0b1f8`, `REDIS_URL_TEST=…/11`), её `reset` стирает ключи. Unit sharing после правок —
+  153/153. Повторный int-прогон на чистом db 11 — **NOT VERIFIED**.
+- `apps/app` jest целиком — 274 набора, 2599 тестов, зелёные.
+- `tsc --noEmit`: api, app, contracts, api-client, design-tokens, i18n — без ошибок. ESLint `--max-warnings=0` по
+  затронутым каталогам — чисто. Prettier `--check` по изменённым файлам — чисто. `pnpm arch:check` — без нарушений.
+- e2e `apps/app/e2e/web.spec.ts` (`/i/<код>` и тело регистрации) — **NOT VERIFIED** (нужны `build:web` и Chrome).
+- Полный `pnpm check` — не запускался (по поручению оркестратора).
+- Вне scope: в `apps/api/scripts/story-card-preview.ts` уже была ошибка типов (`inviteFacts` без `photoId`, ride-photo) —
+  не исправлялась; скрипт запускается (`tsx`).

@@ -250,7 +250,13 @@ export class IdentityRepository {
    */
   async insertUser(
     session: DbSession,
-    user: { email: string; passwordHash: string; birthDate: string; createdAt: Date },
+    user: {
+      email: string;
+      passwordHash: string;
+      birthDate: string;
+      createdAt: Date;
+      invite: string | null;
+    },
   ): Promise<string> {
     const id = uuidv7();
     await this.c.users.insertOne(
@@ -272,8 +278,21 @@ export class IdentityRepository {
     );
   }
 
-  async markEmailVerified(session: DbSession, userId: string, at: Date): Promise<void> {
-    await this.c.users.updateOne({ _id: userId }, { $set: { emailVerifiedAt: at } }, { session });
+  /**
+   * Первое подтверждение e-mail — условной записью (`emailVerifiedAt: null` в фильтре). Возвращает код пригласившего
+   * (`invite`, P6) или `undefined`, если аккаунт уже подтверждён: событие подтверждения тогда не пишется.
+   */
+  async markEmailVerified(
+    session: DbSession,
+    userId: string,
+    at: Date,
+  ): Promise<{ invite: string | null } | undefined> {
+    const before = await this.c.users.findOneAndUpdate(
+      { _id: userId, emailVerifiedAt: null },
+      { $set: { emailVerifiedAt: at } },
+      { session, projection: { invite: 1 } },
+    );
+    return before ? { invite: before.invite ?? null } : undefined;
   }
 
   // --- ссылки из писем (подтверждение, сброс пароля) ---
@@ -772,6 +791,7 @@ export class IdentityRepository {
           email: erase.marker,
           birthDate: null,
           passwordHash: null,
+          invite: null,
           erasedAt: erase.now,
           deletionEmailClaimedAt: null,
         },

@@ -20,6 +20,7 @@ async function userWithRegistrationToken() {
       passwordHash: 'x',
       birthDate: '1990-05-01',
       createdAt: now,
+      invite: null,
     });
     await repository.insertRegistrationToken(session, {
       userId,

@@ -9,6 +9,7 @@ const base: StoryCardInput = {
   template: 'line',
   themeId: 'classic',
   riderName: null,
+  address: null,
   facts: {
     entryId: 'entry',
     race: {
@@ -41,6 +42,7 @@ describe('storyCardHash — ключ кэша карточки', () => {
     ['тема', { ...base, themeId: 'chrono' }],
     ['шаблон', { ...base, template: 'night' }],
     ['имя', { ...base, riderName: 'Анна' }],
+    ['адрес приглашения', { ...base, address: 'pokatim.by/i/K7M2PQX' }],
     ['место', withFacts({ place: 2 })],
     ['ничья', withFacts({ tied: true })],
     ['статус', withFacts({ status: 'final' })],
@@ -53,7 +55,7 @@ describe('storyCardHash — ключ кэша карточки', () => {
 
   it('меняется от версии рендера', () => {
     const before = storyCardHash(base);
-    vi.spyOn(STORY_CARD_POLICY, 'renderVersion', 'get').mockReturnValue(5 as 4);
+    vi.spyOn(STORY_CARD_POLICY, 'renderVersion', 'get').mockReturnValue(6 as 5);
     expect(storyCardHash(base)).not.toBe(before);
   });
 });
@@ -73,10 +75,10 @@ describe('StoryCardInputs.resolve — тема владельца заявки (
 
   it('тема берётся из RIDER_THEMES по userId запроса и входит в ключ', async () => {
     const atlas = inputs('atlas');
-    const resolved = await atlas.service.resolve('user-1', 'race-1', 'line');
+    const resolved = await atlas.service.resolve('user-1', 'race-1', 'line', null);
     expect(atlas.themes.themeOf).toHaveBeenCalledWith('user-1');
     expect(resolved?.input.themeId).toBe('atlas');
-    const classic = await inputs('classic').service.resolve('user-1', 'race-1', 'line');
+    const classic = await inputs('classic').service.resolve('user-1', 'race-1', 'line', null);
     expect(classic?.hash).toBe(storyCardHash(base));
     expect(resolved?.hash).not.toBe(classic?.hash);
   });

@@ -3236,4 +3236,10 @@ export const ru = {
   'admin.invite.error.PANEL_INVITATION_EMAIL_MISMATCH':
     'Приглашение отправлено на другой адрес — войдите тем аккаунтом, на который пришло письмо.',
   'admin.invite.error.PANEL_ALREADY_MEMBER': 'Вы уже в команде платформы — просто войдите.',
+  // «Свои», приглашения (P6, K9): «Позвать друзей» в своём профиле — ссылка с личным кодом
+  'invites.friends.action': 'Позвать друзей',
+  'invites.friends.shareTitle': 'Покатим',
+  'invites.friends.shareText': 'Катайтесь со мной в «Покатим» — гонки, кофе-райды и маршруты',
+  'invites.friends.copied': 'Ссылка-приглашение скопирована',
+  'invites.friends.failed': 'Не удалось поделиться ссылкой-приглашением.',
 } as const;

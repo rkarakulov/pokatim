@@ -17,6 +17,12 @@ describe('storyCard — прототип 360×640 × 3', () => {
     expect(storyCard.text.timeStep9).toMatchObject({ size: 156, lineHeight: 168 });
   });
 
+  it('строка адреса приглашения — высотой колонтитула и мастхеда (P6)', () => {
+    expect(storyCard.text.address.lineHeight).toBe(storyCard.text.colophon.lineHeight);
+    expect(storyCard.text.address.lineHeight).toBe(storyCard.text.masthead.lineHeight);
+    expect(storyCard.text.address.size).toBeLessThan(storyCard.text.colophon.size);
+  });
+
   it('ярус линии вписан в карточку', () => {
     expect(storyCard.line.tier2Width).toBe(storyCard.size.width - 2 * storyCard.insetX);
   });

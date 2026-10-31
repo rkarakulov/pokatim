@@ -13,6 +13,7 @@ import { AchievementProgressBlock } from '@/features/achievements/achievement-pr
 import { achievementItemPath } from '@/features/achievements/achievement-catalog';
 import { AchievementsBlock } from '@/features/achievements/achievements-block';
 import { useAchievements } from '@/features/achievements/queries';
+import { InviteFriendsAction } from '@/features/invites/invite-friends-action';
 import { useHeaderSeasonState } from '@/features/races/queries';
 import { ProfileSeasonBlock } from '@/features/standings/profile-season-block';
 import { useStandingsRefetch } from '@/features/standings/queries';
@@ -25,7 +26,7 @@ import { useProfile, useProfileRaces, useProfileRides, useProfileStats } from '.
 
 const DOCUMENT_TITLE = `${t('profile.title')} — ${t('app.name')}`;
 
-/** «Редактировать профиль» и «Как вас видят другие» (или подсказка, пока ссылки нет). */
+/** «Редактировать профиль», «Как вас видят другие» (или подсказка, пока ссылки нет) и «Позвать друзей». */
 function ProfileActions({ profile }: { profile: ProfileView }) {
   const theme = useTheme();
   const router = useRouter();
@@ -43,6 +44,8 @@ function ProfileActions({ profile }: { profile: ProfileView }) {
           {t('profile.publicHint')}
         </Text>
       )}
+      {/* «Позвать друзей» (P6, K9) — последним элементом */}
+      <InviteFriendsAction publicId={publicId} />
     </View>
   );
 }

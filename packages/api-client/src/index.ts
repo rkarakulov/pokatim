@@ -1,5 +1,6 @@
 import {
   AchievementList,
+  InviteCodeResponse,
   type AchievementCode,
   type AchievementStoryCardQuery,
   AppAppearance,
@@ -1181,6 +1182,14 @@ export function createApiClient({
         '/v1/profile/onboarding/devices',
         OnboardingStatus,
         authorized(accessToken, { method: 'PUT', body: JSON.stringify(body), ...withCredentials }),
+      ),
+    // --- «Свои»: приглашения (P6, K9) ---
+    /** Личный код приглашения (`no-store`; выдаётся при первом запросе, дальше — тот же). */
+    getInviteCode: (accessToken: string) =>
+      request(
+        '/v1/social/invite-code',
+        InviteCodeResponse,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
       ),
   };
 }

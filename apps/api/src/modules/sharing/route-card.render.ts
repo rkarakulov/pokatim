@@ -4,6 +4,7 @@ import { storyCard, type StoryCardColors, type StoryCardText } from '@pokatim/de
 import type { RouteCardTexts } from './route-card.texts';
 import {
   box,
+  brandRow,
   page,
   statRow,
   type StoryCardChild,
@@ -27,6 +28,8 @@ export interface RouteCardRenderInput {
   texts: RouteCardTexts;
   /** линия показа маршрута каталога (нет линии — задача `skipped`); вырожденная (точка) — ярус/плитка пусты */
   track: StoryCardTrack | null;
+  /** короткая ссылка приглашения `<домен>/i/<код>` справа от бренда (P6); нет кода или домена — `null` */
+  address: string | null;
 }
 
 /** Метка, название, «город · форма» — общий верх обоих шаблонов. */
@@ -104,7 +107,7 @@ function lineCard(input: RouteCardRenderInput): StoryCardNode {
         paddingTop: g.colophonPadTop,
         borderTop: `${storyCard.rule}px solid ${colors.rule}`,
       },
-      [text(storyCard.text.colophon, colors.ink, texts.brand)],
+      [brandRow(storyCard.text.colophon, colors, texts.brand, input.address)],
     ),
   ]);
 }
@@ -122,7 +125,7 @@ function nightCard(input: RouteCardRenderInput): StoryCardNode {
         paddingBottom: g.mastheadPadBottom,
         borderBottom: `${storyCard.rule}px solid ${colors.rule}`,
       },
-      [text(storyCard.text.masthead, colors.ink, texts.brand)],
+      [brandRow(storyCard.text.masthead, colors, texts.brand, input.address)],
     ),
     box({ flexGrow: 1, flexShrink: 1, minHeight: 0 }),
     box({ flexDirection: 'column', flexShrink: 0, marginBottom: g.copyBottom }, [
