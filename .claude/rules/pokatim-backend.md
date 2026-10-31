@@ -613,7 +613,20 @@ RC-A1, ADR-0019).
   `ROUTE_RIDE_POLICY.corridorWidthM` (пишется в документ), окно — время заезда ± 1 мин; итог — одна запись своей
   ревизией без транзакции и событий. Финальная попытка — `failed: error`; dead-letter в панель неприменим (личные
   данные, организатора нет): зависшие (`queued` > 2 ч, `checking` > 15 мин) — «ленивый» `failed: error` при чтении,
-  POST перепоставляет (RC-5). Подписки на `tracks.*` нет (outbox — тип в одну очередь, RC-1).
+  POST перепоставляет (RC-5). Подписки на `tracks.activity-ready/-removed` нет (outbox — тип в одну очередь, RC-1).
+- Автопроверка (route-rides-03, `docs/product/routes.md` V1–V5): сверка — общий `RouteRideEvaluator`
+  (`route-ride-evaluator.ts`: `analyze`, `parseLimits`, `evaluate` — без записи; им же пользуется
+  `RouteRideCheckProcessor`, копий `evaluate`/`THREAD_FAILURES` нет). Триггер — событие владельца
+  `tracks.activity-group-created` (только **новая** группа дублей, в транзакции записи активности под
+  `lockUserActivities`; дубль, перехват основной поздним источником и `regroupAfterDelete` его не дают) → маршрут у
+  подписчика `routeRidesOutboxRoutes` → очередь `route-ride-auto` (параллелизм 1, отдельно от `route-ride-check`) →
+  `RouteRideAutoProcessor`: основная группы сейчас (`primaryOfGroup`) → `autoEligible` → план `autoPlan` (свои
+  заезды `ridesByRoute` ≤ 200 маршрутов по последнему заезду ↓, затем `RouteRideRoutes.ownReadyIds`; пропуски — заезд
+  группы, квота 100) → `RouteRideRoutes.rideableBounds` пачками по 25 + `nearRoutes` (`boundsNear` 600 м) → ≤ 20
+  прогонов → только `passed`: повторно активность, `findExisting`, квота → `insertChecked` (`origin: 'auto'`).
+  Одна задача на активность: сбой окружения — ретрай всей задачи, на последней попытке маршрут пропускается с логом.
+  Правила — `ROUTE_RIDE_AUTO_POLICY` (`route-rides.policy.ts`). Ограничение «тип → одна очередь» действует и для
+  `tracks.activity-group-created`: второму подписчику — своё событие владельца или fan-out базы.
 
 ## Уведомления (`notifications`, ADR-0017)
 

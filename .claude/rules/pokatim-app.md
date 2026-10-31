@@ -541,6 +541,9 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   `NOT_READY` — один повтор; ответ загрузки — в кэш опроса; ошибка опроса — баннер с повтором. Опрос списка и детали —
   3 с первые 2 мин, затем 15 с; список — только в фокусе карточки (`subscribed`). Карта — `RouteLineMap` с пропсом `track` (`RouteMapTrack`); строка кандидата — общий
   `components/activity-pick-row.tsx` (`ActivityPickRow`, и в `races/pick`). Тексты ошибок — `routeRideErrorMessage`.
+  route-rides-03: «Проверить снова» шлёт `POST { activityId }` из детали (кандидаты не запрашиваются; `404` — баннер
+  `recheckMissing`; `activityId: null` — старый API, кнопки нет); у `origin: 'auto'` — строка «Проверен
+  автоматически» (`routeRideOriginText`) под вердиктом экрана результата, в списке — нет.
 
 ## Календарь стартов (блок 04, `docs/product/races-and-seasons.md`)
 

@@ -201,29 +201,37 @@ Contracts-first, TDD. Int-тесты — своя БД Mongo (`*_test`-суфф�
 
 ## 8.2 Deviations from spec
 
+- **AC-3 (V1, уточнение формулировки):** «момент готовности» для окна 7 суток — `ActivityRef.uploadCreatedAt` (приём файла
+  сервером), не `clock.now()` worker: условие `startedAt ≥ uploadCreatedAt − 7 сут` (`autoEligible`).
+- **AC-2, AC-6** — приняты рекомендации architect: событие только для новой группы дублей; одна задача на активность.
+- `RouteRideResult` перенесён из `route-rides.repository.ts` в `route-rides.collection.ts` (иначе цикл
+  `policy ↔ repository` на `newRideDoc`, `arch:check`); поведение не меняется.
+- `ridesByRoute` отдаёт `{ routeId, lastStartedAt, activityIds }` (плоский список id вместо `rides: [{ activityId }]`).
+- Порт `rideableBounds` при > 25 id бросает исключение (защита предела), а не режет молча.
+
 ## 8.3 Security checklist
 
 Затронуто: данные пользователя (треки, заезды), worker, новый ответ API. Чек-лист — обязателен.
 
-- [ ] **AuthZ (worker).** `userId` — только из payload события, записанного сервером в транзакции `tracks`; активность
+- [x] **AuthZ (worker).** `userId` — только из payload события, записанного сервером в транзакции `tracks`; активность
   — `ActivitySource.activity(userId, id)` (чужая/удалённая — `null` → пропуск); маршруты — только порт
   `RouteRideRoutes` (условие `findRideable`: `IN_CATALOG` или `ownRider(userId)`, `ready`), видимость повторно
   проверяет `matchGeometry` перед чтением линии сверки (RC-9). Чужие маршруты райдеров и снятые с публикации в план не
   попадают (int-тест).
-- [ ] **AuthZ (API).** `RouteRideDetail.activityId` — основная **своей** группы (`liveActivities(userId, …)`), деталь
+- [x] **AuthZ (API).** `RouteRideDetail.activityId` — основная **своей** группы (`liveActivities(userId, …)`), деталь
   по-прежнему с `userId` в фильтре; ключи ответа — явный список (int-тест ключей: + `activityId`, `origin`).
-- [ ] **Данные наружу.** Без `userId`, `trackMap`, `engineVersion`, координат; `origin` — только `manual|auto`.
+- [x] **Данные наружу.** Без `userId`, `trackMap`, `engineVersion`, координат; `origin` — только `manual|auto`.
   Правило `pokatim-security.md` «без id активности (кроме кандидатов)» дополняется: «и `activityId` своей основной в
   детали».
-- [ ] **Злоупотребления / нагрузка.** Триггер — только новая группа (AC-2), спорт `cycling|unknown`, старт ≤ 7 сут до
+- [x] **Злоупотребления / нагрузка.** Триггер — только новая группа (AC-2), спорт `cycling|unknown`, старт ≤ 7 сут до
   приёма файла (синхронизация истории не заваливает worker); ≤ 20 прогонов на активность; квота 100; параллелизм 1,
   отдельная очередь; загрузки уже ограничены лимитами `tracks`/`devices`. Лимит `route-rides-user` не тратится.
-- [ ] **Серверный авторитет.** Клиент не влияет на план и вердикт; `origin` ставит только сервер.
-- [ ] **Логи.** Только id (активность, пользователь, маршрут, заезд), счётчики, статусы и коды:
+- [x] **Серверный авторитет.** Клиент не влияет на план и вердикт; `origin` ставит только сервер.
+- [x] **Логи.** Только id (активность, пользователь, маршрут, заезд), счётчики, статусы и коды:
   `route-ride-auto activity <id> user <uid>: planned N, passed K, skipped S in T ms`, `route-ride <id> auto passed`;
   без названий маршрутов, координат, рамок.
-- [ ] **Удаление аккаунта.** Автозаезды стираются `RouteRideErasure.deleteAllOf`; гонка — AC-12.
-- [ ] **Секреты/конфиг.** Не затронуты.
+- [x] **Удаление аккаунта.** Автозаезды стираются `RouteRideErasure.deleteAllOf`; гонка — AC-12.
+- [x] **Секреты/конфиг.** Не затронуты.
 
 ## 9. Acceptance Criteria
 
@@ -393,3 +401,52 @@ ADR-0012, ADR-0015.
 и в списке; миграции и новые индексы; правка `@rkarakulov/api-kit`; уборщик сирот.
 
 ## 12. Outcome (заполняет coder)
+
+Коммиты (ветка `feature/route-rides-auto-check`, не запушено; хук pre-commit лёгкий — `--no-verify` не применялся):
+`c8999700` контракты (шаг 1) · `1bf5bd7b` деталь `activityId`/`origin`, `newRideDoc` (2) · `ad83e181`
+`RouteRideEvaluator` (3) · `891e3289` `tracks.activity-group-created` (4) · `8d26a120` `ownReadyIds`/`rideableBounds`
+(5) · `13bc9025` автопроверка: политика, репозиторий, `RouteRideAutoProcessor`, очередь, маршрут outbox, хелпер (6) ·
+`68ddfcfa` `RouteRideResult` в collection (arch:check) · `34043cd6` приложение и i18n (7) · документация (8).
+
+**Сделано.** §3 п. 1–7 по плану §11: событие владельца `tracks.activity-group-created` (только новая группа, в
+транзакции под `lockUserActivities`) → `routeRidesOutboxRoutes` → очередь `route-ride-auto` (параллелизм 1) →
+`RouteRideAutoProcessor` (основная группы сейчас → `autoEligible` → `autoPlan` → `rideableBounds` пачками по 25 +
+`nearRoutes` → ≤ 20 прогонов общего `RouteRideEvaluator` → только `passed`: повтор проверки активности, заезда группы
+и квоты → `insertChecked` с `origin: 'auto'`). `RouteRideDetail.activityId` (основная группы сейчас) и `origin`;
+«Проверить снова» шлёт `activityId` детали; «Проверен автоматически».
+
+**AC-12.** Проверено: повторный проход `account.deletion-sweep` (`AccountErasureService.run`, `pass: 'sweep'`, через
+`ACCOUNT_POLICY.sweepDelayMs` = 15 мин) выполняет все шаги, включая `route-rides` (`RouteRideErasure.deleteAllOf`).
+Перед вставкой автопроверка перечитывает активность (`null` → пропуск, int-тест). Остаточное окно — задача
+автопроверки дольше 15 мин между шагами стирания (не наблюдается при ≤ 20 прогонах), принятое ограничение.
+
+**Тесты (добавлено).** Контракт: `activityId`/`origin` по умолчанию, `unknown`. Unit политики: `autoEligible` (спорт,
+граница 7 сут ± 1 мс), `autoPlan` (порядок (а)/(б), дедуп, заезд группы, квота 100/99, без живых), `nearRoutes`
+(далёкая/невидимая рамка, 20 из 26). Int: `activity-source` — group-created только для новой группы (дубль, перехват,
+удаление основной, повтор задачи — без события); `route-ride-routes` — `ownReadyIds`, `rideableBounds`;
+`route-ride-auto.int.test.ts` (10 тестов: AC1 passed+сравнение, не пройден, лимит не списан (Redis), process/повтор
+события, станок/бег/старше 7 сут/удалённая/чужая, дубль, чужой/снятый/далёкий/квота, 20 из 22 по порядку, гонка
+с ручным POST (ворота на `insertChecked`), проигрыш индекса, сбой окружения (не финальная/финальная), скрытие маршрута
+и удаление активности во время прогона, маршруты публикатора results vs route-rides); `route-rides.int` — ключи
+детали, `activityId` после позднего перехвата, старый документ без `origin`; `route-ride-check.int` — спаи на
+эвалюаторе. App: `route-ride.test.tsx` (POST `{ activityId }` без кандидатов, 404 → `recheckMissing`, `null` — без
+кнопки, «Проверен автоматически»), `route-ride-format.test.ts`.
+
+**Проверки** (node 24, Mongo `pokatim_rr03_test` на 27117, Redis db 7; полный `pnpm check` не запускался — решение
+пользователя):
+- `@pokatim/api` int `route-rides, results, tracks, account, achievements, routes` → 48 files, 682 passed; int
+  `devices, notifications, disputes, test/` → 32 files, 484 passed; unit → 95 files, 898 passed; `tsc --noEmit` — ок;
+  после правки цикла — повторный прогон `route-rides` → 5 files, 52 passed.
+- `@pokatim/contracts` test 52/483 passed, typecheck ок; `@pokatim/api-client` 22/169, typecheck ок; `@pokatim/i18n`
+  2/15, typecheck ок.
+- `@pokatim/app`: `tsc` ок; jest полный — 262/266 suites, 21 падение в несвязанных `calendar-detail`, `race-disputes`,
+  `auth-guard`, `register`, `modal-sheet` под параллельной нагрузкой (набор менялся между прогонами); отдельно эти 5 —
+  76/76 passed. Затронутые `route-ride*`, `route-rides-block`, `features/route-rides` — 79/79.
+- eslint затронутых путей — без замечаний; `pnpm format:check` — ок; `pnpm arch:check` — no dependency violations.
+
+**Процесс.** Шаг 5 (порт `routes`): тест и реализация написаны одним заходом — красная фаза не наблюдалась; остальные
+шаги — тест красный → код.
+
+**Риски.** Нагрузка: до 20 прогонов движка на новую активность в отдельной очереди с параллелизмом 1 и общим семафором
+потоков; ретрай всей задачи при сбое окружения повторяет отказные прогоны. Остаточное окно «две основные одной
+группы» (RC-3) — как у ручной проверки.
