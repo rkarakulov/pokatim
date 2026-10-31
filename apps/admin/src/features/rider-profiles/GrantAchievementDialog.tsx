@@ -11,6 +11,7 @@ import {
   Uuid,
 } from '@pokatim/contracts';
 import { t } from '@pokatim/i18n';
+import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { api } from '../../api';
@@ -38,7 +39,10 @@ const grantedCodes = (items: readonly RiderAchievementAdminItem[]) =>
 /**
  * «Выдать вручную» (achievements-panel, M3): `ReasonDialog` с кодом каталога, id объекта (подпись — по виду кода,
  * `ACHIEVEMENT_OBJECT_KIND_BY_CODE`) и уровнем счётного (по умолчанию бронза); подтверждение неактивно, пока id не UUID
- * (RC-7). 400 `objectId` — под полем; 409 — текст в окне и перечитывание блока (`onStale`).
+ * (RC-7), непустой не-UUID — ошибка формата под полем. 400 `objectId` — под полем; 409 — текст в окне и перечитывание
+ * блока (`onStale`). Отправленный код фиксируется: стал выданным после перечитывания — остаётся выбранным, подтверждение
+ * неактивно, пока сотрудник явно не выберет другой (не подменяется первым свободным). Запрос — `useMutation`: общие
+ * 401/403 (`MutationCache`).
  */
 export function GrantAchievementDialog({
   open,
@@ -61,10 +65,19 @@ export function GrantAchievementDialog({
   const [objectId, setObjectId] = useState('');
   const [level, setLevel] = useState<AchievementLevel>(DEFAULT_LEVEL);
   const [objectError, setObjectError] = useState(false);
-  // выбранный код мог стать выданным после перечитывания блока — тогда первый свободный
-  const code = picked && !granted.has(picked) ? picked : firstFree;
+  const grant = useMutation({
+    mutationFn: (body: GrantRiderAchievementRequest) => api.grantRiderAchievement(userId, body),
+  });
+  const code = picked ?? firstFree;
+  const codeGranted = granted.has(code);
   const kind = ACHIEVEMENT_OBJECT_KIND_BY_CODE[code];
   const id = objectId.trim();
+  const idValid = Uuid.safeParse(id).success;
+  const objectErrorText = objectError
+    ? t('admin.riderAchievements.error.object')
+    : id && !idValid
+      ? t('admin.riderAchievements.error.objectFormat')
+      : undefined;
 
   const reset = () => {
     setPicked(undefined);
@@ -74,6 +87,8 @@ export function GrantAchievementDialog({
   };
 
   const confirm = async (reason: string) => {
+    // код по умолчанию (первый свободный) фиксируется: после 409 и перечитывания он не сменится сам
+    setPicked(code);
     const body: GrantRiderAchievementRequest = {
       code,
       objectId: id,
@@ -81,7 +96,7 @@ export function GrantAchievementDialog({
       reason,
     };
     try {
-      await api.grantRiderAchievement(userId, body);
+      await grant.mutateAsync(body);
     } catch (error) {
       if (hasObjectError(error)) setObjectError(true);
       if (isInvalidState(error)) await onStale();
@@ -97,13 +112,14 @@ export function GrantAchievementDialog({
       title={t('admin.riderAchievements.grantTitle')}
       consequences={t('admin.riderAchievements.grantConsequences')}
       confirmLabel={t('admin.riderAchievements.grantConfirm')}
-      confirmDisabled={!Uuid.safeParse(id).success}
+      confirmDisabled={!idValid || codeGranted}
       extraFields={
         <>
           <SelectField
             label={t('admin.riderAchievements.field.code')}
             value={code}
             help={granted.size > 0 ? t('admin.riderAchievements.field.codeHelp') : undefined}
+            error={codeGranted ? t('admin.riderAchievements.error.codeGranted') : undefined}
             onChange={(event) => {
               setPicked(event.target.value as AchievementCode);
               setObjectError(false);
@@ -125,7 +141,7 @@ export function GrantAchievementDialog({
             spellCheck={false}
             autoComplete="off"
             help={t(`admin.riderAchievements.field.objectHelp.${kind}`)}
-            error={objectError ? t('admin.riderAchievements.error.object') : undefined}
+            error={objectErrorText}
             onChange={(event) => {
               setObjectId(event.target.value);
               setObjectError(false);

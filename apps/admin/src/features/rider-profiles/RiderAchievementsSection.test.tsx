@@ -8,7 +8,7 @@ import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '../../api';
-import { httpError, ME, networkError, renderApp, USER_ID } from '../../test/app';
+import { httpError, ME, networkError, renderApp, unauthorized, USER_ID } from '../../test/app';
 
 vi.mock('../../api', () => ({
   api: {
@@ -201,7 +201,9 @@ describe('блок «Достижения» карточки райдера (ach
     await open();
     const block = await section();
     expect(within(block).getAllByTestId('skeleton-row').length).toBeGreaterThan(0);
-    expect(within(block).getByRole('button', { name: 'Выдать вручную' })).toBeTruthy();
+    // без списка окно не знает выданных кодов — кнопка видна, но неактивна
+    const grant = within(block).getByRole('button', { name: 'Выдать вручную' });
+    expect(grant.hasAttribute('disabled')).toBe(true);
   });
 
   it('ошибка без данных — «Нет соединения» с повтором; повтор перечитывает блок', async () => {
@@ -209,8 +211,11 @@ describe('блок «Достижения» карточки райдера (ach
     await open();
     const block = await section();
     expect(await within(block).findByText('Нет соединения')).toBeTruthy();
+    const grant = within(block).getByRole('button', { name: 'Выдать вручную' });
+    expect(grant.hasAttribute('disabled')).toBe(true);
     fireEvent.click(within(block).getByRole('button', { name: 'Повторить' }));
     await loaded(block);
+    expect(grant.hasAttribute('disabled')).toBe(false);
     expect(mocked.getRiderAchievements).toHaveBeenCalledTimes(2);
   });
 
@@ -264,14 +269,21 @@ describe('блок «Достижения» карточки райдера (ach
     const confirm = within(dialog()).getByRole('button', { name: 'Выдать' });
     fillReason();
     expect(confirm.hasAttribute('disabled')).toBe(true);
-    fireEvent.change(within(dialog()).getByLabelText('ID кофе-райда'), {
-      target: { value: 'не uuid' },
-    });
+    const rideField = within(dialog()).getByLabelText('ID кофе-райда');
+    expect(rideField.getAttribute('aria-invalid')).toBeNull();
+    fireEvent.change(rideField, { target: { value: 'не uuid' } });
     expect(confirm.hasAttribute('disabled')).toBe(true);
+    // непустой не-UUID — объяснение под полем, а не молча неактивная кнопка
+    expect(rideField.getAttribute('aria-invalid')).toBe('true');
+    const formatId = rideField.getAttribute('aria-describedby')?.split(' ')[0] ?? '';
+    expect(document.getElementById(formatId)?.textContent).toBe(
+      'Это не id — скопируйте его из адреса страницы',
+    );
     fireEvent.change(within(dialog()).getByLabelText('ID кофе-райда'), {
       target: { value: ` ${NEW_RACE} ` },
     });
     expect(confirm.hasAttribute('disabled')).toBe(false);
+    expect(rideField.getAttribute('aria-invalid')).toBeNull();
     fireEvent.click(confirm);
 
     await waitFor(() =>
@@ -329,6 +341,105 @@ describe('блок «Достижения» карточки райдера (ach
     if (text.startsWith('У райдера')) {
       await waitFor(() => expect(mocked.getRiderAchievements).toHaveBeenCalledTimes(2));
     }
+  });
+
+  it('409 `already_granted` — выбранный код не подменяется, «Выдать» неактивна до явного выбора другого', async () => {
+    mocked.grantRiderAchievement.mockRejectedValue(
+      httpError(409, 'ACHIEVEMENT_INVALID_STATE', { reason: 'already_granted' }),
+    );
+    await open();
+    const block = await section();
+    await loaded(block);
+    fireEvent.click(within(block).getByRole('button', { name: 'Выдать вручную' }));
+    const code = within(dialog()).getByLabelText('Достижение') as HTMLSelectElement;
+    expect(code.value).toBe('race_first_finish');
+    // другой сотрудник успел выдать «Первый финиш» — перечитанный список содержит выбранный код
+    mocked.getRiderAchievements.mockResolvedValue(
+      list({ items: [...ITEMS, item({ code: 'race_first_finish' })] }),
+    );
+    fireEvent.change(within(dialog()).getByLabelText('ID гонки'), { target: { value: NEW_RACE } });
+    fillReason();
+    const confirm = within(dialog()).getByRole('button', { name: 'Выдать' });
+    fireEvent.click(confirm);
+    expect(
+      await within(dialog()).findByText('У райдера уже есть это достижение — список обновлён.'),
+    ).toBeTruthy();
+    await waitFor(() =>
+      expect(
+        (within(code).getByRole('option', { name: /^Первый финиш/ }) as HTMLOptionElement).disabled,
+      ).toBe(true),
+    );
+    expect(code.value).toBe('race_first_finish');
+    expect(confirm.hasAttribute('disabled')).toBe(true);
+    expect(code.getAttribute('aria-invalid')).toBe('true');
+
+    fireEvent.change(code, { target: { value: 'race_win' } });
+    expect(confirm.hasAttribute('disabled')).toBe(false);
+    expect(mocked.grantRiderAchievement).toHaveBeenCalledTimes(1);
+  });
+
+  it('401 на выдаче — общий выход на «Вход» с «Сессия истекла»', async () => {
+    mocked.grantRiderAchievement.mockRejectedValue(unauthorized());
+    const { router } = await open();
+    const block = await section();
+    await loaded(block);
+    fireEvent.click(within(block).getByRole('button', { name: 'Выдать вручную' }));
+    fireEvent.change(within(dialog()).getByLabelText('ID гонки'), { target: { value: NEW_RACE } });
+    fillReason();
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Выдать' }));
+    expect(await screen.findByText('Сессия истекла')).toBeTruthy();
+    expect(router.state.location.search).toEqual({
+      reason: 'expired',
+      next: `/rider-profiles/${ID}`,
+    });
+  });
+
+  it('403 на отзыве — права перечитаны; без `achievements.manage` блок пропадает', async () => {
+    mocked.revokeRiderAchievement.mockRejectedValue(httpError(403, 'FORBIDDEN'));
+    await open();
+    const block = await section();
+    const revoke = await within(block).findByRole('button', {
+      name: 'Отозвать: Подиум, Гонка · Минская сотка',
+    });
+    const meCalls = mocked.me.mock.calls.length;
+    mocked.me.mockResolvedValue(ME.moderator);
+    fireEvent.click(revoke);
+    fillReason();
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Отозвать' }));
+    await waitFor(() => expect(mocked.me.mock.calls.length).toBeGreaterThan(meCalls));
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Достижения' })).toBeNull());
+    expect(screen.getByRole('heading', { name: 'Анна К. ·9a8090' })).toBeTruthy();
+  });
+
+  it('после «Отозвать» исчезнувшая кнопка строки — фокус на заголовке блока, не на body', async () => {
+    mocked.revokeRiderAchievement.mockResolvedValue(undefined);
+    await open();
+    const block = await section();
+    const revoke = await within(block).findByRole('button', {
+      name: 'Отозвать: Подиум, Гонка · Минская сотка',
+    });
+    mocked.getRiderAchievements.mockResolvedValue(
+      list({
+        items: [
+          item({
+            status: 'revoked_manually',
+            revokedAt: '2026-10-31T08:00:00.000Z',
+            override: {
+              decision: 'revoked',
+              at: '2026-10-31T08:00:00.000Z',
+              by: { userId: USER_ID, displayName: 'Ольга' },
+            },
+          }),
+        ],
+      }),
+    );
+    revoke.focus();
+    fireEvent.click(revoke);
+    fillReason();
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Отозвать' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(revoke.isConnected).toBe(false);
+    expect(document.activeElement).toBe(within(block).getByRole('heading', { name: 'Достижения' }));
   });
 
   it('400 `objectId` — ошибка под полем id объекта', async () => {

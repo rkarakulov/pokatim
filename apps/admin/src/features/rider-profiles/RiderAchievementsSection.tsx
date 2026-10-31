@@ -1,8 +1,8 @@
 import { isSeasonalCode, type RiderAchievementAdminItem } from '@pokatim/contracts';
 import { t } from '@pokatim/i18n';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createColumnHelper } from '@tanstack/react-table';
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 
 import { api } from '../../api';
 import { formatLocalDate } from '../../format';
@@ -44,7 +44,9 @@ const targetOf = (item: RiderAchievementAdminItem) =>
  * правом): все выдачи со статусом, объектом, уровнем, датой факта, ручным решением и «По фактам» (RC-6). «Выдать
  * вручную» — `GrantAchievementDialog`; «Отозвать» (видимые) и «Вернуть автоматике» (ручные) — `ReasonDialog` с
  * предупреждением «причина видна команде». Свой запрос (не зависит от карточки); 403 — блока нет. После действия —
- * инвалидация блока и журнала; 409 — текст в окне и перечитывание.
+ * инвалидация блока и журнала; 409 — текст в окне и перечитывание. Действия — `useMutation` (общие 401/403,
+ * `MutationCache`). «Выдать вручную» неактивна, пока нет списка (окно не знает выданных кодов). Кнопка строки
+ * исчезла после действия — фокус на заголовок блока (не на body).
  */
 export function RiderAchievementsSection({ userId }: { userId: string }) {
   const queryClient = useQueryClient();
@@ -53,6 +55,28 @@ export function RiderAchievementsSection({ userId }: { userId: string }) {
   const [action, setAction] = useState<RowAction>();
   const [notReconciled, setNotReconciled] = useState(false);
   const titleId = useId();
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const actionOpen = action !== undefined;
+  const wasActionOpen = useRef(false);
+  const rowAction = useMutation({
+    mutationFn: async ({ kind, item, reason }: RowAction & { reason: string }) => {
+      const body = { ...targetOf(item), reason };
+      if (kind === 'revoke') {
+        await api.revokeRiderAchievement(userId, body);
+        return false;
+      }
+      const result = await api.clearRiderAchievementOverride(userId, body);
+      return result.cleared && !result.reconciled;
+    },
+  });
+
+  // `Dialog` возвращает фокус на кнопку строки, но после отзыва/снятия её уже нет — фокус ушёл бы на body
+  useEffect(() => {
+    if (wasActionOpen.current && !actionOpen && document.activeElement === document.body) {
+      titleRef.current?.focus();
+    }
+    wasActionOpen.current = actionOpen;
+  }, [actionOpen]);
 
   if (query.isError && isForbidden(query.error)) return null;
 
@@ -65,15 +89,8 @@ export function RiderAchievementsSection({ userId }: { userId: string }) {
 
   const run = async (reason: string) => {
     if (!action) return;
-    const body = { ...targetOf(action.item), reason };
     try {
-      if (action.kind === 'revoke') {
-        await api.revokeRiderAchievement(userId, body);
-        setNotReconciled(false);
-      } else {
-        const result = await api.clearRiderAchievementOverride(userId, body);
-        setNotReconciled(result.cleared && !result.reconciled);
-      }
+      setNotReconciled(await rowAction.mutateAsync({ ...action, reason }));
     } catch (error) {
       if (isInvalidState(error)) await reloadBlock();
       throw error;
@@ -154,11 +171,13 @@ export function RiderAchievementsSection({ userId }: { userId: string }) {
 
   return (
     <section className="section" aria-labelledby={titleId}>
-      <h2 id={titleId} className="section__title t-label">
+      <h2 id={titleId} ref={titleRef} tabIndex={-1} className="section__title t-label">
         {t('admin.riderAchievements.title')}
       </h2>
       <div className="toolbar">
-        <Button onClick={() => setGranting(true)}>{t('admin.riderAchievements.grant')}</Button>
+        <Button disabled={!query.data} onClick={() => setGranting(true)}>
+          {t('admin.riderAchievements.grant')}
+        </Button>
       </div>
       {query.data && query.isError ? (
         <RefreshFailedBanner busy={query.isFetching} onRetry={() => void query.refetch()} />

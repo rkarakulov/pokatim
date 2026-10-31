@@ -171,11 +171,14 @@ paths:
   `neutral`, вручную `error`; решение — сотрудник и время по Минску; «По фактам»), действия строки `size="sm"` с
   `aria-label` «Действие: достижение, объект». «Выдать вручную» — `GrantAchievementDialog` (`ReasonDialog` +
   `extraFields` на `useState`: код — выданный несезонный `disabled` в `SelectField`; подпись id объекта — по
-  `ACHIEVEMENT_OBJECT_KIND_BY_CODE`; уровень — только `isLeveledCode`, бронза; `confirmDisabled`, пока id не `Uuid`; 400
-  `objectId` — под полем). «Отозвать» / «Вернуть автоматике» — `ReasonDialog` (отзыв деструктивный); `reconciled:
-  false` — баннер. Предупреждение «причина видна команде» — во всех трёх. 409 `ACHIEVEMENT_INVALID_STATE` — текст в
-  окне и перечитывание блока; тексты ошибок — `achievementActionErrorText`; после действия — инвалидация блока и
-  журнала. Журнал — детали `achievement.*`: «Код · Уровень, Вид ·<хвост id>» (`shortObjectId`).
+  `ACHIEVEMENT_OBJECT_KIND_BY_CODE`; уровень — только `isLeveledCode`, бронза; `confirmDisabled`, пока id не `Uuid`
+  (непустой не-UUID — ошибка формата под полем) или код уже выдан; 400 `objectId` — под полем; отправленный код
+  фиксируется — после 409 и перечитывания не подменяется первым свободным). Кнопка «Выдать вручную» неактивна, пока нет
+  списка. «Отозвать» / «Вернуть автоматике» — `ReasonDialog` (отзыв деструктивный); `reconciled: false` — баннер;
+  исчезла кнопка строки — фокус на заголовок блока (`tabIndex={-1}`). Действия — `useMutation`/`mutateAsync` (общие
+  401/403 `MutationCache`), локальные ошибки — в окне. Предупреждение «причина видна команде» — во всех трёх. 409
+  `ACHIEVEMENT_INVALID_STATE` — текст в окне и перечитывание блока; тексты ошибок — `achievementActionErrorText`; после
+  действия — инвалидация блока и журнала. Журнал — детали `achievement.*`: «Код · Уровень, Вид ·<хвост id>» (`shortObjectId`).
 - «Споры» (race-results-06) — `features/disputes/*`, маршруты `/disputes` (`?status=`, `?raceId=` — в URL) и
   `/disputes/$disputeId` под `RequirePermission permission="disputes.read"`; пункт навигации — группа `main` после
   «Гонок». Список: `ChipGroup` статуса (по умолчанию «На рассмотрении»), фильтр гонки — текст «Гонка: {название}» и

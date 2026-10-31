@@ -2745,6 +2745,8 @@ export const ru = {
     'У райдера уже есть это достижение — список обновлён.',
   'admin.riderAchievements.error.not_granted': 'Достижение уже отозвано — список обновлён.',
   'admin.riderAchievements.error.object': 'Объект не найден или не подходит этому достижению',
+  'admin.riderAchievements.error.objectFormat': 'Это не id — скопируйте его из адреса страницы',
+  'admin.riderAchievements.error.codeGranted': 'Это достижение уже выдано — выберите другое',
   'admin.riderAchievements.error.fields': 'Проверьте поля',
   'admin.riderAchievements.error.notFound': 'Райдер не найден',
   'admin.riderAchievements.error.rateLimited': 'Слишком много действий — попробуйте позже',
