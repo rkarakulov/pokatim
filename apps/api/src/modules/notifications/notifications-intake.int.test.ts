@@ -7,7 +7,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 
 import { seedDispute } from '../../../test/disputes';
 import { createHarness, DAY, HOUR, type Harness, MINUTE } from '../../../test/harness';
-import { bearer, call, collections, gate } from '../../../test/identity';
+import { bearer, call, collections } from '../../../test/identity';
 import {
   appendEvent,
   completeIntakeJobs,
@@ -40,6 +40,7 @@ import {
 import {
   authed,
   createRide,
+  heldRideWrite,
   join,
   report,
   RIDES,
@@ -60,7 +61,6 @@ import {
 import { NOTIFICATIONS_POLICY } from './notifications.policy';
 import { NotificationsRepository } from './notifications.repository';
 import { RIDES_PARTICIPANT_JOINED, RIDES_RIDE_CANCELLED, RIDES_RIDE_RESCHEDULED } from '../rides';
-import { RidesRepository } from '../rides/rides.repository';
 import { ACHIEVEMENTS_GRANT_NOTICED } from '../achievements';
 import { ACHIEVEMENTS, achievementsDb, daysAgo, raceAt } from '../../../test/achievements';
 import { placedRow, seedSeason } from '../../../test/standings';
@@ -286,23 +286,9 @@ describe('райды: получатели, тексты, цели', () => {
     expect(await notificationsOf(h, stranger.userId)).toEqual([]);
   });
 
-  /** Операция репозитория райдов под воротами: запрос уже взял `now`, запись — после `open()`. */
-  function held(method: 'cancel' | 'join') {
-    const paused = gate();
-    const original = RidesRepository.prototype[method] as (...args: unknown[]) => unknown;
-    vi.spyOn(RidesRepository.prototype, method).mockImplementationOnce(async function (
-      this: RidesRepository,
-      ...args: unknown[]
-    ) {
-      await paused.wait();
-      return original.apply(this, args);
-    } as never);
-    return paused;
-  }
-
   it('отмена начата раньше «Я иду», а записана позже — вошедший получает отмену (порядок записей, не время)', async () => {
     const ride = await rideWithParticipants();
-    const paused = held('cancel');
+    const paused = heldRideWrite('cancel');
     const cancel = authed(h, organizer, 'POST', `${RIDES}/${ride.id}/cancel`, {
       reason: 'weather',
     });
@@ -322,7 +308,7 @@ describe('райды: получатели, тексты, цели', () => {
 
   it('«Я иду» начат раньше переноса, а записан позже — о переносе не узнаёт', async () => {
     const ride = await rideWithParticipants();
-    const paused = held('join');
+    const paused = heldRideWrite('join');
     const joining = join(h, stranger, ride.id);
     await paused.reached;
     h.clock.advance(MINUTE);
