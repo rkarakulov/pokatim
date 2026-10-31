@@ -116,13 +116,7 @@ export class PushDelivery {
       return 'limited';
     }
 
-    // «Свои» одним уведомлением — имена на момент отправки (тихие часы: лица, добавленные за ожиданием, — в тексте)
-    const [only] = due;
-    const cards =
-      due.length === 1 && only?.group === 'social' && (only.actors?.length ?? 0) > 0
-        ? await this.names.publicRiders(only.actors ?? [])
-        : new Map<string, PublicRiderCard>();
-    const content = contentOf(due, cards);
+    const content = contentOf(due, await this.socialCards(userId, due));
     const expoTokens = usable.filter((token) => token.platform !== 'web');
     const webTokens = usable.filter((token) => token.platform === 'web');
     const unregistered: PushTokenSnapshot[] = [];
@@ -194,6 +188,27 @@ export class PushDelivery {
       `notifications.push uid=${userId} count=${due.length} tokens=${usable.length} web=${webTokens.length} accepted=${delivered} unregistered=${removed}`,
     );
     return delivered > 0 ? 'sent' : 'failed';
+  }
+
+  /**
+   * Имена «Своих» для одного уведомления — на момент отправки (тихие часы: лица, добавленные за ожиданием, — в тексте).
+   * Захват и лимит уже за спиной: сбой запроса имён не роняет доставку — пустая карта, уходит запасной текст документа
+   * («Райдер», цель `rider` — `null`, RC-3); в логе — `uid` и класс ошибки, без имён.
+   */
+  private async socialCards(
+    userId: string,
+    due: readonly ClaimedPush[],
+  ): Promise<ReadonlyMap<string, PublicRiderCard>> {
+    const [only] = due;
+    const actors = due.length === 1 && only?.group === 'social' ? (only.actors ?? []) : [];
+    if (actors.length === 0) return new Map();
+    try {
+      return await this.names.publicRiders(actors);
+    } catch (error) {
+      const kind = error instanceof Error ? error.name : 'unknown';
+      this.logger.warn(`notifications.push_names_failed uid=${userId} error=${kind}`);
+      return new Map();
+    }
   }
 
   /** Сбой отправки: последняя попытка — `failed`, иначе захват снят (`pending`), лимит уже списан. */

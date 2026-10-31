@@ -243,6 +243,12 @@ Architect, 2026-10-31. Статус — **CONCERNS**: противоречий �
 - Повтор без upsert после дубля: для документа накопления — на дубль любого уникального индекса (RC-1a), для замены
   по `collapseSeq` — как раньше, только `notifications_collapse_unique`.
 - RC-11: иконка и подпись группы в строке центра не делались (решение оркестратора).
+- Ревью pass 1 (findings.md, MEDIUM): сбой `publicRiders` в push — `try/catch` в `PushDelivery.socialCards`, при
+  сбое уходит запасной текст документа («Райдер», цель `null`), лог `notifications.push_names_failed uid error=<класс>`.
+  Перенос запроса до списания лимита не выбран: исключение после `claimPush` всё равно оставило бы документ в
+  `sending` до конца аренды; запасной текст (RC-3) доставляет push сразу и лимит не списывается повторно.
+- Ревью pass 1 (LOW): `socialParamsOf` сам держит одну строку и потолок 200 (черновик в обход `socialNoticeDraft` не
+  ломает пачку `FanoutJobData`).
 
 ## 9. Acceptance Criteria
 
@@ -508,3 +514,10 @@ Coder, 2026-10-31. Отклонения — §8.2.
   Expo (`data.target`).
 - Стирание — через порты `ProfileErasure` и `NotificationErasure`, не полным проходом `AccountErasure`
   (account int-тесты зелёные без изменений).
+
+**Исправления ревью pass 1** (отдельный коммит): MEDIUM — int-тест «сбой запроса имён — push уходит запасным текстом,
+документ не застревает в sending» (сначала красный: исключение выходило из `deliver`), затем `socialCards` с
+`try/catch`; LOW — unit-тест `socialParamsOf` (потолок 200, одна строка), затем обрезка. Прогоны: int
+`notifications-social` + `notifications-delivery` → 2 файла, 53 теста, pass; unit `src/modules/notifications` → 10
+файлов, 157 тестов, pass; api `tsc --noEmit` — exit 0; eslint по затронутым файлам — exit 0. Web Push payload с целью
+`rider` и полный `AccountErasure` (LOW, пробелы тестов) — без изменений, как в «Не проверено».

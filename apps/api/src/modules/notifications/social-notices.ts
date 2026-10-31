@@ -183,9 +183,14 @@ export function socialNoticeDraft(input: {
   };
 }
 
-/** `params` документа из текста черновика (`SocialNoticeText`): только название объекта. */
+/**
+ * `params` документа из текста черновика (`SocialNoticeText`): только название объекта — одна строка, ≤ 200 символов
+ * (тот же потолок, что у `socialNoticeDraft` и `SocialNoticeParams`: прямой путь и пачка ведут себя одинаково).
+ */
 export function socialParamsOf(text: object): SocialNoticeParams {
-  return 'object' in text && typeof text.object === 'string' ? { object: text.object } : {};
+  return 'object' in text && typeof text.object === 'string'
+    ? { object: oneLine(text.object).slice(0, OBJECT_TITLE_MAX) }
+    : {};
 }
 
 const bodyOf = (rule: SocialKindRule, names: string, object: string | undefined) => {

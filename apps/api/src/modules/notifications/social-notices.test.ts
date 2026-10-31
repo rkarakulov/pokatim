@@ -161,6 +161,15 @@ describe('socialNoticeDraft — черновик для intake (P7)', () => {
     expect(socialParamsOf(draft.text)).toEqual({ object: 'а'.repeat(200) });
   });
 
+  it('socialParamsOf сам держит потолок 200 и одну строку (черновик в обход socialNoticeDraft)', () => {
+    expect(socialParamsOf({ kind: 'social_thanks', object: `  Кофе\n${'а'.repeat(300)}` })).toEqual(
+      {
+        object: `Кофе ${'а'.repeat(195)}`,
+      },
+    );
+    expect(socialParamsOf({ kind: 'social_added' })).toEqual({});
+  });
+
   it('вид с действующими лицами без лица — ошибка', () => {
     expect(() =>
       socialNoticeDraft({

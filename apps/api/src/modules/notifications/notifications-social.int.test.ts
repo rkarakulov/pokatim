@@ -447,6 +447,23 @@ describe('push «Своих» (RC-5)', () => {
     expect((await docsOf(a))[0]).toMatchObject({ body: 'Райдер', target: null });
   });
 
+  it('сбой запроса имён — push уходит запасным текстом, документ не застревает в sending (findings MEDIUM)', async () => {
+    await seedPushToken(h, a.userId, 'a1');
+    await social('social_added', katya, [a], null);
+    const names = h.worker.get<RiderNameDirectory>(RIDER_NAMES, { strict: false });
+    vi.spyOn(names, 'publicRiders').mockRejectedValue(new Error('profiles unavailable'));
+    expect(await runPush(h, a.userId)).toBe('sent');
+    expect(expo.delivered.map((entry) => entry.message)).toEqual([
+      expect.objectContaining({
+        title: 'Вас добавили в свои',
+        body: 'Райдер',
+        data: { target: null },
+      }),
+    ]);
+    expect((await docsOf(a))[0]?.push).toMatchObject({ state: 'sent', claimId: null });
+    expect(await runPush(h, a.userId)).toBe('none');
+  });
+
   it('тихие часы → накопление → после конца интервала один push «… и ещё 1»', async () => {
     await seedPushToken(h, a.userId, 'a1');
     h.clock.advance(11 * HOUR); // 23:00 по Минску
