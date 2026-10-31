@@ -61,6 +61,7 @@ const detail: RideDetail = {
   rescheduledAt: null,
   route: null,
   start: null,
+  photo: null,
   description: 'Едем спокойно.\nhttps://example.by — не ссылка.',
 };
 const viewer = (role: RideViewer['role'], rights: Partial<RideViewer> = {}): RideViewer => ({

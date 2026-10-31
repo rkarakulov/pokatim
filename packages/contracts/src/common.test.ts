@@ -106,6 +106,9 @@ describe('коды ошибок', () => {
       'PANEL_INVITATIONS_UNAVAILABLE',
       'ACHIEVEMENT_INVALID_STATE',
       'SOCIAL_ACTION_BLOCKED',
+      'IMAGE_FORMAT_UNSUPPORTED',
+      'IMAGE_TOO_LARGE',
+      'IMAGE_INVALID',
     ]);
     expect(FieldErrorCode.options).toEqual([
       'REQUIRED',

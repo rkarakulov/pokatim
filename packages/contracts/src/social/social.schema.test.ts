@@ -45,6 +45,7 @@ describe('«Свои» (social, ADR-0027): справочники', () => {
   it('details 409 SOCIAL_ACTION_BLOCKED терпят новую причину (unknown)', () => {
     expect(SocialActionBlockedDetails.parse({ reason: 'self' })).toEqual({ reason: 'self' });
     expect(SocialActionBlockedDetails.parse({ reason: 'later' })).toEqual({ reason: 'unknown' });
-    expect(ErrorCode.options.at(-1)).toBe('SOCIAL_ACTION_BLOCKED');
+    // порядок всего списка — common.test.ts (новые коды — после него)
+    expect(ErrorCode.options).toContain('SOCIAL_ACTION_BLOCKED');
   });
 });

@@ -117,6 +117,12 @@ export const { ErrorCode, ApiError } = defineErrorCodes([
   // «Свои» (ADR-0027): действие со связью, явкой или реакцией недоступно (409, `details.reason` —
   // `SocialActionBlockedDetails`)
   'SOCIAL_ACTION_BLOCKED',
+  // media (ADR-0028): фото райда и следующие виды фото — не JPEG/PNG/WebP по сигнатуре (415); больше предела байт
+  // (413); не декодируется, больше предела пикселей, мелкое после вписывания (422, `ImageInvalidDetails`). Аватар
+  // остаётся на `AVATAR_*` (установленные клиенты)
+  'IMAGE_FORMAT_UNSUPPORTED',
+  'IMAGE_TOO_LARGE',
+  'IMAGE_INVALID',
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;
 export type ApiError = z.infer<typeof ApiError>;
