@@ -16,7 +16,7 @@ const isRideReason = (code: string): code is RideReason =>
  * Версия текста согласия на показ имени (profile-02): ключи i18n `profile.show.label` и `profile.show.hint`. Сменили
  * формулировку — подняли версию (дата). Пишет сервер в `profile_consent_events`; клиент присылает только флаг.
  */
-export const PUBLIC_NAME_CONSENT_VERSION = '2026-10-27';
+export const PUBLIC_NAME_CONSENT_VERSION = '2026-10-31';
 
 export const RIDER_PUBLIC_NAME_MIN = 2;
 export const RIDER_PUBLIC_NAME_MAX = 80;
@@ -24,7 +24,13 @@ export const RIDER_PUBLIC_NAME_MAX = 80;
 const RIDER_NAME_LINE = /^[^\p{Cc}\p{Cf}]+$/u;
 /** Подписи таблицы результатов, которые имя не может повторять (RC-8): своя строка, аноним, удалённый; «ё» = «е». */
 const RESERVED_RIDER_NAMES = new Set(['вы', 'участник', 'удаленный участник']);
-const reservedKey = (value: string) => value.toLowerCase().replaceAll('ё', 'е');
+/** Заглушка строки без имени «Райдер #N» (name-consent-prompt, N8): и «Райдер», «Райдер №12», «Райдер 7». */
+const RESERVED_RIDER_NUMBER = /^райдер\s*(?:[#№]\s*)?\d*$/u;
+const reservedKey = (value: string) => value.trim().toLowerCase().replaceAll('ё', 'е');
+const isReservedName = (value: string) => {
+  const key = reservedKey(value);
+  return RESERVED_RIDER_NAMES.has(key) || RESERVED_RIDER_NUMBER.test(key);
+};
 
 /**
  * Публичная строка райдера (имя, клуб): необязательно, пусто — `null`; `min`–`max` символов одной строкой без `\p{Cc}`
@@ -33,7 +39,7 @@ const reservedKey = (value: string) => value.toLowerCase().replaceAll('ё', 'е'
 const riderLine = (min: number, max: number) =>
   optionalText(max, RIDER_NAME_LINE)
     .refine((value) => value === null || value.length >= min, { error: 'TOO_SHORT' })
-    .refine((value) => value === null || !RESERVED_RIDER_NAMES.has(reservedKey(value)), {
+    .refine((value) => value === null || !isReservedName(value), {
       error: 'INVALID',
     });
 

@@ -36,7 +36,10 @@ const valuesOf = (profile: ProfileView): ProfileFormValues => ({
 });
 
 /** Текст ошибки поля по коду (сообщение zod = код); `min` — предел поля; незнакомый код — «Проверьте значение». */
-function fieldText(code: string | undefined, min = RIDER_PUBLIC_NAME_MIN): string | undefined {
+export function fieldText(
+  code: string | undefined,
+  min = RIDER_PUBLIC_NAME_MIN,
+): string | undefined {
   if (code === undefined) return undefined;
   const key = `field.error.${code}` as MessageKey;
   const text = t(key, { min });
