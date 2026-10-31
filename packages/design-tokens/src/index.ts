@@ -71,6 +71,7 @@ export {
   type FontFileId,
   type RoleFontFiles,
 } from './app-fonts.ts';
+export { photoScrim, photoScrimAlpha } from './photo-scrim.ts';
 export {
   STORY_CARD_TIME_STEPS,
   storyCard,

@@ -53,7 +53,7 @@ describe('storyCardHash — ключ кэша карточки', () => {
 
   it('меняется от версии рендера', () => {
     const before = storyCardHash(base);
-    vi.spyOn(STORY_CARD_POLICY, 'renderVersion', 'get').mockReturnValue(4 as 3);
+    vi.spyOn(STORY_CARD_POLICY, 'renderVersion', 'get').mockReturnValue(5 as 4);
     expect(storyCardHash(base)).not.toBe(before);
   });
 });
