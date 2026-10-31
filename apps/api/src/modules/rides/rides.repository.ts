@@ -212,6 +212,31 @@ export class RidesRepository {
     );
   }
 
+  /**
+   * Факты райда для явки «Свои» (порт `RIDES_FOR_SOCIAL`): статус, старт, организатор, участники — только `userId`,
+   * точка старта. Любой статус (фазу и отказ решает `social`); до `0031_rides_geo` полей точки нет — чтение `?? false`.
+   */
+  findForSocial(
+    id: string,
+  ): Promise<Pick<
+    RideDoc,
+    '_id' | 'status' | 'startsAt' | 'organizerUserId' | 'participants' | 'geo' | 'startPrecise'
+  > | null> {
+    return this.rides.findOne(
+      { _id: id },
+      {
+        projection: {
+          status: 1,
+          startsAt: 1,
+          organizerUserId: 1,
+          'participants.userId': 1,
+          geo: 1,
+          startPrecise: 1,
+        },
+      },
+    );
+  }
+
   /** Опубликованные райды, изменившиеся после курсора (`og.sync`), по `(updatedAt, _id)` — индекс `0037_og_sync_indexes`. */
   async changedForOg(after: ChangedCursor | null, limit: number): Promise<ChangedRow[]> {
     const docs = await this.rides

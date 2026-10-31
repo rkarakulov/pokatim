@@ -2608,6 +2608,8 @@ export const ru = {
   'admin.accountErasures.step.route-rides': 'Заезды по маршрутам',
   'admin.accountErasures.step.achievements': 'Достижения',
   'admin.accountErasures.step.tickets': 'Билеты и регистрации',
+  'admin.accountErasures.step.social': 'Связи «Свои»',
+  'admin.accountErasures.step.product-events': 'События метрик',
   'admin.accountErasures.step.notifications': 'Уведомления',
   'admin.accountErasures.step.identity': 'Письмо и учётные данные',
   // profile-moderation: панель — «Профили райдеров» (право profiles.moderate); жалобы — без автора, имя — по Q2

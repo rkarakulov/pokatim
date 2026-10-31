@@ -25,6 +25,7 @@ import { ResultsWorkerModule } from './modules/results';
 import { RouteRidesWorkerModule } from './modules/route-rides';
 import { RoutesWorkerModule } from './modules/routes';
 import { SharingWorkerModule } from './modules/sharing';
+import { SocialWorkerModule } from './modules/social';
 import { StandingsWorkerModule } from './modules/standings';
 import { TicketsWorkerModule } from './modules/tickets';
 import { TracksWorkerModule } from './modules/tracks';
@@ -67,6 +68,8 @@ import { TracksWorkerModule } from './modules/tracks';
     PanelWorkerModule,
     // серверная сверка достижений: регламент по курсорам портов владельцев, push без открытия приложения (achievements-push)
     AchievementsWorkerModule,
+    // «Свои» (ADR-0027): якорь процессоров social-intake и social-maintenance (P5, P7)
+    SocialWorkerModule,
   ],
 })
 export class WorkerModule {}

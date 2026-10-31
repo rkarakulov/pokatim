@@ -26,3 +26,9 @@ export {
 } from './rider-rides.port';
 /** Порт «Обзора» панели (admin-overview): райды с открытыми жалобами и активные райды. */
 export { RidesOverview } from './rides-overview';
+/** Порт для `social` («Свои», ADR-0027): факты райда для явки — фаза, старт, участники, точная точка старта. */
+export {
+  RIDES_FOR_SOCIAL,
+  type RidesForSocial,
+  type SocialRideFacts,
+} from './rides-for-social.port';

@@ -41,6 +41,24 @@ module.exports = {
       },
     },
     {
+      name: 'product-events-leaf',
+      comment: 'product-events — листовой модуль (ADR-0027 п. 7): другие модули API не импортирует',
+      severity: 'error',
+      from: { path: '^apps/api/src/modules/product-events/' },
+      to: { path: '^apps/api/src/modules/(?!product-events/)' },
+    },
+    {
+      name: 'social-consumers-only',
+      comment:
+        'Производители не знают о social (ADR-0027 п. 1): ссылаются только notifications и account',
+      severity: 'error',
+      from: {
+        path: '^apps/api/src/modules/',
+        pathNot: '^apps/api/src/modules/(social|notifications|account)/',
+      },
+      to: { path: '^apps/api/src/modules/social/' },
+    },
+    {
       name: 'contracts-pure',
       comment:
         'contracts — только zod и ядро контрактов базы (чистый zod), без runtime-зависимостей фреймворков',

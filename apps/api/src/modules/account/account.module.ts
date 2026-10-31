@@ -7,10 +7,12 @@ import { DevicesCoreModule } from '../devices';
 import { IdentityErasureModule, IdentityModule } from '../identity';
 import { NotificationsCoreModule } from '../notifications';
 import { PanelModule } from '../panel';
+import { ProductEventsCoreModule } from '../product-events';
 import { ProfileCoreModule } from '../profile';
 import { RidesCoreModule } from '../rides';
 import { RouteRidesCoreModule } from '../route-rides';
 import { RoutesCoreModule } from '../routes';
+import { SocialCoreModule } from '../social';
 import { TicketsCoreModule } from '../tickets';
 import { TracksCoreModule } from '../tracks';
 import { AccountDeletionService } from './account-deletion.service';
@@ -50,6 +52,8 @@ export class AccountModule {}
     TicketsCoreModule,
     DevicesCoreModule,
     NotificationsCoreModule,
+    SocialCoreModule,
+    ProductEventsCoreModule,
     BullModule.registerQueue({ name: QUEUE.accountDeletion }),
   ],
   providers: [AccountErasureService, AccountErasureProcessor, AccountSchedules],

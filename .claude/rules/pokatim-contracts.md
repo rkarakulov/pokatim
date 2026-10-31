@@ -238,3 +238,8 @@ paths:
   (PR D): `EventTicketingUpdate.reminders?` — `EventReminderInput[]` ≤ 3 (`strictObject`: `id?` — правка своего,
   `offsetHours` 1–168, `text` 1–500; нет поля — правила не меняются), ответ `EventTicketingSettings.reminders` —
   `EventReminder` (`sendAt`, `sentAt`, `sentCount`, `late`).
+- «Свои» (ADR-0027): `src/social/social.schema.ts` — `CONNECTION_SOURCES`, `REACTION_KINDS`, `REACTION_TARGET_TYPES`,
+  `ATTENDANCE_VIA`, `RIDE_JOIN_SOURCES`, `SOCIAL_BLOCK_REASONS` (только в конец; в ответах P2–P7 — `tolerantEnum`),
+  `SocialActionBlockedDetails` (`409 SOCIAL_ACTION_BLOCKED`, код — в конце `ErrorCode`). Справочник продуктовых
+  событий — не здесь (журнал наружу не уходит, RC-11): `apps/api/src/modules/product-events/product-events.types.ts`.
+  `ERASURE_STEPS` — в порядке исполнения (`…, 'tickets', 'social', 'product-events', 'notifications', 'identity'`).

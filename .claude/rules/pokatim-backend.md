@@ -238,11 +238,12 @@ paths:
   транзакция `AccountClosure.close` + `PanelAudit` `account.deleted` + outbox `account.deletion-requested`) и
   `AccountWorkerModule` (очередь `account-deletion`, `AccountErasureProcessor` по имени задачи: событие, sweep,
   регламент `account.erasure-resume`). Зависимости: `account → identity, panel, profile, rides, routes, route-rides, achievements,
-  tickets, tracks, devices, notifications` только через `index.ts`; `account` не импортирует никто. Порты стирания — `ProfileErasure`
+  tickets, tracks, devices, notifications, social, product-events` только через `index.ts`; `account` не импортирует никто. Порты стирания — `ProfileErasure`
   (`ProfileCoreModule`), `RideErasure` (`RidesCoreModule`), `RouteErasure` (`RoutesCoreModule`), `DeviceErasure`
   (`DevicesCoreModule`), `TrackErasure` (`TracksCoreModule`), `RouteRideErasure` (`RouteRidesCoreModule`, шаг `route-rides` после `tracks`), `AchievementErasure`
   (`AchievementsCoreModule`, шаг `achievements` после `route-rides`), `TicketErasure` (`TicketsCoreModule`, шаг
-  `tickets` после `achievements`, перед `notifications`),
+  `tickets` после `achievements`), `SocialErasure` (`SocialCoreModule`, шаг `social` после `tickets`),
+  `ProductEventErasure` (`ProductEventsCoreModule`, шаг `product-events` после `social`, перед `notifications`),
   `NotificationErasure` (`NotificationsCoreModule`, шаг
   между `tracks` и `identity`), `AccountErasure` (`IdentityErasureModule`); push-токены — `PushTokens.revokeAllOf(tx)`
   в транзакции удаления. Новый модуль с
@@ -645,7 +646,8 @@ RC-A1, ADR-0019).
   (`receipts` */15 — `DeviceNotRegistered` снимает токен; `redeliver` */10).
 - Текст — снимок сервера (`notification-texts.ts`, не `@pokatim/i18n`; исключение RC-P5 — имена достижений, уровней и
   объектов из каталога `@pokatim/i18n` `achievements.*`, заголовок `achievement_granted` — функция `achievementTitle`);
-  цель — белый список типов. Expo — порт
+  цель — белый список типов. Второе исключение — группа «Свои» (ADR-0027 п. 6, P1): `actors` + `params`, имена — при
+  чтении списка и отправке push через `RIDER_NAMES.publicRiders` (нет публичного — «Райдер»). Expo — порт
   `PUSH_SENDER` (`expo-push.sender.ts`, адрес из env, в production — только `exp.host`); `PUSH_ENABLED=false` — push
   `skipped`.
 - HTTP `/v1/notifications` под `AuthGuard`, только свои (`userId` сессии в фильтре, чужое — 404); лимиты
@@ -663,3 +665,29 @@ RC-A1, ADR-0019).
   endpoint — только хосты `isWebPushEndpoint` контракта (SSRF), повторно в адаптере. 404/410 снимают подписку; канал
   выключен (`push_off`), только если выключены оба транспорта (`pushChannelEnabled`). Тесты — фейковый push-сервис
   `test/fake-web-push.ts` (`WEB_PUSH_TEST_ORIGIN`, только `NODE_ENV=test`), тело расшифровывается ключом подписки.
+
+## «Свои» (`social`, `product-events`, ADR-0027 Proposed, `docs/product/social.md`)
+
+- Модуль `social` — потребитель: `social → rides, profile, product-events` (P0; далее `results`, `routes`, `tracks`,
+  `identity` — в своих PR) только через `index.ts` и порты: `RIDES_FOR_SOCIAL` (`rides-for-social.port.ts`, `rideFacts`:
+  фаза — `ridePhase` внутри `rides`, участники «Иду» с организатором первым, точная точка старта при `startPrecise`),
+  `RIDER_NAMES.publicRiders` (публичность — при чтении, K3; ручное добавление — только к публичному). Коллекции
+  `rides`, `profiles`, `activities` `social` не читает. На `social` ссылаются только `notifications`, `account`,
+  `AppModule`, `WorkerModule` (dependency-cruiser `social-consumers-only`).
+- Композиция (RC-13): `SocialCoreModule` (репозитории, `SocialConnectionsService`, `SocialAttendanceService`,
+  `SocialReactionsService`, `SocialErasure`), `SocialModule` (`AppModule`, контроллеры — P2–P4, P7),
+  `SocialWorkerModule` (`WorkerModule`, процессоры `social-intake` / `social-maintenance` — P5, P7). Дальше правки —
+  только в `social/*`.
+- Правила — `social.policy.ts` (`SOCIAL_POLICY`: лимит ручного «В свои» `social-manual:<uid>` 30/24 ч, окно ручной
+  явки 7 дн, пороги автоявки, `bulkBatch`; `attendanceCheck`, `rideConnectionDiff`, `connectionSources`). Отказы —
+  `409 SOCIAL_ACTION_BLOCKED { reason }` (`socialBlocked`), райда нет и непубличный профиль — `404 NOT_FOUND`, лимит —
+  `429 RATE_LIMITED` (проверяется первым, на каждую попытку).
+- Явка (RC-2a) — транзакция: условная запись документа явки райда → явившиеся → `rideConnectionDiff` с парами райда
+  → `bulkWrite` связей → удаление пар без источников (надгробие `removedAt` остаётся, RC-6) → события. Повтор — no-op
+  без событий. «Меня не было» ставит `declinedAt` (RC-3a), явка по треку его не перекрывает.
+- Реакции: `thank` — только между явившимися, повтор — no-op (RC-4); `toggleRespect` — на разрешённой вызывающим цели
+  (порты целей — P4), дубль уникального ключа — перечитать состояние.
+- Модуль `product-events` — листовой (dependency-cruiser `product-events-leaf`): порт `PRODUCT_EVENTS.record(event,
+  session?)`, справочник и `props` — `product-events.types.ts` (zod, `strictObject`, без id пользователей, RC-11, RC-12).
+  `social` пишет события в своей транзакции; вызывающий вне транзакции — после основной записи, сбой — лог
+  `product_events.record_failed type=<t>` без отказа. Коллекцию `product_events` пишет только модуль.
