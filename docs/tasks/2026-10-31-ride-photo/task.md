@@ -333,6 +333,25 @@ RGB) + 3 буфера 1080×1920 RGBA (~25 МБ) — в пределах; `sharp
 - **D6. Проверки «свой будущий райд»** — `RidesService.ownRide` / `assertUpcoming` / `viewOf` стали публичными
   методами (вариант «вызывать через `RidesService`» §5.1), копий нет.
 
+Отклонения и уточнения PR B (coder, 2026-10-31):
+
+- **D8. Загрузка — `api.uploadRidePhoto` (fetch с Blob), не native upload task.** §11 упоминает
+  `ridePhotoUploadRequest` «как аватар», но аватар в приложении грузится `api.uploadAvatar` с Blob на всех платформах
+  (без XHR и прогресса, `pokatim-app.md`); фото райда — тот же путь. `ridePhotoUploadRequest` в приложении не нужен.
+- **D9. Общий выбор фото — `features/media/pick-image(.web).ts`.** `load-image-picker.ts` и `image-picker-support.ts`
+  перенесены из `features/profile` (пути в `jest.setup.ts` и тестах профиля — только импорты), `pick-avatar.web.ts`
+  удалён — развилка платформ теперь в `pickImage`, `pick-avatar.ts` — обёртка с ошибками аватара (тесты
+  `pick-avatar(.web).test.ts` без правок ожиданий). Для фото без обрезки на iOS — `preferredAssetRepresentationMode:
+  compatible` (без него `expo-image-picker` отдаёт HEIC как есть → 415), MIME вне JPEG/PNG/WebP (HEIF Android) — отказ
+  до отправки.
+- **D10. Затемнение героя — полосы `View` (48) по `photoScrimAlpha`,** не SVG-градиент: `react-native-svg` на native
+  грузится лениво с фолбэком (`useSvgLib`) — на время загрузки текст стоял бы на фото без скрима; полосы одинаковы на
+  всех платформах, шаг прозрачности ≤ ~0,07. Значения токена с прототипом не сверены — прототипов в репозитории нет
+  (R7), остаются `[ASSUMPTION]`.
+- **D11. «Удалить фото» — без подтверждения** (в отличие от аватара): спецификация его не требует, вернуть фото —
+  загрузить снова; кнопка только при фото и занята на время запроса (LOW findings PR A). Шаблон карточки после загрузки
+  не переключается на «Ночь» автоматически — подсказка блока говорит, где фото.
+
 ## 8.3 Security checklist
 
 Зона `pokatim-security.md` (`modules/rides/**`, `modules/media/**`, `raw-body.ts`, `upload-slots.ts`) — чек-лист
