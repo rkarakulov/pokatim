@@ -20,6 +20,7 @@ import { domainError } from '../../error-messages';
 import { decodeCursor, encodeCursor } from '../../page-cursor';
 import {
   RIDER_NAMES,
+  type PublicRiderCard,
   riderRowFields,
   type RiderNameDirectory,
   VERIFIED_PROFILES,
@@ -78,8 +79,19 @@ const FinisherCursorKey = z.literal('f');
 /** Строка таблицы до подстановки имени: `userId` — только для порта имён, наружу не выходит. */
 interface UnnamedRow {
   userId: string;
-  row: Omit<RaceResultRow, 'riderName' | 'riderPublicId' | 'riderAvatar'>;
+  /** номер заявки в гонке (N7); наружу — только `riderNo` строки без имени */
+  entryNo: number | null;
+  row: Omit<RaceResultRow, 'riderName' | 'riderNo' | 'riderPublicId' | 'riderAvatar'>;
 }
+
+/**
+ * Поля райдера публичной строки: имя, ссылка и фото — по согласию (порт `RIDER_NAMES`); без имени — номер заявки в
+ * гонке `riderNo` («Райдер #N», name-consent-prompt N7), с именем номер не уходит.
+ */
+const raceRiderFields = (card: PublicRiderCard | undefined, entryNo: number | null) => {
+  const fields = riderRowFields(card);
+  return { ...fields, riderNo: fields.riderName === null ? entryNo : null };
+};
 type UnnamedPage = Omit<RaceResultsPage, 'items'> & { items: UnnamedRow[] };
 /** Сегмент попытки наружу: без координат и датчиков (приложение и панель). */
 export const segmentView = (segment: AttemptSegmentDoc | null) =>
@@ -402,6 +414,7 @@ export class ResultsReadService {
         ranked,
         items: page.map((row, index) => ({
           userId: row.userId,
+          entryNo: row.entryNo ?? null,
           row: {
             entryId: row._id,
             place: places[index]!.place,
@@ -444,7 +457,7 @@ export class ResultsReadService {
       items: rows.map((row) => ({
         entryId: row._id,
         elapsedSec: row.best.elapsedSec,
-        ...riderRowFields(riders.get(row.userId)),
+        ...raceRiderFields(riders.get(row.userId), row.entryNo ?? null),
         unranked: unrankedOf(row) ?? 'no_heart_rate',
       })),
       nextCursor: page.rows.length > query.limit && last ? encodeCursor('f', last._id) : null,
@@ -465,12 +478,12 @@ export class ResultsReadService {
       nextCursor: page.nextCursor,
       groups: page.groups.map((group) => ({ key: group.key, ranked: group.ranked })),
       finishers: page.finishers,
-      items: page.items.map(({ userId, row }) => ({
+      items: page.items.map(({ userId, entryNo, row }) => ({
         entryId: row.entryId,
         place: row.place,
         tied: row.tied,
         elapsedSec: row.elapsedSec,
-        ...riderRowFields(riders.get(userId)),
+        ...raceRiderFields(riders.get(userId), entryNo),
       })),
     };
   }
@@ -515,6 +528,11 @@ export class ResultsReadService {
       );
       const page = rows.slice(0, limit);
       const last = page.at(-1);
+      const numbers = await this.repository.entryNumbers(
+        raceId,
+        page.map((row) => row.entryId),
+        session,
+      );
       return {
         group,
         status: 'final' as const,
@@ -528,6 +546,7 @@ export class ResultsReadService {
             : [
                 {
                   userId: row.userId,
+                  entryNo: numbers.get(row.entryId) ?? null,
                   row: {
                     entryId: row.entryId,
                     place: row.place,

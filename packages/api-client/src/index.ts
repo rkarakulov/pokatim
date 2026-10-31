@@ -42,6 +42,8 @@ import {
   type UpdateRouteNotificationSettings,
   AchievementNotificationSettingsView,
   type UpdateAchievementNotificationSettings,
+  SocialNotificationSettingsView,
+  type UpdateSocialNotificationSettings,
   type RegisterPushToken,
   type RevokePushToken,
   type RegisterWebPushSubscription,
@@ -1126,6 +1128,23 @@ export function createApiClient({
       request(
         '/v1/notifications/settings/achievements',
         AchievementNotificationSettingsView,
+        authorized(accessToken, { method: 'PUT', body: JSON.stringify(body), ...withCredentials }),
+      ),
+    /** Тумблер группы «Свои» (подресурс, только push); нет сохранённого — включено. */
+    getSocialNotificationSettings: (accessToken: string) =>
+      request(
+        '/v1/notifications/settings/social',
+        SocialNotificationSettingsView,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /** Замена тумблера «Свои»; ответ — сохранённый. */
+    updateSocialNotificationSettings: (
+      accessToken: string,
+      body: UpdateSocialNotificationSettings,
+    ) =>
+      request(
+        '/v1/notifications/settings/social',
+        SocialNotificationSettingsView,
         authorized(accessToken, { method: 'PUT', body: JSON.stringify(body), ...withCredentials }),
       ),
     /** Регистрация или обновление push-токена этого устройства; `204`. */

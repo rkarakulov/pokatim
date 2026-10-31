@@ -33,6 +33,8 @@ const getRouteSettings = jest.mocked(api.getRouteNotificationSettings);
 const updateRouteSettings = jest.mocked(api.updateRouteNotificationSettings);
 const getAchievementSettings = jest.mocked(api.getAchievementNotificationSettings);
 const updateAchievementSettings = jest.mocked(api.updateAchievementNotificationSettings);
+const getSocialSettings = jest.mocked(api.getSocialNotificationSettings);
+const updateSocialSettings = jest.mocked(api.updateSocialNotificationSettings);
 
 const RACE = '0190a6f4-0000-7000-8000-000000000001';
 const never = () => new Promise<never>(() => undefined);
@@ -71,6 +73,8 @@ beforeEach(() => {
   updateRouteSettings.mockImplementation(async (_token, body) => body);
   getAchievementSettings.mockResolvedValue({ push: true });
   updateAchievementSettings.mockImplementation(async (_token, body) => body);
+  getSocialSettings.mockResolvedValue({ push: true });
+  updateSocialSettings.mockImplementation(async (_token, body) => body);
   getProfile.mockResolvedValue({
     rideReasons: [],
     publicName: null,
@@ -96,6 +100,7 @@ async function open(initialUrl: string) {
       'races/[id]': () => null,
       'rides/[id]': () => null,
       'achievements/[code]': () => null,
+      'riders/[id]': () => null,
     },
     { initialUrl, wrapper },
   );
@@ -194,6 +199,24 @@ describe('«Уведомления»: нажатие и «Прочитать в�
     );
     await waitFor(() => expect(router.getPathname()).toBe('/achievements/season_champion'));
     expect(router.getSearchParams()).toMatchObject({ season: RACE });
+  });
+
+  it('«Свои»: цель rider — переход на публичный профиль', async () => {
+    const publicId = 'K'.repeat(43);
+    list.mockResolvedValue(
+      page([
+        notice({
+          kind: 'social_added',
+          group: 'social',
+          title: 'Вас добавили в свои',
+          body: 'Катя Л. и ещё 2',
+          target: { type: 'rider', publicId },
+        }),
+      ]),
+    );
+    const router = await open('/notifications');
+    await fireEvent.press(await screen.findByRole('button', { name: /^Вас добавили в свои\./ }));
+    await waitFor(() => expect(router.getPathname()).toBe(`/riders/${publicId}`));
   });
 
   it.each([
@@ -306,7 +329,7 @@ describe('«Настройки уведомлений» (N4, N6)', () => {
     expect(screen.getByRole('header', { name: 'Гонки и результаты' })).toBeOnTheScreen();
     const headers = screen.getAllByRole('header').map((header) => header.props.children);
     expect(headers.indexOf('Маршруты')).toBe(headers.indexOf('Райды') + 1);
-    expect(screen.getAllByRole('switch', { name: 'Push-уведомления' })).toHaveLength(6);
+    expect(screen.getAllByRole('switch', { name: 'Push-уведомления' })).toHaveLength(7);
     expect(screen.getAllByRole('switch', { name: 'Письма на e-mail' })).toHaveLength(3);
     expect(screen.getByText('Только напоминания о событиях с билетом.')).toBeOnTheScreen();
     expect(screen.getByRole('switch', { name: 'Не присылать push ночью' })).toBeChecked();
@@ -369,11 +392,11 @@ describe('«Настройки уведомлений» (N4, N6)', () => {
     await waitFor(() =>
       expect(screen.getAllByRole('switch', { name: 'Push-уведомления' })[0]).not.toBeChecked(),
     );
-    // «Маршруты», «Мероприятия» и «Достижения» — свои подресурсы и своё сохранение: блокируются только тумблеры
-    // основного объекта
+    // «Маршруты», «Мероприятия», «Достижения» и «Свои» — свои подресурсы и своё сохранение: блокируются только
+    // тумблеры основного объекта
     const switches = screen.getAllByRole('switch');
     const disabled = switches.filter((toggle) => toggle.props.accessibilityState?.disabled);
-    expect(disabled).toHaveLength(switches.length - 4);
+    expect(disabled).toHaveLength(switches.length - 5);
     const [hour] = screen.getAllByRole('button', { name: '23:00' });
     expect(hour).toBeDisabled();
     await fireEvent.press(screen.getAllByRole('switch', { name: 'Письма на e-mail' })[0]!);
@@ -428,14 +451,14 @@ describe('«Настройки уведомлений» (N4, N6)', () => {
     await screen.findByRole('header', { name: 'Райды' });
     await waitFor(() => expect(getEventSettings).toHaveBeenCalled());
     expect(screen.queryByRole('header', { name: 'Мероприятия' })).toBeNull();
-    expect(screen.getAllByRole('switch', { name: 'Push-уведомления' })).toHaveLength(5);
+    expect(screen.getAllByRole('switch', { name: 'Push-уведомления' })).toHaveLength(6);
   });
 
   it('«Маршруты»: тумблер сохраняет подресурс, основные настройки не трогает', async () => {
     await open('/settings/notifications');
     await screen.findByRole('header', { name: 'Маршруты' });
     const pushes = await screen.findAllByRole('switch', { name: 'Push-уведомления' });
-    expect(pushes).toHaveLength(6);
+    expect(pushes).toHaveLength(7);
 
     await fireEvent.press(pushes[3]!);
 
@@ -455,7 +478,7 @@ describe('«Настройки уведомлений» (N4, N6)', () => {
     const headers = screen.getAllByRole('header').map((header) => header.props.children);
     expect(headers.indexOf('Достижения')).toBe(headers.indexOf('Мероприятия') + 1);
     const pushes = await screen.findAllByRole('switch', { name: 'Push-уведомления' });
-    expect(pushes).toHaveLength(6);
+    expect(pushes).toHaveLength(7);
 
     await fireEvent.press(pushes[5]!);
 
@@ -479,7 +502,39 @@ describe('«Настройки уведомлений» (N4, N6)', () => {
     await screen.findByRole('header', { name: 'Мероприятия' });
     await waitFor(() => expect(getAchievementSettings).toHaveBeenCalled());
     expect(screen.queryByRole('header', { name: 'Достижения' })).toBeNull();
-    expect(screen.getAllByRole('switch', { name: 'Push-уведомления' })).toHaveLength(5);
+    expect(screen.getAllByRole('switch', { name: 'Push-уведомления' })).toHaveLength(6);
+  });
+
+  it('«Свои»: только push, последней из групп; тумблер сохраняет подресурс settings/social', async () => {
+    await open('/settings/notifications');
+    expect(await screen.findByRole('header', { name: 'Свои' })).toBeOnTheScreen();
+    const headers = screen.getAllByRole('header').map((header) => header.props.children);
+    expect(headers.indexOf('Свои')).toBe(headers.indexOf('Достижения') + 1);
+    expect(headers.indexOf('Тихие часы')).toBe(headers.indexOf('Свои') + 1);
+    const pushes = await screen.findAllByRole('switch', { name: 'Push-уведомления' });
+    expect(pushes).toHaveLength(7);
+
+    await fireEvent.press(pushes[6]!);
+
+    await waitFor(() =>
+      expect(updateSocialSettings).toHaveBeenCalledWith(liveSession.accessToken, { push: false }),
+    );
+    expect(updateSettings).not.toHaveBeenCalled();
+    expect(updateAchievementSettings).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(screen.getAllByRole('switch', { name: 'Push-уведомления' })[6]).not.toBeChecked(),
+    );
+  });
+
+  it('«Свои»: старый API (404) — блока нет', async () => {
+    getSocialSettings.mockRejectedValueOnce(
+      new ApiHttpError(404, { code: 'NOT_FOUND', message: 'x' }),
+    );
+    await open('/settings/notifications');
+    await screen.findByRole('header', { name: 'Мероприятия' });
+    await waitFor(() => expect(getSocialSettings).toHaveBeenCalled());
+    expect(screen.queryByRole('header', { name: 'Свои' })).toBeNull();
+    expect(screen.getAllByRole('switch', { name: 'Push-уведомления' })).toHaveLength(6);
   });
 
   it('«Маршруты»: старый API (404) — блока нет', async () => {
@@ -490,7 +545,7 @@ describe('«Настройки уведомлений» (N4, N6)', () => {
     await screen.findByRole('header', { name: 'Мероприятия' });
     await waitFor(() => expect(getRouteSettings).toHaveBeenCalled());
     expect(screen.queryByRole('header', { name: 'Маршруты' })).toBeNull();
-    expect(screen.getAllByRole('switch', { name: 'Push-уведомления' })).toHaveLength(5);
+    expect(screen.getAllByRole('switch', { name: 'Push-уведомления' })).toHaveLength(6);
   });
 
   it('«Маршруты»: ошибка сохранения — баннер и прежнее значение', async () => {

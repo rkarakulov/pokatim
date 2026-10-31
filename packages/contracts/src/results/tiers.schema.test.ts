@@ -164,6 +164,7 @@ describe('race-results-07: таблица и финишёры', () => {
       entryId: ID,
       elapsedSec: 3600,
       riderName: null,
+      riderNo: null,
       riderPublicId: null,
       riderAvatar: null,
       unranked: 'start',

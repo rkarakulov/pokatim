@@ -33,13 +33,16 @@ export interface RaceForResults {
   disputeFilingClosedAt: Date | null;
 }
 
+/** Гонка после `admitEntry`: `entryAdmissions` — счётчик заявок после этой записи (номер новой заявки, N7). */
+export type AdmittedRace = RaceForResults & { entryAdmissions: number };
+
 export interface RaceRegistry {
   /**
-   * Первая операция транзакции заявки: запись `lockedAt ??= now` и `groupScheme ??= gender_age` (race-results-07) в
-   * документ опубликованной гонки (конфликт записи с правкой и отменой гонки панелью). Не опубликована или не найдена
-   * — `null`.
+   * Первая операция транзакции заявки: запись `lockedAt ??= now`, `groupScheme ??= gender_age` (race-results-07) и
+   * `entryAdmissions + 1` в документ опубликованной гонки (конфликт записи с правкой и отменой гонки панелью). Не
+   * опубликована или не найдена — `null`.
    */
-  admitEntry(tx: DbSession, raceId: string, now: Date): Promise<RaceForResults | null>;
+  admitEntry(tx: DbSession, raceId: string, now: Date): Promise<AdmittedRace | null>;
   /**
    * Замок результатов гонки (race-results-05): запись `resultsVersion` в документ опубликованной или отменённой
    * гонки — **первая** операция транзакций действий панели над результатами. Нет или черновик — `null`

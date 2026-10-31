@@ -45,7 +45,7 @@ export interface StandingsFilter {
   finishers?: boolean;
 }
 
-export type RankedEntry = Pick<RaceEntryDoc, '_id' | 'userId' | 'groupKey' | 'tier'> & {
+export type RankedEntry = Pick<RaceEntryDoc, '_id' | 'userId' | 'groupKey' | 'tier' | 'entryNo'> & {
   best: NonNullable<RaceEntryDoc['best']>;
 };
 
@@ -55,11 +55,20 @@ export interface GroupCount {
   ranked: number;
 }
 
-const RANKED_PROJECTION = { _id: 1, userId: 1, groupKey: 1, tier: 1, best: 1 } as const;
+const RANKED_PROJECTION = {
+  _id: 1,
+  userId: 1,
+  groupKey: 1,
+  tier: 1,
+  best: 1,
+  entryNo: 1,
+} as const;
 
-const toRanked = (docs: Pick<RaceEntryDoc, '_id' | 'userId' | 'groupKey' | 'tier' | 'best'>[]) =>
-  docs.flatMap(({ _id, userId, groupKey, tier, best }) =>
-    best ? [{ _id, userId, groupKey, tier, best }] : [],
+const toRanked = (
+  docs: Pick<RaceEntryDoc, '_id' | 'userId' | 'groupKey' | 'tier' | 'best' | 'entryNo'>[],
+) =>
+  docs.flatMap(({ _id, userId, groupKey, tier, best, entryNo }) =>
+    best ? [{ _id, userId, groupKey, tier, best, entryNo }] : [],
   );
 
 /** Группы по порядку справочника. */
@@ -175,6 +184,27 @@ export class ResultsRepository {
     session?: DbSession,
   ): Promise<RaceEntryDoc | undefined> {
     return (await this.c.entries.findOne({ raceId, userId }, { session })) ?? undefined;
+  }
+
+  /**
+   * Номера заявок гонки (name-consent-prompt, N7) для строк протокола — снимок номера не хранит. Заявка без номера
+   * (до `0048`, старый API в окне деплоя) в карту не попадает.
+   */
+  async entryNumbers(
+    raceId: string,
+    entryIds: readonly string[],
+    session?: DbSession,
+  ): Promise<Map<string, number>> {
+    if (entryIds.length === 0) return new Map();
+    const docs = await this.c.entries
+      .find(
+        { _id: { $in: [...entryIds] }, raceId },
+        { session, projection: { _id: 1, entryNo: 1 } },
+      )
+      .toArray();
+    return new Map(
+      docs.flatMap((doc) => (typeof doc.entryNo === 'number' ? [[doc._id, doc.entryNo]] : [])),
+    );
   }
 
   async findEntryById(id: string, session?: DbSession): Promise<RaceEntryDoc | undefined> {

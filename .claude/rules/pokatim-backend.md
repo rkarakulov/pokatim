@@ -254,7 +254,7 @@ paths:
   `NotificationErasure` (`NotificationsCoreModule`, шаг
   между `tracks` и `identity`), `AccountErasure` (`IdentityErasureModule`); push-токены — `PushTokens.revokeAllOf(tx)`
   в транзакции удаления. Новый модуль с
-  данными пользователя — порт стирания и шаг. Строка таблиц удалённого — «Участник» (A3). Финальный провал шага — лог
+  данными пользователя — порт стирания и шаг. Строка таблиц удалённого — «Участник», в таблице гонки — «Райдер #N» (A3, name-consent-prompt N7). Финальный провал шага — лог
   `account.erasure_failed user=<uid> step=<s>`, failed-набор BullMQ, регламент; экран в панели — «Сбои удаления аккаунтов» (ниже).
 
 ## «Обзор» панели (`overview`, admin-overview)
@@ -682,9 +682,9 @@ RC-A1, ADR-0019).
   коды) и дают порт чтения через `index.ts`: `ResultsNotices`, `DisputeNotices`, `RideNotices`, `RouteNotices`,
   `TicketNotices`; плюс `RaceRegistry`,
   `IdentityAccounts.liveUserIds/emailsOf`. Чужих коллекций `notifications` не читает; источники о нём не знают.
-  `profile` — источник без порта: ребро `notifications → profile` только файловое (`PROFILE_FIELD_RESET` и схема
-  `ProfileFieldReset` из `profile/index.ts`, без Nest-импорта `ProfileCoreModule`), payload самодостаточен, живость
-  получателя — `liveUserIds`; схлопывание `profile:<uid>:<field>` по `seq`, событие без `seq` — `invalid_payload`.
+  `profile` — источник без порта: `PROFILE_FIELD_RESET` и схема `ProfileFieldReset` из `profile/index.ts`, payload
+  самодостаточен, живость получателя — `liveUserIds`; Nest-импорт `ProfileCoreModule` — в `NotificationsModule` и
+  `NotificationsWorkerModule` (не в `NotificationsCoreModule`) ради порта `RIDER_NAMES` для имён «Своих» (social-p1); схлопывание `profile:<uid>:<field>` по `seq`, событие без `seq` — `invalid_payload`.
 - Маршруты объявляет подписчик: `notificationsOutboxRoutes` (15 типов → `notifications-intake`; `achievements.grant-noticed`
   — порт `ACHIEVEMENT_NOTICES`, черновик с `inApp` при `origin: 'read'` → push `skipped`/`in_app`
   (`initialDelivery(…, { inApp })`, флаг идёт и в пачку `FanoutJobData.inApp`), схлопывание `achievement:<grantId>` по
@@ -701,14 +701,20 @@ RC-A1, ADR-0019).
 - Текст — снимок сервера (`notification-texts.ts`, не `@pokatim/i18n`; исключение RC-P5 — имена достижений, уровней и
   объектов из каталога `@pokatim/i18n` `achievements.*`, заголовок `achievement_granted` — функция `achievementTitle`);
   цель — белый список типов. Второе исключение — группа «Свои» (ADR-0027 п. 6, P1): `actors` + `params`, имена — при
-  чтении списка и отправке push через `RIDER_NAMES.publicRiders` (нет публичного — «Райдер»). Expo — порт
+  чтении списка и отправке push через `RIDER_NAMES.publicRiders` (нет публичного — «Райдер»). Чистые функции группы —
+  `social-notices.ts` (`SOCIAL_NOTICE_KINDS`, `socialCollapseKey` — день события по Минску, `socialNoticeDraft` — точка
+  входа P7, `renderSocialNotice`, `socialActorIds`); `NoticeDraft.actor` → `RenderedDraft.social` →
+  `FanoutJobData.social?` → `writeRecipients` (`actors: [лицо]`, `params`) → режим накопления `writeNotices`; рендер —
+  `NotificationsService.list` (один `publicRiders` на страницу) и `contentOf` push (одно социальное — имена на момент
+  отправки, сводка — без имён); цель `rider` в документе не хранится (`null`), выводится из показанного лица. Expo — порт
   `PUSH_SENDER` (`expo-push.sender.ts`, адрес из env, в production — только `exp.host`); `PUSH_ENABLED=false` — push
   `skipped`.
 - HTTP `/v1/notifications` под `AuthGuard`, только свои (`userId` сессии в фильтре, чужое — 404); лимиты
   `notifications-read` 120/мин, `notifications-settings` 30/ч, `notifications-push-token` 30/ч → `429 RATE_LIMITED`.
   Группа «Маршруты» (`route_published`/`route_rejected`) — подресурс `GET|PUT settings/routes` (`push.routes`, только
   push; нет поля — значение `push.rides`). Группа «Достижения» (`achievement_granted`, achievements-push) — подресурс
-  `GET|PUT settings/achievements` (`push.achievements`, только push; нет поля — включено).
+  `GET|PUT settings/achievements` (`push.achievements`, только push; нет поля — включено). Группа «Свои» (social-p1) —
+  подресурс `GET|PUT settings/social` (`push.social`, только push; нет поля — включено).
   Группа «Мероприятия» — подресурс `GET|PUT settings/events` (`push.events`, `email.events`; нет поля — включено):
   `NotificationSettings` ответа строгий, новое поле сломало бы старые сборки (RC-D1); `PUT settings` — `$set`
   известных полей, не `replaceOne` (старые сборки не стирают тумблеры подресурса). Внутренний тип — `DeliverySettings`.

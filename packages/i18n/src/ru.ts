@@ -677,7 +677,12 @@ export const ru = {
   // profile-02: сменили текст `profile.show.label`/`profile.show.hint` — поднять `PUBLIC_NAME_CONSENT_VERSION` (contracts)
   'profile.show.label': 'Показывать имя в таблицах результатов',
   'profile.show.hint':
-    'Имя увидят все в таблицах результатов гонок. Выключите — вы будете «Участник».',
+    'Имя увидят все в таблицах результатов гонок. Выключите — вместо имени будет номер, например «Райдер #12».',
+  // name-consent-prompt: шит после записи на гонку (N4); переключатель и пояснение — `profile.show.*` (одна версия)
+  'profile.consent.title': 'Как вас показывать в результатах?',
+  'profile.consent.lead': 'Добавьте имя — соперники и друзья увидят вас в таблице гонки.',
+  'profile.consent.nameRequired': 'Введите имя или выключите показ',
+  'profile.consent.later': 'Не сейчас',
   'profile.save': 'Сохранить',
   'profile.saved': 'Сохранено',
   'profile.deleteAccount': 'Удалить аккаунт',
@@ -1656,6 +1661,8 @@ export const ru = {
   'races.block.unknown': 'Действие недоступно',
   'races.results.title': 'Результаты',
   'races.results.rider': 'Участник',
+  // name-consent-prompt (N7): строка без имени — номер заявки в гонке
+  'races.results.riderNo': 'Райдер #{no}',
   'races.results.you': 'Вы',
   'races.results.tiePlace': '={place}',
   'races.results.empty': 'Пока нет засчитанных результатов',
@@ -1794,7 +1801,6 @@ export const ru = {
   'disputes.title': 'Споры',
   'disputes.rival.title': 'Результат участника',
   'disputes.rival.place': '{place} место',
-  'disputes.rival.participant': 'Участник',
   'disputes.rival.profile': 'Профиль райдера',
   'disputes.rival.status': 'Предварительный',
   'disputes.rival.notFound': 'Результат не найден',
@@ -3253,6 +3259,8 @@ export const ru = {
   'admin.invite.error.PANEL_INVITATION_EMAIL_MISMATCH':
     'Приглашение отправлено на другой адрес — войдите тем аккаунтом, на который пришло письмо.',
   'admin.invite.error.PANEL_ALREADY_MEMBER': 'Вы уже в команде платформы — просто войдите.',
+  // social-p1: группа уведомлений «Свои» (K10)
+  'notifications.settings.group.social': 'Свои',
   // «Свои» P2: участники райда (K4), явка на прошедшем райде (K5), подпись стопки прошедшего (Q2)
   'rides.participants.more': {
     one: 'и ещё {count}',

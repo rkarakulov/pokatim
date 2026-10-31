@@ -128,6 +128,7 @@ export class EntriesService {
           withdrawnAt: null,
           disqualified: null,
           raceWindowStartsAt: race.windowStartsAt,
+          entryNo: race.entryAdmissions,
           version: 0,
         };
         await this.repository.insertEntry(tx, entry);

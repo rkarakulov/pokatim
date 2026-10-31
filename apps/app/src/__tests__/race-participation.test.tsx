@@ -1,5 +1,6 @@
 /// <reference types="jest" />
 import { ApiHttpError, ApiNetworkError } from '@pokatim/api-client';
+import type { ProfileView } from '@pokatim/contracts';
 import { focusManager, onlineManager } from '@tanstack/react-query';
 import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
 import { getDocumentAsync } from 'expo-document-picker';
@@ -347,6 +348,163 @@ describe('вошедший: заявка (AC2, AC3, AC15, AC16)', () => {
     expect(screen.getByText('Вы отменили участие в этой гонке')).toBeOnTheScreen();
     expect(screen.queryByRole('button', { name: 'Загрузить заезд' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Отменить участие' })).toBeNull();
+  });
+});
+
+describe('шит «Как вас показывать в результатах?» после записи (name-consent-prompt N1–N5)', () => {
+  const SHEET = 'Как вас показывать в результатах?';
+  const SHOW = 'Показывать имя в таблицах результатов';
+  const NAME = 'Как вас показывать в результатах';
+  const profile = (overrides: Partial<ProfileView> = {}): ProfileView => ({
+    rideReasons: [],
+    publicName: null,
+    showNameInResults: false,
+    club: null,
+    avatar: null,
+    publicId: null,
+    themeId: 'classic',
+    avatarUploadBlockedUntil: null,
+    ...overrides,
+  });
+  const updateProfile = jest.mocked(api.updateProfile);
+  const enter = async () => {
+    await openSignedIn();
+    await fireEvent.press(await screen.findByRole('button', { name: 'Участвовать' }));
+  };
+
+  beforeEach(() => {
+    signedIn();
+    enterRace.mockResolvedValue(myEntry());
+    jest.mocked(api.getProfile).mockResolvedValue(profile());
+  });
+
+  it('открытие карточки — шита нет; новая запись — шит, переключатель предзаполнен «вкл», запросов нет (AC1, N5)', async () => {
+    await openSignedIn();
+    await screen.findByRole('button', { name: 'Участвовать' });
+    expect(screen.queryByText(SHEET)).toBeNull();
+    await fireEvent.press(screen.getByRole('button', { name: 'Участвовать' }));
+    expect(await screen.findByText(SHEET)).toBeOnTheScreen();
+    expect(screen.getByRole('switch', { name: SHOW })).toBeChecked();
+    expect(updateProfile).not.toHaveBeenCalled();
+  });
+
+  it('«Сохранить» с именем и показом — PATCH с согласием, шит закрыт (AC1)', async () => {
+    updateProfile.mockResolvedValue(
+      profile({ publicName: 'Анна К.', showNameInResults: true, publicId: 'p'.repeat(43) }),
+    );
+    await enter();
+    await screen.findByText(SHEET);
+    await fireEvent.changeText(screen.getByLabelText(NAME), 'Анна К.');
+    await fireEvent.press(screen.getByRole('button', { name: 'Сохранить' }));
+    await waitFor(() =>
+      expect(updateProfile).toHaveBeenCalledWith(TOKEN, {
+        publicName: 'Анна К.',
+        showNameInResults: true,
+      }),
+    );
+    await waitFor(() => expect(screen.queryByText(SHEET)).toBeNull());
+  });
+
+  it('показ включён без имени — ошибка под полем, запроса нет (AC4)', async () => {
+    await enter();
+    await screen.findByText(SHEET);
+    await fireEvent.press(screen.getByRole('button', { name: 'Сохранить' }));
+    expect(await screen.findByText('Введите имя или выключите показ')).toBeOnTheScreen();
+    expect(updateProfile).not.toHaveBeenCalled();
+  });
+
+  it('«Не сейчас» — шит закрыт, согласия нет, пауза на устройстве (AC2)', async () => {
+    await enter();
+    await screen.findByText(SHEET);
+    // «Не сейчас» есть и у подсказки push под шитом — нажимаем в шите
+    const sheet = within(screen.getByTestId('name-consent-sheet'));
+    await fireEvent.press(sheet.getByRole('button', { name: 'Не сейчас' }));
+    await waitFor(() => expect(screen.queryByText(SHEET)).toBeNull());
+    expect(updateProfile).not.toHaveBeenCalled();
+    const store = jest.requireMock<{ __store: Map<string, string> }>('expo-secure-store').__store;
+    await waitFor(() =>
+      expect(JSON.parse(store.get('pokatim.nameConsentPrompt') ?? '{}')).toEqual({
+        snoozedAt: expect.any(Number),
+      }),
+    );
+  });
+
+  const secureStore = () =>
+    jest.requireMock<{ __store: Map<string, string> }>('expo-secure-store').__store;
+  /** Запись прошла, профиль запрошен и ответ разобран — решение о шите принято. */
+  const enteredAndDecided = async () => {
+    await enter();
+    expect(await screen.findByText('Ваше участие')).toBeOnTheScreen();
+    await waitFor(() => expect(api.getProfile).toHaveBeenCalled());
+    await act(async () => undefined);
+  };
+
+  it('имя уже показывается — шита нет (AC3)', async () => {
+    jest
+      .mocked(api.getProfile)
+      .mockResolvedValue(profile({ publicName: 'Анна К.', showNameInResults: true }));
+    await enteredAndDecided();
+    expect(screen.queryByText(SHEET)).toBeNull();
+  });
+
+  it('пауза меньше 90 дней — шита нет (AC3, N3)', async () => {
+    secureStore().set(
+      'pokatim.nameConsentPrompt',
+      JSON.stringify({ snoozedAt: NOW.getTime() - 89 * 24 * 60 * 60 * 1000 }),
+    );
+    await enteredAndDecided();
+    expect(screen.queryByText(SHEET)).toBeNull();
+  });
+
+  it('профиль не загрузился — шита нет, ошибки на экране нет (AC3)', async () => {
+    jest.mocked(api.getProfile).mockRejectedValue(new ApiNetworkError(new Error('offline')));
+    await enteredAndDecided();
+    expect(screen.queryByText(SHEET)).toBeNull();
+  });
+
+  it('«Сохранить» с выключенным показом — PATCH без согласия и пауза (AC2)', async () => {
+    updateProfile.mockResolvedValue(profile({ publicName: 'Анна К.' }));
+    await enter();
+    await screen.findByText(SHEET);
+    await fireEvent.changeText(screen.getByLabelText(NAME), 'Анна К.');
+    await fireEvent.press(screen.getByRole('switch', { name: SHOW }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Сохранить' }));
+    await waitFor(() =>
+      expect(updateProfile).toHaveBeenCalledWith(TOKEN, {
+        publicName: 'Анна К.',
+        showNameInResults: false,
+      }),
+    );
+    await waitFor(() => expect(screen.queryByText(SHEET)).toBeNull());
+    await waitFor(() => expect(secureStore().get('pokatim.nameConsentPrompt')).toBeDefined());
+  });
+
+  it('закрытие затемнением — как «Не сейчас»; во время сохранения — не закрывается (N5)', async () => {
+    let resolve: (view: ProfileView) => void = () => undefined;
+    updateProfile.mockReturnValue(new Promise((r) => (resolve = r)));
+    await enter();
+    await screen.findByText(SHEET);
+    await fireEvent.changeText(screen.getByLabelText(NAME), 'Анна К.');
+    await fireEvent.press(screen.getByRole('button', { name: 'Сохранить' }));
+    await waitFor(() => expect(updateProfile).toHaveBeenCalled());
+    await fireEvent.press(
+      screen.getByTestId('name-consent-sheet-scrim', { includeHiddenElements: true }),
+    );
+    expect(screen.getByText(SHEET)).toBeOnTheScreen();
+    expect(secureStore().get('pokatim.nameConsentPrompt')).toBeUndefined();
+    await act(async () => resolve(profile({ publicName: 'Анна К.', showNameInResults: true })));
+    await waitFor(() => expect(screen.queryByText(SHEET)).toBeNull());
+  });
+
+  it('затемнение без сохранения — шит закрыт, пауза, запросов нет (AC2)', async () => {
+    await enter();
+    await screen.findByText(SHEET);
+    await fireEvent.press(
+      screen.getByTestId('name-consent-sheet-scrim', { includeHiddenElements: true }),
+    );
+    await waitFor(() => expect(screen.queryByText(SHEET)).toBeNull());
+    expect(updateProfile).not.toHaveBeenCalled();
+    await waitFor(() => expect(secureStore().get('pokatim.nameConsentPrompt')).toBeDefined());
   });
 });
 

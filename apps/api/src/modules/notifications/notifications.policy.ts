@@ -4,6 +4,7 @@ import {
   DEFAULT_EVENT_NOTIFICATION_SETTINGS,
   DEFAULT_NOTIFICATION_SETTINGS,
   DEFAULT_ROUTE_NOTIFICATION_SETTINGS,
+  DEFAULT_SOCIAL_NOTIFICATION_SETTINGS,
   minskWallTimeToUtc,
   NOTIFICATION_GROUPS,
   type NotificationGroup,
@@ -44,7 +45,7 @@ export const NOTIFICATIONS_POLICY = {
 
 // группы — из справочника контракта: строковый литерал группы споров совпал бы с именем коллекции споров (сторож
 // `disputes.repository.test.ts`)
-const [RACES, DISPUTES, RIDES, EVENTS, ROUTES, ACHIEVEMENTS] = NOTIFICATION_GROUPS;
+const [RACES, DISPUTES, RIDES, EVENTS, ROUTES, ACHIEVEMENTS, SOCIAL] = NOTIFICATION_GROUPS;
 
 const KIND_GROUPS: Record<NotificationKind, NotificationGroup> = {
   result_counted: RACES,
@@ -69,6 +70,12 @@ const KIND_GROUPS: Record<NotificationKind, NotificationGroup> = {
   profile_avatar_reset: RIDES,
   profile_club_reset: RIDES,
   achievement_granted: ACHIEVEMENTS,
+  social_riders_going: SOCIAL,
+  social_thanks: SOCIAL,
+  social_added: SOCIAL,
+  social_respect: SOCIAL,
+  social_invite_registered: SOCIAL,
+  social_ride_ask: SOCIAL,
 };
 
 /** Группа настроек события (N4). */
@@ -86,12 +93,15 @@ export const EMAIL_KINDS: ReadonlySet<NotificationKind> = new Set([
 /**
  * Настройки доставки (внутренний тип): основные `NotificationSettings` + тумблеры группы «Мероприятия»
  * (`push.events`, `email.events` — подресурс настроек, RC-D1; нет поля — включено), «Маршруты» (`push.routes`, только
- * push; нет поля — значение `push.rides`) и «Достижения» (`push.achievements`, только push; нет поля — включено, P4).
- * Хранятся в одном документе.
+ * push; нет поля — значение `push.rides`), «Достижения» (`push.achievements`, только push; нет поля — включено, P4) и
+ * «Свои» (`push.social`, только push; нет поля — включено, social-p1). Хранятся в одном документе.
  */
 export interface DeliverySettings {
   push: Record<NotificationGroup, boolean>;
-  email: Record<Exclude<NotificationGroup, 'races' | 'routes' | 'achievements'>, boolean>;
+  email: Record<
+    Exclude<NotificationGroup, 'races' | 'routes' | 'achievements' | 'social'>,
+    boolean
+  >;
   quietHours: NotificationSettings['quietHours'];
 }
 
@@ -102,6 +112,7 @@ export const DEFAULT_DELIVERY_SETTINGS: DeliverySettings = {
     events: DEFAULT_EVENT_NOTIFICATION_SETTINGS.push,
     routes: DEFAULT_ROUTE_NOTIFICATION_SETTINGS.push,
     achievements: DEFAULT_ACHIEVEMENT_NOTIFICATION_SETTINGS.push,
+    social: DEFAULT_SOCIAL_NOTIFICATION_SETTINGS.push,
   },
   email: {
     ...DEFAULT_NOTIFICATION_SETTINGS.email,
@@ -160,7 +171,13 @@ export function initialDelivery(
     sentAt: null,
     reason,
   };
-  if (!EMAIL_KINDS.has(kind) || group === RACES || group === ROUTES || group === ACHIEVEMENTS)
+  if (
+    !EMAIL_KINDS.has(kind) ||
+    group === RACES ||
+    group === ROUTES ||
+    group === ACHIEVEMENTS ||
+    group === SOCIAL
+  )
     return { push, email: null };
   return {
     push,
