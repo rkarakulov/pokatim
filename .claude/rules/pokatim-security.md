@@ -231,7 +231,9 @@ paths:
   `@IpRateLimit`, `consumeIpLimit` в `src/public-read.guard.ts`; 429 + `Retry-After`), `public, max-age=60`. Файл
   посчитан worker'ом (`routeGpx`: только `trkpt lat lon` и `ele` точек линии сверки — без `time`, датчиков,
   `name`/`desc`, `metadata`, `extensions` исходника; `routeKml` — одна `LineString`; `routeTcx` — курс `Name=Pokatim` с
-  условным временем; в файлах только числа); API экспорт не разбирает. KML/TCX нет у экспорта `derivedVersion` 1 — 404. Заголовки файла — только у 200:
+  условным временем; в файлах только числа); API экспорт не разбирает (route-exports-gzip: хранится gzip —
+  отдаётся с `Content-Encoding: gzip` или распаковывается `gunzip` с `maxOutputLength` = `exportMaxBytes`, лог сбоя —
+  без текста ошибки). KML/TCX нет у экспорта `derivedVersion` 1 — 404. Заголовки файла — только у 200:
   `ROUTE_EXPORT_CONTENT_TYPES` (`application/gpx+xml`, KML, TCX), `Content-Disposition: attachment` с ASCII-fallback и `filename*` RFC 5987
   (`routeFileName`/`routeContentDisposition`: без `\p{Cc}`/`\p{Cf}` — bidi-подмена расширения, без `\/:*?"<>|`, ≤ 80 кодовых точек),
   `X-Content-Type-Options: nosniff`, `Content-Security-Policy: default-src 'none'; sandbox`. Раскрывает то же, что
@@ -281,9 +283,11 @@ paths:
   4 приёмов на процесс API и **1 на пользователя** (второй одновременный — `429 RATE_LIMITED`, `retryAfterSec: 5`, до
   чтения тела); слот освобождается в `finally` обработчика при любом исходе (успех, 4xx, таймаут, обрыв). Слоты — в
   памяти процесса (Redis-слоты между процессами — нет).
-- `readLimited` (все три загрузки, включая панель): тишина между порциями тела дольше 30 с или всё тело дольше 180 с —
+- `readLimited` (все загрузки: заезды, мои маршруты, маршруты панели, аватар, PDF материалов): тишина между порциями тела дольше 30 с или всё тело дольше 180 с —
   `408 VALIDATION_FAILED` `{ fields: [{ path: 'body', code: 'INVALID' }] }`; остаток тела сливается без хранения,
-  ответ — `Connection: close`. Таймауты — `DEFAULT_BODY_TIMEOUTS` (`raw-body.ts`), в политиках модулей —
+  ответ — `Connection: close`. Закрытие после отказа — lingering close (`lingerOnClose`): FIN после ответа, приём
+  сливается до конца тела, FIN клиента или `LINGER_MS` (5 с), затем `destroy` (иначе хвост тела давал RST, и клиент
+  получал обрыв вместо 413/408). Таймауты — `DEFAULT_BODY_TIMEOUTS` (`raw-body.ts`), в политиках модулей —
   `bodyTimeouts`.
 
 ## Кофе-райды (блок 05, ADR-0013 Proposed)
@@ -356,9 +360,11 @@ paths:
   только при имени и согласии (`RIDER_PROFILES.findPublic`), иначе один 404; без записи. Только `race_*` — маршруты и
   райды личные (A7).
 - Наружу — явный список полей (ключи держит `achievements.int.test.ts`): `code`, `object { kind, id, title }`,
-  `factDate` (день по Минску, без времени суток — RC-7), свой — ещё `seen`; без `userId`, id выдачи, `grantedAt`,
-  `revokedAt`. Названия маршрутов — только видимых райдеру (RC-4). Логи — `uid`, флаг `first` и счётчики; без кодов
-  объектов, названий и `publicId`.
+  `factDate` (день по Минску, без времени суток — RC-7), `level`, свой — ещё `seen`; свой список — `items` и
+  `progress` (`{ code, level, current, target }`, только свой — в публичном ответе и на карточке нет); без `userId`,
+  id выдачи, `grantedAt`, `revokedAt`, `seenLevel`. Клиент на уровень не влияет: `POST seen` — только коды, уровень —
+  из документа в атомарной операции. Названия маршрутов — только видимых райдеру (RC-4). Логи — `uid`, флаг `first` и счётчики; без кодов
+  объектов, названий, уровней и `publicId`.
 
 ## Модерация профиля (profile-moderation)
 

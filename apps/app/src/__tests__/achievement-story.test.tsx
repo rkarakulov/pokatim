@@ -34,12 +34,14 @@ const win: Achievement = {
   code: 'race_win',
   object: { kind: 'race', id: RACE_ID, title: 'Гонка у озера' },
   factDate: '2026-05-02',
+  level: null,
   seen: true,
 };
 const route: Achievement = {
   code: 'route_first',
   object: { kind: 'route', id: RACE_ID, title: 'Петля' },
   factDate: '2026-04-01',
+  level: null,
   seen: true,
 };
 
@@ -57,7 +59,7 @@ const open = (url: string) =>
 beforeEach(() => {
   useSessionStore.setState({ status: 'signedIn', session: liveSession });
   useOnboardingStore.setState({ survey: 'completed', location: 'done', devices: 'done' });
-  listAchievements.mockResolvedValue({ items: [win, route] });
+  listAchievements.mockResolvedValue({ progress: [], items: [win, route] });
   jest
     .mocked(api.storyCardImageUrl)
     .mockImplementation((token) => `https://api.test/v1/story-cards/${token}.png`);

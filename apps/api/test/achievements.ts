@@ -5,7 +5,7 @@ import { DAY, type Harness } from './harness';
 import { routeRidesDb } from './route-rides';
 import { resultsDb } from './results';
 import { createRide, join, type Rider, ridesDb } from './rides';
-import { type SeedRow, seedProtocolRace } from './standings';
+import { placedRow, type SeedRow, seedProtocolRace } from './standings';
 import { tracks } from './tracks';
 
 /** Коллекции модуля `achievements` тестовой БД. */
@@ -131,4 +131,22 @@ export async function pastRide(
   }
   await ridesDb(h).updateOne({ _id: ride.id }, { $set: { startsAt: daysAgo(h, daysBack) } });
   return ride.id;
+}
+
+/**
+ * `n` гонок «в зачёте» (место 5) по одной в день: первая — `fromDaysAgo` дней назад, следующие — на день позже.
+ * Возвращает id гонок по дате.
+ */
+export async function racesAt(
+  h: Harness,
+  seasonId: string,
+  userId: string,
+  n: number,
+  fromDaysAgo: number,
+): Promise<string[]> {
+  const ids: string[] = [];
+  for (let k = 0; k < n; k += 1) {
+    ids.push(await raceAt(h, seasonId, [placedRow(userId, 5)], daysAgo(h, fromDaysAgo - k)));
+  }
+  return ids;
 }

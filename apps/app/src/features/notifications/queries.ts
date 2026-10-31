@@ -3,6 +3,7 @@ import type {
   EventNotificationSettingsView,
   NotificationPage,
   NotificationSettings,
+  RouteNotificationSettingsView,
 } from '@pokatim/contracts';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
@@ -26,6 +27,7 @@ export const unreadCountKey = ['notifications', 'unread'] as const;
 const listKey = ['notifications', 'list', 'pages'] as const;
 const settingsKey = ['notifications', 'settings'] as const;
 const eventSettingsKey = ['notifications', 'settings', 'events'] as const;
+const routeSettingsKey = ['notifications', 'settings', 'routes'] as const;
 
 /** Счётчик колокольчика: только у вошедшего, опрос 60 с и при возврате фокуса. */
 export function useUnreadCount() {
@@ -94,19 +96,25 @@ export function useNotificationSettings() {
   });
 }
 
-/** Сохранение полного объекта настроек; ответ сервера — в кеш. */
+/**
+ * Сохранение полного объекта настроек; ответ сервера — в кеш. «Маршруты» без своего тумблера наследуют «Райды»
+ * (сервер) — их запрос перечитывается.
+ */
 export function useUpdateNotificationSettings() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (settings: NotificationSettings) =>
       withAccessToken((accessToken) => api.updateNotificationSettings(accessToken, settings)),
     networkMode: 'always',
-    onSuccess: (saved) => queryClient.setQueryData(settingsKey, saved),
+    onSuccess: (saved) => {
+      queryClient.setQueryData(settingsKey, saved);
+      void queryClient.invalidateQueries({ queryKey: routeSettingsKey });
+    },
   });
 }
 
-/** Старый API без подресурса «Мероприятия» — `404`: группу не показываем. */
-export const isEventSettingsMissing = (error: unknown) =>
+/** Старый API без подресурса группы («Мероприятия», «Маршруты») — `404`: группу не показываем. */
+export const isSettingsResourceMissing = (error: unknown) =>
   error instanceof ApiHttpError && error.status === 404;
 
 /** Тумблеры «Мероприятия» — подресурс (RC-D1); нет сохранённых — включено. */
@@ -115,7 +123,7 @@ export function useEventNotificationSettings() {
     queryKey: eventSettingsKey,
     queryFn: () => withAccessToken((accessToken) => api.getEventNotificationSettings(accessToken)),
     staleTime: DEFAULT_STALE_MS,
-    retry: (count, error) => !isEventSettingsMissing(error) && count < 2,
+    retry: (count, error) => !isSettingsResourceMissing(error) && count < 2,
   });
 }
 
@@ -127,5 +135,27 @@ export function useUpdateEventNotificationSettings() {
       withAccessToken((accessToken) => api.updateEventNotificationSettings(accessToken, settings)),
     networkMode: 'always',
     onSuccess: (saved) => queryClient.setQueryData(eventSettingsKey, saved),
+  });
+}
+
+/** Тумблер «Маршруты» — подресурс, только push; запрос — только на платформе с push (`enabled`). */
+export function useRouteNotificationSettings({ enabled }: { enabled: boolean }) {
+  return useQuery({
+    queryKey: routeSettingsKey,
+    queryFn: () => withAccessToken((accessToken) => api.getRouteNotificationSettings(accessToken)),
+    staleTime: DEFAULT_STALE_MS,
+    enabled,
+    retry: (count, error) => !isSettingsResourceMissing(error) && count < 2,
+  });
+}
+
+/** Сохранение тумблера «Маршруты»; ответ сервера — в кеш. */
+export function useUpdateRouteNotificationSettings() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (settings: RouteNotificationSettingsView) =>
+      withAccessToken((accessToken) => api.updateRouteNotificationSettings(accessToken, settings)),
+    networkMode: 'always',
+    onSuccess: (saved) => queryClient.setQueryData(routeSettingsKey, saved),
   });
 }

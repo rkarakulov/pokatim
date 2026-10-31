@@ -1,6 +1,8 @@
 import type { AchievementCode, AchievementObjectKind } from '@pokatim/contracts';
 import type { Collection, Db } from 'mongodb';
 
+import type { LevelRank } from './achievements.policy';
+
 /**
  * Коллекции модуля `achievements` — выдачи достижений, производная проекция фактов (`results`, `route-rides`,
  * `rides`), ADR-0020. Создаёт миграция `0035_achievements`; единственный писатель — `AchievementsRepository`. Не
@@ -26,6 +28,10 @@ export interface AchievementGrantDoc {
   seenAt: Date | null;
   /** факт пропал — скрыто из списка, вспышки и публичного профиля (A4) */
   revokedAt: Date | null;
+  /** ранг уровня счётного (1–3), пересчитывается сверкой; разовые — `null`; нет у документов v1 — ≡ 1 */
+  level?: LevelRank | null;
+  /** наибольший показанный ранг (монотонен, `$max`); нет у документов v1 — ≡ 1 (L3) */
+  seenLevel?: LevelRank | null;
   updatedAt: Date;
 }
 

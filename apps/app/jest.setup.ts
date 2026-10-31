@@ -11,6 +11,7 @@ import type * as ReactNative from 'react-native';
 import type * as RegistrationStore from './src/features/auth/registration-store';
 import type * as OnboardingStore from './src/features/onboarding/onboarding-store';
 import type * as SessionStore from './src/features/auth/session-store';
+import type * as PushSoftPromptStore from './src/features/notifications/push-soft-prompt-store';
 
 // в jest нет Keychain: in-memory хранилище; тесты читают его через jest.requireMock('expo-secure-store').__store
 jest.mock('expo-secure-store', () => {
@@ -249,4 +250,10 @@ beforeEach(() => {
   jest
     .requireActual<typeof OnboardingStore>('./src/features/onboarding/onboarding-store')
     .resetOnboardingStore();
+  // подсказка push — один показ за запуск: каждый тест — новый запуск
+  jest
+    .requireActual<typeof PushSoftPromptStore>(
+      './src/features/notifications/push-soft-prompt-store',
+    )
+    .resetPushSoftPrompt();
 });

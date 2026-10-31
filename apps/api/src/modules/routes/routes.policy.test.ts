@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  acceptsGzip,
   canPublish,
   type PublicationAction,
   publicationTransition,
@@ -9,6 +10,7 @@ import {
   routeContentDisposition,
   routeExportFormats,
   routeFileName,
+  varyWith,
 } from './routes.policy';
 import type { RoutePublicationDoc } from './routes.collection';
 
@@ -175,5 +177,41 @@ describe('canPublish (routes-06)', () => {
     expect(ROUTE_POLICY.reportLimit).toEqual({ limit: 20, windowSec: 86_400 });
     expect(ROUTE_POLICY.maxPendingPublications).toBe(3);
     expect(ROUTE_POLICY.maxSubmissionsPerRoute).toBe(3);
+  });
+});
+
+describe('acceptsGzip (route-exports-gzip, AC6)', () => {
+  it.each<[string | undefined, boolean]>([
+    [undefined, false],
+    ['', false],
+    ['gzip', true],
+    ['GZip', true],
+    ['x-gzip', true],
+    ['deflate, gzip', true],
+    ['gzip;q=0.5', true],
+    ['*', true],
+    ['br;q=1, *;q=0.1', true],
+    ['gzip;q=0', false],
+    ['gzip;q=0.000', false],
+    ['gzip;q=0, *', false],
+    ['identity', false],
+    ['br, deflate', false],
+    ['*;q=0', false],
+    ['gzip;q=abc', false],
+  ])('%j → %s', (header, expected) => {
+    expect(acceptsGzip(header)).toBe(expected);
+  });
+});
+
+describe('varyWith (route-exports-gzip: Vary: Origin от CORS не затирается)', () => {
+  it.each<[string | string[] | number | undefined, string]>([
+    [undefined, 'Accept-Encoding'],
+    ['', 'Accept-Encoding'],
+    ['Origin', 'Origin, Accept-Encoding'],
+    [['Origin', 'Cookie'], 'Origin, Cookie, Accept-Encoding'],
+    ['origin, accept-encoding', 'origin, accept-encoding'],
+    ['*', '*'],
+  ])('%j → %s', (current, expected) => {
+    expect(varyWith(current, 'Accept-Encoding')).toBe(expected);
   });
 });

@@ -36,6 +36,8 @@ import {
   NotificationSettings,
   EventNotificationSettingsView,
   type UpdateEventNotificationSettings,
+  RouteNotificationSettingsView,
+  type UpdateRouteNotificationSettings,
   type RegisterPushToken,
   type RevokePushToken,
   type RegisterWebPushSubscription,
@@ -1042,6 +1044,20 @@ export function createApiClient({
       request(
         '/v1/notifications/settings/events',
         EventNotificationSettingsView,
+        authorized(accessToken, { method: 'PUT', body: JSON.stringify(body), ...withCredentials }),
+      ),
+    /** Тумблер группы «Маршруты» (подресурс, только push); нет сохранённого — значение «Райдов». */
+    getRouteNotificationSettings: (accessToken: string) =>
+      request(
+        '/v1/notifications/settings/routes',
+        RouteNotificationSettingsView,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /** Замена тумблера «Маршруты»; ответ — сохранённый. */
+    updateRouteNotificationSettings: (accessToken: string, body: UpdateRouteNotificationSettings) =>
+      request(
+        '/v1/notifications/settings/routes',
+        RouteNotificationSettingsView,
         authorized(accessToken, { method: 'PUT', body: JSON.stringify(body), ...withCredentials }),
       ),
     /** Регистрация или обновление push-токена этого устройства; `204`. */

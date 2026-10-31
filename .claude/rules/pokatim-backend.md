@@ -54,7 +54,11 @@ paths:
   `routes/:id/{gpx,kml,tcx}` (общий `sendExport`) — `IpRateLimitGuard` +
   `@IpRateLimit('route-gpx', ROUTE_POLICY.exportIpLimit)` после класс-гарда,
   байты `route_exports`, заголовки файла через `HttpAdapterHost` после чтения (Nest пишет `@Header` до обработчика —
-  404 с типом файла не сериализовался бы). Общий IP-лимит метода — `consumeIpLimit`/`IpRateLimitGuard` в
+  404 с типом файла не сериализовался бы). Сжатие (route-exports-gzip): `@Headers('accept-encoding')` →
+  `acceptsGzip` (`routes.policy.ts`) → `RoutesPublicService.exportFile(id, format, acceptGzip)`: хранится gzip и клиент
+  принимает — байты как есть + `Content-Encoding: gzip`; не принимает — `gunzip` ≤ `ROUTE_POLICY.exportMaxBytes`
+  (распаковка своих данных, не разбор и не сборка; сбой — лог `routeId`/формат/класс ошибки, 500); старый несжатый
+  документ — как есть. `Vary: Accept-Encoding` — у каждого 200. Глобального `@fastify/compress` нет. Общий IP-лимит метода — `consumeIpLimit`/`IpRateLimitGuard` в
   `src/public-read.guard.ts` (им же пользуется `PublicReadGuard`).
 - Очередь `routes-maintenance` (routes-03, `RoutesWorkerModule`): `RoutesSchedules` — расписание `routes.maintenance`
   каждые 10 мин + разовая `routes.derive.boot` при старте worker; `RoutesMaintenanceProcessor` → `RouteDerivedBackfill.run`
@@ -340,16 +344,22 @@ paths:
   и лог `achievements.{rides,route_rides}_truncated`. Предикат «в зачёте» — общий `isRankedRow` (`results/index.ts`,
   RC-9: им же считает `riders.policy.summarize`). Копий условий и второго расчёта мест в `achievements` нет.
 - Правила и план — чистые функции `achievements.policy.ts`: `ACHIEVEMENT_RULES` (`satisfies Record<AchievementCode,
-  …>` — новый код без правила не скомпилируется), `earnedAchievements` (факты по времени ↑, при равенстве — id ↑),
-  `raceAchievements` (публичный список — те же правила), `reconcilePlan`, `sortForList` (факт ↓, равенство — каталог
-  ↓), `ACHIEVEMENTS_POLICY` (лимиты).
+  …>` — новый код без правила не скомпилируется), `evaluateAchievements` (одна сортировка фактов: по времени ↑, при
+  равенстве — id ↑ → `earned` + `progress`), `earnedAchievements` (= `.earned`), `raceAchievements` (публичный список —
+  те же правила, с уровнем `races_5`), `reconcilePlan`, `sortForList` (факт ↓, равенство — каталог ↓),
+  `ACHIEVEMENTS_POLICY` (лимиты). Уровни: пороги — только `ACHIEVEMENT_LEVEL_TARGETS` из контрактов (своих констант
+  нет); `LEVELED_FACTS` — источник счёта счётного кода для правила и прогресса (второго счёта нет); правило — наибольший
+  ранг, объект и дата — факт порога; `Earned.level` (ранг, разовые — `null`), `levelName` (ранг → строка),
+  `storedRank`, `isSeen(grant, level)` (`seenAt != null && seenLevel >= level`, `null` ≡ 1); `refresh` — и при
+  другом ранге.
 - Сверка — в `GET /v1/achievements` (`AchievementsService.sync`): лимит `achievements-read:<uid>` 60/мин → факты
   параллельно → `reconcilePlan` (insert — первая сверка `seenAt = now`; restore — `seenAt` не трогать; refresh;
   revoke) → по одной условной операции на код без транзакции (вставка — `isDuplicateKey` уникального индекса) →
   **только после выдач** — маркер первой сверки (RC-1) → ответ: перечитанные видимые ∩ заработанные (название и дата —
-  из фактов запроса). Лог `achievements.sync uid first granted revoked restored` — только если план не пуст.
-  `POST /v1/achievements/seen` — лимит `achievements-seen:<uid>` 120/ч, `updateMany` своих видимых непросмотренных,
-  сверку не запускает. Публично — `AchievementsPublicController` (`riders/:publicId/achievements`, `PublicReadGuard`)
+  из фактов запроса; `level` — из фактов запроса, `seen` — `isSeen` по уровню ответа, не сохранённому, RC-L10;
+  `progress` — из той же `Evaluation`). Лог `achievements.sync uid first granted revoked restored refreshed` — только
+  если план не пуст. `POST /v1/achievements/seen` — лимит `achievements-seen:<uid>` 120/ч, `updateMany` pipeline своих
+  видимых с непоказанным уровнем (`seenLevel = max(seenLevel, level)` из документа), сверку не запускает. Публично — `AchievementsPublicController` (`riders/:publicId/achievements`, `PublicReadGuard`)
   → `publicList`: `findPublic` (нет — 404) → `raceAchievements` → без записи.
 
 ## Карточки для сторис (`sharing`, story-cards, ADR-0018)
@@ -377,7 +387,10 @@ paths:
   `AchievementCardService` → `AchievementCardInputs` (порт `achievements` `ACHIEVEMENTS_FOR_SHARING.cardFacts` — факты
   ∩ не отозванная выдача, без записи; маршрут — название только из `ROUTES_FOR_SHARING.ogFacts`) → `CardRequests` →
   задача `achievement-card.render` → `buildAchievementCard` → `achievementCardTree` (значок — глиф Material Symbols,
-  `achievement-card.icons.ts` — зеркало иконок каталога приложения). `SharingModule`/`SharingWorkerModule` импортируют
+  `achievement-card.icons.ts` — зеркало иконок каталога приложения; число — `badgeCount(code, level)` из
+  `ACHIEVEMENT_LEVEL_TARGETS`). Порт отдаёт `level` (строка или `null`); уровень — в `achievementCardHash` явно после
+  кода; тексты — метка уровня в kicker (`achievementCard.kickerLevel`), условие с `{count}` порога; сменил строки или
+  вёрстку — подними `STORY_CARD_POLICY.renderVersion` (сейчас 3). `SharingModule`/`SharingWorkerModule` импортируют
   `AchievementsReadModule`.
 - Карточка маршрута каталога (route-story-card): `RouteCardController` (`GET routes/:routeId/story-card`, `AuthGuard`,
   `no-store`) → `RouteCardService` (не в каталоге — 404) → `RouteCardInputs` (`ROUTES_FOR_SHARING.ogFacts`/`ogLine`,
@@ -551,7 +564,12 @@ RC-A1, ADR-0019).
   получателя — `liveUserIds`; схлопывание `profile:<uid>:<field>` по `seq`, событие без `seq` — `invalid_payload`.
 - Маршруты объявляет подписчик: `notificationsOutboxRoutes` (14 типов → `notifications-intake`; `tickets.reminder-due` — получателю своя цель `ticket` через `NoticeDraft.targets`). Очереди:
   `notifications-intake` (событие → получатели → настройки → upsert; > 72 ч — skip; уникальность `(sourceEventId,
-  userId)`, схлопывание `collapseKey`), `notifications-delivery` (`notifications.push` по пользователю — захват,
+  userId)`, схлопывание `collapseKey`; аудитория > `NOTIFICATIONS_POLICY.fanoutChunk` (200) — задачи-пачки
+  `notifications.fanout` той же очереди: `planFanout` (`notification-fanout.ts`) → план в данных задачи intake
+  (`job.updateData`, `IntakeJobData.fanout`; есть — порты не зовутся) → `FanoutJobs.enqueue` — `FlowProducer.addBulk`
+  (MULTI; `Queue.addBulk` — pipeline), опции — `defaultJobOptions` очереди явно; MULTI не гарантирует успеха команд —
+  каждый jobId проверяется `getJob`, недостающие — ещё раз, нет — исключение; пачка: 72 ч, общая `writeRecipients`,
+  `scheduleEvent(eventId, userIds)`, последняя попытка — лог `notifications.fanout_failed`), `notifications-delivery` (`notifications.push` по пользователю — захват,
   тумблер, тихие часы, лимит 20/ч, сводка; `notifications.email` — только N2), `notifications-maintenance`
   (`receipts` */15 — `DeviceNotRegistered` снимает токен; `redeliver` */10).
 - Текст — снимок сервера (`notification-texts.ts`, не `@pokatim/i18n`); цель — белый список типов. Expo — порт
@@ -559,6 +577,8 @@ RC-A1, ADR-0019).
   `skipped`.
 - HTTP `/v1/notifications` под `AuthGuard`, только свои (`userId` сессии в фильтре, чужое — 404); лимиты
   `notifications-read` 120/мин, `notifications-settings` 30/ч, `notifications-push-token` 30/ч → `429 RATE_LIMITED`.
+  Группа «Маршруты» (`route_published`/`route_rejected`) — подресурс `GET|PUT settings/routes` (`push.routes`, только
+  push; нет поля — значение `push.rides`).
   Группа «Мероприятия» — подресурс `GET|PUT settings/events` (`push.events`, `email.events`; нет поля — включено):
   `NotificationSettings` ответа строгий, новое поле сломало бы старые сборки (RC-D1); `PUT settings` — `$set`
   известных полей, не `replaceOne` (старые сборки не стирают тумблеры подресурса). Внутренний тип — `DeliverySettings`.

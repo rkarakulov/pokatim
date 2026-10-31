@@ -184,6 +184,7 @@ Architect review: **CONCERNS** (блокеров нет). Миграция не 
   API отдаёт с `Content-Encoding: gzip`/распаковывает) — сжатие ×8–10; (c) KML/TCX только маршрутам каталога —
   ломает инвариант версии и требует пересчёта при публикации. **Рекомендация: (a)** сейчас (прода нет, объёмы малы),
   (b) — follow-up при росте; `sizeBytes` документа экспорта — сумма трёх файлов (диагностика), не только GPX.
+  **(b) — сделано в route-exports-gzip** (`docs/tasks/2026-10-30-route-exports-gzip/task.md`).
 - **RC-8 (выбор формата в приложении).** В `@rkarakulov/ui` нет ActionSheet/Menu; `SegmentedControl` — переключатель
   состояния/фильтра, не действие. Есть `components/modal-sheet.tsx` (`ModalSheet`, образец — `features/rides/
   ride-published-sheet.tsx`). **Решение:** доступен один формат (маршрут версии 1 до бэкфилла, старый API) — прежняя

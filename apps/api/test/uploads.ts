@@ -5,6 +5,7 @@ import { vi } from 'vitest';
 import { UploadSlots } from '../src/upload-slots';
 import type { Harness } from './harness';
 import type { UploadResult } from './tracks';
+import { waitUntil } from './wait';
 
 /**
  * Загрузка с удерживаемым телом (upload-limits-kml-panel): тело — поток, обработчик читает его, пока тест не вызовет
@@ -34,7 +35,7 @@ export function heldUpload(
   return {
     /** Запрос получил слот и читает тело. */
     held: () =>
-      vi.waitFor(() => {
+      waitUntil(() => {
         const result = acquire.mock.results[calls];
         if (result?.type !== 'return' || result.value === null) throw new Error('slot not taken');
       }),

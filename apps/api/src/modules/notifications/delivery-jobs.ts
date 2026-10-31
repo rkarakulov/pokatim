@@ -40,9 +40,12 @@ export class DeliveryJobs {
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
-  /** Задачи по уведомлениям события в `pending` (после записи intake). Возвращает число поставленных. */
-  async scheduleEvent(sourceEventId: string): Promise<number> {
-    const pending = await this.repository.pendingDeliveriesOf(sourceEventId);
+  /**
+   * Задачи по уведомлениям события в `pending` (после записи intake); `userIds` — только получатели пачки. Возвращает
+   * число поставленных.
+   */
+  async scheduleEvent(sourceEventId: string, userIds?: readonly string[]): Promise<number> {
+    const pending = await this.repository.pendingDeliveriesOf(sourceEventId, userIds);
     let scheduled = 0;
     for (const doc of pending) {
       if (doc.push.state === 'pending') {

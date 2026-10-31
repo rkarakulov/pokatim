@@ -1,4 +1,4 @@
-import { Controller, Get, Header, Param, Query, Res, UseGuards } from '@nestjs/common';
+import { Controller, Get, Header, Headers, Param, Query, Res, UseGuards } from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
 import {
   type CatalogRouteCities,
@@ -19,7 +19,13 @@ import {
   PublicReadGuard,
 } from '../../public-read.guard';
 import { RoutesPublicService } from './routes-public.service';
-import { ROUTE_EXPORT_CONTENT_TYPES, ROUTE_POLICY, routeContentDisposition } from './routes.policy';
+import {
+  acceptsGzip,
+  ROUTE_EXPORT_CONTENT_TYPES,
+  ROUTE_POLICY,
+  routeContentDisposition,
+  varyWith,
+} from './routes.policy';
 
 const idPipe = new ZodValidationPipe(Uuid, FieldErrorCode);
 
@@ -69,9 +75,10 @@ export class RoutesPublicController {
   @Header('Cache-Control', PUBLIC_READ_CACHE_CONTROL)
   gpx(
     @Param('id', idPipe) id: string,
+    @Headers('accept-encoding') acceptEncoding: string | undefined,
     @Res({ passthrough: true }) reply: unknown,
   ): Promise<Buffer> {
-    return this.sendExport(reply, id, 'gpx');
+    return this.sendExport(reply, id, 'gpx', acceptEncoding);
   }
 
   /** KML маршрута каталога (routes-formats) — тот же бюджет IP-лимита `route-gpx`, что у GPX. */
@@ -81,9 +88,10 @@ export class RoutesPublicController {
   @Header('Cache-Control', PUBLIC_READ_CACHE_CONTROL)
   kml(
     @Param('id', idPipe) id: string,
+    @Headers('accept-encoding') acceptEncoding: string | undefined,
     @Res({ passthrough: true }) reply: unknown,
   ): Promise<Buffer> {
-    return this.sendExport(reply, id, 'kml');
+    return this.sendExport(reply, id, 'kml', acceptEncoding);
   }
 
   /** TCX (курс) маршрута каталога (routes-formats) — тот же бюджет IP-лимита `route-gpx`, что у GPX. */
@@ -93,23 +101,37 @@ export class RoutesPublicController {
   @Header('Cache-Control', PUBLIC_READ_CACHE_CONTROL)
   tcx(
     @Param('id', idPipe) id: string,
+    @Headers('accept-encoding') acceptEncoding: string | undefined,
     @Res({ passthrough: true }) reply: unknown,
   ): Promise<Buffer> {
-    return this.sendExport(reply, id, 'tcx');
+    return this.sendExport(reply, id, 'tcx', acceptEncoding);
   }
 
   /**
    * Файл экспорта маршрута каталога: посчитан worker'ом (API не разбирает и не собирает). Заголовки файла ставятся
    * после чтения: Nest пишет `@Header` до обработчика, и 404 с `Content-Type` файла не сериализовался бы в JSON
-   * ошибки; 404 и 429 — JSON без `Content-Disposition`. `sandbox` — файл не исполняется.
+   * ошибки; 404 и 429 — JSON без `Content-Disposition`. `sandbox` — файл не исполняется. Хранится gzip
+   * (route-exports-gzip): клиенту с gzip в `Accept-Encoding` — сжатые байты и `Content-Encoding: gzip`, иначе сервис
+   * распаковывает; `Accept-Encoding` дописывается в `Vary` у каждого 200 (`Vary: Origin` от CORS сохраняется).
    */
-  private async sendExport(reply: unknown, id: string, format: RouteExportFormat): Promise<Buffer> {
-    const { bytes, title } = await this.routes.exportFile(id, format);
+  private async sendExport(
+    reply: unknown,
+    id: string,
+    format: RouteExportFormat,
+    acceptEncoding: string | undefined,
+  ): Promise<Buffer> {
+    const { bytes, contentEncoding, title } = await this.routes.exportFile(
+      id,
+      format,
+      acceptsGzip(acceptEncoding),
+    );
     const adapter = this.adapterHost.httpAdapter;
     adapter.setHeader(reply, 'Content-Type', ROUTE_EXPORT_CONTENT_TYPES[format]);
     adapter.setHeader(reply, 'Content-Disposition', routeContentDisposition(title, format));
     adapter.setHeader(reply, 'X-Content-Type-Options', 'nosniff');
     adapter.setHeader(reply, 'Content-Security-Policy', "default-src 'none'; sandbox");
+    adapter.setHeader(reply, 'Vary', varyWith(adapter.getHeader(reply, 'Vary'), 'Accept-Encoding'));
+    if (contentEncoding) adapter.setHeader(reply, 'Content-Encoding', contentEncoding);
     return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   }
 }

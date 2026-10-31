@@ -20,8 +20,10 @@ import {
   RegisterWebPushSubscription,
   RevokePushToken,
   RevokeWebPushSubscription,
+  type RouteNotificationSettingsView,
   type UnreadCount,
   UpdateEventNotificationSettings,
+  UpdateRouteNotificationSettings,
   Uuid,
   type WebPushConfig,
 } from '@pokatim/contracts';
@@ -93,6 +95,23 @@ export class NotificationsController {
     body: UpdateEventNotificationSettings,
   ): Promise<EventNotificationSettingsView> {
     return this.settings.putEvents(user.userId, body);
+  }
+
+  /** Группа «Маршруты» — подресурс, только push (писем у группы нет). */
+  @Get('settings/routes')
+  @Header('Cache-Control', 'no-store')
+  getRouteSettings(@CurrentUser() user: AuthUser): Promise<RouteNotificationSettingsView> {
+    return this.settings.getRoutes(user.userId);
+  }
+
+  @Put('settings/routes')
+  @HttpCode(200)
+  putRouteSettings(
+    @CurrentUser() user: AuthUser,
+    @Body(new ZodValidationPipe(UpdateRouteNotificationSettings, FieldErrorCode))
+    body: UpdateRouteNotificationSettings,
+  ): Promise<RouteNotificationSettingsView> {
+    return this.settings.putRoutes(user.userId, body);
   }
 
   @Put('push-tokens')

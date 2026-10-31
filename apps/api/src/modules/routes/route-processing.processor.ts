@@ -18,7 +18,8 @@ export type RouteProcessingOutcome = 'ready' | 'failed' | 'skipped';
 /**
  * Разбор маршрута (`route-processing`, jobId = id события outbox): захват по статусу `processing` (терминальный —
  * no-op) → исходник из `route_sources` → `analyzeRoute` в потоке с лимитами → отказ `failed: <код>` или транзакция
- * { геометрия, профиль высоты и экспорт GPX/KML/TCX (routes-03, routes-formats) + `processing → ready` }. Сбой окружения (исходник, поток, запись результата) — исключение и ретрай
+ * { геометрия, профиль высоты и экспорт GPX/KML/TCX (routes-03, routes-formats; сжат gzip до транзакции —
+ * route-exports-gzip) + `processing → ready` }. Сбой окружения (исходник, поток, запись результата) — исключение и ретрай
  * BullMQ; последняя попытка — `failed: unreadable` (панель показывает причину, маршрут не висит в «Обрабатываем…»;
  * если и эта запись не удалась — повторная загрузка того же файла вернёт маршрут в обработку). Параллелизм — 1.
  * Маршрут райдера, удалённый автором во время обработки (routes-02), — `skipped`: захвата нет, исходника и маршрута
@@ -93,6 +94,8 @@ export class RouteProcessingProcessor extends WorkerHost {
       return 'failed';
     }
     const analysis = outcome.result;
+    // экспорт сжат gzip до транзакции (route-exports-gzip, RC-5)
+    const files = await exportFilesOf(analysis);
     const now = this.clock.now();
     const recorded = await this.transactions.run((tx) =>
       this.repository.markReady(
@@ -112,7 +115,7 @@ export class RouteProcessingProcessor extends WorkerHost {
           profile: analysis.profile,
           derivedVersion: ROUTE_DERIVED_VERSION,
         },
-        exportFilesOf(analysis),
+        files,
         now,
       ),
     );

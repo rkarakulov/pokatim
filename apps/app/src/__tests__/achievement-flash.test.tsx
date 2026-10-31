@@ -26,6 +26,7 @@ const item = (overrides: Partial<Achievement> = {}): Achievement => ({
   code: 'race_win',
   object: { kind: 'race', id: RACE_ID, title: 'Гонка у озера' },
   factDate: '2026-05-02',
+  level: null,
   seen: false,
   ...overrides,
 });
@@ -92,7 +93,7 @@ afterEach(() => {
 
 describe('хост вспышки (A5, AC9)', () => {
   it('новое достижение → вспышка; «Закрыть» → seen, повторно не открывается', async () => {
-    listAchievements.mockResolvedValue({ items: [item()] });
+    listAchievements.mockResolvedValue({ progress: [], items: [item()] });
     const router = await open();
     expect(await screen.findByRole('header', { name: 'Победа' })).toBeOnTheScreen();
     expect(router.getPathname()).toBe('/achievements/flash');
@@ -110,7 +111,7 @@ describe('хост вспышки (A5, AC9)', () => {
   });
 
   it('всё просмотрено — вспышки нет', async () => {
-    listAchievements.mockResolvedValue({ items: [item({ seen: true })] });
+    listAchievements.mockResolvedValue({ progress: [], items: [item({ seen: true })] });
     const router = await open();
     await waitFor(() => expect(listAchievements).toHaveBeenCalled());
     await act(async () => undefined);
@@ -119,7 +120,7 @@ describe('хост вспышки (A5, AC9)', () => {
   });
 
   it('незнакомый код старой сборки (RC-8) — вспышки нет', async () => {
-    listAchievements.mockResolvedValue({ items: [item({ code: 'unknown' })] });
+    listAchievements.mockResolvedValue({ progress: [], items: [item({ code: 'unknown' })] });
     const router = await open();
     await waitFor(() => expect(listAchievements).toHaveBeenCalled());
     await act(async () => undefined);
@@ -136,7 +137,7 @@ describe('хост вспышки (A5, AC9)', () => {
   });
 
   it('сбой `seen` — кэш откатывается, но в этом запуске вспышка не повторяется', async () => {
-    listAchievements.mockResolvedValue({ items: [item()] });
+    listAchievements.mockResolvedValue({ progress: [], items: [item()] });
     markSeen.mockRejectedValue(new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }));
     const router = await open();
     expect(await screen.findByRole('header', { name: 'Победа' })).toBeOnTheScreen();
@@ -148,14 +149,14 @@ describe('хост вспышки (A5, AC9)', () => {
   });
 
   it('не вошёл / онбординг не пройден (`ready: false`) — без запроса', async () => {
-    listAchievements.mockResolvedValue({ items: [item()] });
+    listAchievements.mockResolvedValue({ progress: [], items: [item()] });
     await open('/', false);
     expect(await screen.findByText('Главная')).toBeOnTheScreen();
     expect(listAchievements).not.toHaveBeenCalled();
   });
 
   it('на экране сторис — не открывается', async () => {
-    listAchievements.mockResolvedValue({ items: [item()] });
+    listAchievements.mockResolvedValue({ progress: [], items: [item()] });
     const router = await open(`/races/story/${RACE_ID}`);
     await waitFor(() => expect(listAchievements).toHaveBeenCalled());
     await act(async () => undefined);
@@ -163,7 +164,7 @@ describe('хост вспышки (A5, AC9)', () => {
   });
   it('выход и вход другим аккаунтом — показанное прежним снова вспыхивает (`resetShown`)', async () => {
     const client = createTestQueryClient();
-    listAchievements.mockResolvedValue({ items: [item()] });
+    listAchievements.mockResolvedValue({ progress: [], items: [item()] });
     const router = await open('/', true, client);
     await fireEvent.press(await screen.findByRole('button', { name: 'Закрыть' }));
     expect(await screen.findByText('Главная')).toBeOnTheScreen();
@@ -179,12 +180,12 @@ describe('хост вспышки (A5, AC9)', () => {
   });
 
   it('возврат на передний план (`focusManager`) после `staleTime` — новое достижение вспыхивает', async () => {
-    listAchievements.mockResolvedValue({ items: [item({ seen: true })] });
+    listAchievements.mockResolvedValue({ progress: [], items: [item({ seen: true })] });
     const router = await open();
     await waitFor(() => expect(listAchievements).toHaveBeenCalledTimes(1));
     expect(router.getPathname()).toBe('/');
 
-    listAchievements.mockResolvedValue({ items: [routeItem, item({ seen: true })] });
+    listAchievements.mockResolvedValue({ progress: [], items: [routeItem, item({ seen: true })] });
     const now = Date.now();
     const clock = jest.spyOn(Date, 'now').mockReturnValue(now + 61_000);
     await act(async () => {
@@ -198,7 +199,7 @@ describe('хост вспышки (A5, AC9)', () => {
 
   it('«назад» посреди очереди (1 из 2) — вспышка не открывается сразу; остаток — после нового ответа сервера', async () => {
     const client = createTestQueryClient();
-    listAchievements.mockResolvedValue({ items: [item(), routeItem] });
+    listAchievements.mockResolvedValue({ progress: [], items: [item(), routeItem] });
     const router = await open('/', true, client);
     expect(await screen.findByText('1 из 2')).toBeOnTheScreen();
     await act(() => expoRouter.back());
@@ -216,6 +217,7 @@ describe('хост вспышки (A5, AC9)', () => {
   it('«Поделиться» посреди очереди (1 из 2) → карточка, выход из карточки — вспышка не открывается сразу', async () => {
     // от новых к старым: гонка старше — показывается первой
     listAchievements.mockResolvedValue({
+      progress: [],
       items: [{ ...routeItem, factDate: '2026-06-01' }, item()],
     });
     const router = await open();
@@ -232,7 +234,7 @@ describe('хост вспышки (A5, AC9)', () => {
 describe('ответ сервера, пришедший при открытой вспышке (ревью pass 2, LOW-1)', () => {
   it('новый ответ во время показа, затем «назад» на 1 из 2 — вспышка не открывается снова', async () => {
     const client = createTestQueryClient();
-    listAchievements.mockResolvedValue({ items: [item(), routeItem] });
+    listAchievements.mockResolvedValue({ progress: [], items: [item(), routeItem] });
     const router = await open('/', true, client);
     expect(await screen.findByText('1 из 2')).toBeOnTheScreen();
     // возврат из фона / фокус вкладки: перезапрос при открытой вспышке, на сервере остаток всё ещё не просмотрен
@@ -270,7 +272,7 @@ describe('прямой адрес до восстановления сессии
         useSessionStore.setState({ status: 'signedIn', session: liveSession, restoreError: null });
       });
       useSessionStore.setState({ status: 'unknown', session: null, hydrate });
-      listAchievements.mockResolvedValue({ items: [item()] });
+      listAchievements.mockResolvedValue({ progress: [], items: [item()] });
       await renderRouter(
         {
           index: Home,
@@ -313,7 +315,7 @@ describe('вспышка открыта по адресу без данных (�
   it('ошибка — «Не удалось загрузить» с повтором; повтор показывает вспышку', async () => {
     listAchievements
       .mockRejectedValueOnce(new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }))
-      .mockResolvedValue({ items: [item()] });
+      .mockResolvedValue({ progress: [], items: [item()] });
     await open('/achievements/flash');
     expect(await screen.findByText('Не удалось загрузить')).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('button', { name: 'Повторить' }));
@@ -322,7 +324,7 @@ describe('вспышка открыта по адресу без данных (�
 
   it('офлайн — «Нет соединения»; «Закрыть» — на Главную', async () => {
     onlineManager.setOnline(false);
-    listAchievements.mockResolvedValue({ items: [item()] });
+    listAchievements.mockResolvedValue({ progress: [], items: [item()] });
     const router = await open('/achievements/flash');
     expect(await screen.findByText('Нет соединения')).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('button', { name: 'Закрыть' }));
@@ -333,7 +335,7 @@ describe('вспышка открыта по адресу без данных (�
 describe('экран вспышки (AC10, AC11, AC13)', () => {
   it('несколько новых — от старых к новым, «Дальше» по очереди, затем «Закрыть»', async () => {
     // ответ — от новых к старым
-    listAchievements.mockResolvedValue({ items: [item(), routeItem] });
+    listAchievements.mockResolvedValue({ progress: [], items: [item(), routeItem] });
     const router = await open();
     expect(await screen.findByRole('header', { name: 'Первый маршрут' })).toBeOnTheScreen();
     expect(screen.getByText('1 из 2')).toBeOnTheScreen();
@@ -360,7 +362,7 @@ describe('экран вспышки (AC10, AC11, AC13)', () => {
   });
 
   it('«Поделиться» открывает карточку достижения (вместо вспышки)', async () => {
-    listAchievements.mockResolvedValue({ items: [item()] });
+    listAchievements.mockResolvedValue({ progress: [], items: [item()] });
     const router = await open();
     await fireEvent.press(await screen.findByRole('button', { name: 'Поделиться' }));
     await waitFor(() => expect(router.getPathname()).toBe('/achievements/story/race_win'));
@@ -370,6 +372,7 @@ describe('экран вспышки (AC10, AC11, AC13)', () => {
 
   it('незнакомый вид объекта — «Поделиться» карточкой достижения (код известен)', async () => {
     listAchievements.mockResolvedValue({
+      progress: [],
       items: [item({ object: { kind: 'unknown', id: RACE_ID, title: 'Что-то' } })],
     });
     const router = await open();
@@ -379,7 +382,7 @@ describe('экран вспышки (AC10, AC11, AC13)', () => {
 
   it('«Уменьшить движение» — значок без анимации', async () => {
     const timing = jest.spyOn(Animated, 'timing');
-    listAchievements.mockResolvedValue({ items: [item()] });
+    listAchievements.mockResolvedValue({ progress: [], items: [item()] });
     await open();
     expect(await screen.findByRole('header', { name: 'Победа' })).toBeOnTheScreen();
     await act(async () => undefined);
@@ -395,7 +398,7 @@ describe('экран вспышки (AC10, AC11, AC13)', () => {
     const timing = jest
       .spyOn(Animated, 'timing')
       .mockReturnValue({ start, stop: jest.fn(), reset: jest.fn() });
-    listAchievements.mockResolvedValue({ items: [item()] });
+    listAchievements.mockResolvedValue({ progress: [], items: [item()] });
     await open();
     expect(await screen.findByTestId('achievement-badge-animated')).toBeOnTheScreen();
     expect(timing).toHaveBeenCalledTimes(1);
@@ -403,8 +406,50 @@ describe('экран вспышки (AC10, AC11, AC13)', () => {
     timing.mockRestore();
   });
 
+  it('повышение уровня — «Новый уровень», метка и условие уровня, число порога; новое на бронзе — «Новое достижение»', async () => {
+    listAchievements.mockResolvedValue({
+      progress: [],
+      items: [
+        item({ code: 'races_5', level: 'silver' }),
+        item({
+          code: 'rides_10',
+          level: 'bronze',
+          object: { kind: 'ride', id: ROUTE_ID, title: 'Кофе' },
+        }),
+      ],
+    });
+    await open();
+    expect(await screen.findByRole('header', { name: 'Завсегдатай' })).toBeOnTheScreen();
+    expect(screen.getByText('Новое достижение')).toBeOnTheScreen();
+    expect(screen.getByText('Бронза')).toBeOnTheScreen();
+    expect(screen.getByText('10 прошедших кофе-райдов')).toBeOnTheScreen();
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Дальше' }));
+    expect(await screen.findByRole('header', { name: 'Гонщик' })).toBeOnTheScreen();
+    expect(screen.getByText('Новый уровень')).toBeOnTheScreen();
+    expect(screen.getByText('Серебро')).toBeOnTheScreen();
+    expect(screen.getByText('Финиш в зачёте 15 разных гонок')).toBeOnTheScreen();
+    expect(screen.getByText('15', { includeHiddenElements: true })).toBeOnTheScreen();
+    await waitFor(() =>
+      expect(markSeen).toHaveBeenLastCalledWith(liveSession.accessToken, ['races_5']),
+    );
+  });
+
+  it('незнакомый уровень — без метки и числа, условие бронзы, «Новое достижение»', async () => {
+    listAchievements.mockResolvedValue({
+      progress: [],
+      items: [item({ code: 'races_5', level: 'unknown' })],
+    });
+    await open();
+    expect(await screen.findByRole('header', { name: 'Гонщик' })).toBeOnTheScreen();
+    expect(screen.getByText('Новое достижение')).toBeOnTheScreen();
+    expect(screen.getByText('Финиш в зачёте 5 разных гонок')).toBeOnTheScreen();
+    for (const label of ['Бронза', 'Серебро', 'Золото'])
+      expect(screen.queryByText(label)).toBeNull();
+  });
+
   it('открыт напрямую без новых — на Главную', async () => {
-    listAchievements.mockResolvedValue({ items: [item({ seen: true })] });
+    listAchievements.mockResolvedValue({ progress: [], items: [item({ seen: true })] });
     const router = await open('/achievements/flash');
     await waitFor(() => expect(router.getPathname()).toBe('/'));
     expect(markSeen).not.toHaveBeenCalled();
@@ -423,7 +468,7 @@ describe('экран своего достижения /achievements/[code] (A6)
     );
 
   it('гоночное: макет вспышки без «Дальше», «Сторис результата» → сторис; seen не шлёт', async () => {
-    listAchievements.mockResolvedValue({ items: [item({ seen: true })] });
+    listAchievements.mockResolvedValue({ progress: [], items: [item({ seen: true })] });
     const router = await openCode('race_win');
     expect(await screen.findByRole('header', { name: 'Победа' })).toBeOnTheScreen();
     expect(screen.getByText('Первое место в своей группе')).toBeOnTheScreen();
@@ -435,14 +480,14 @@ describe('экран своего достижения /achievements/[code] (A6)
   });
 
   it('маршрутное — без «Сторис результата»', async () => {
-    listAchievements.mockResolvedValue({ items: [{ ...routeItem, seen: true }] });
+    listAchievements.mockResolvedValue({ progress: [], items: [{ ...routeItem, seen: true }] });
     await openCode('route_first');
     expect(await screen.findByRole('header', { name: 'Первый маршрут' })).toBeOnTheScreen();
     expect(screen.queryByRole('button', { name: 'Сторис результата' })).toBeNull();
   });
 
   it('нет в списке (отозвано, незнакомый адрес) — пустое состояние → профиль', async () => {
-    listAchievements.mockResolvedValue({ items: [] });
+    listAchievements.mockResolvedValue({ progress: [], items: [] });
     const router = await openCode('race_podium');
     expect(await screen.findByText('Достижения нет')).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('button', { name: 'К профилю' }));

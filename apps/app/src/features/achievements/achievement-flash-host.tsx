@@ -2,7 +2,7 @@ import { usePathname, useRouter } from 'expo-router';
 import { useEffect } from 'react';
 
 import { flashQueue } from './achievement-catalog';
-import { hiddenCodes, resetShown } from './flash-session';
+import { hiddenKeys, resetShown } from './flash-session';
 import { useAchievements } from './queries';
 
 /** Путь полноэкранной вспышки (внутри `Stack.Protected` вкладок). */
@@ -31,7 +31,7 @@ export function AchievementFlashHost({ ready }: { ready: boolean }): null {
   const pathname = usePathname();
   const { data, dataUpdatedAt } = useAchievements(ready);
   const pending =
-    ready && data !== undefined && flashQueue(data.items, hiddenCodes(dataUpdatedAt)).length > 0;
+    ready && data !== undefined && flashQueue(data.items, hiddenKeys(dataUpdatedAt)).length > 0;
   const quiet = QUIET_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 
   useEffect(() => {

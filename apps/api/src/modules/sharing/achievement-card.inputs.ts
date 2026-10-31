@@ -25,7 +25,7 @@ export interface AchievementCardInput {
 
 /**
  * Ключ кэша: sha256 hex канонического JSON (вид карточки — ключи кэша общие со сторис гонки и приглашением, версия
- * рендера, шаблон, тема, код, объект и его публичное название, дата факта, имя). Смена любого — новая картинка.
+ * рендера, шаблон, тема, код, уровень, объект и его публичное название, дата факта, имя). Смена любого — новая картинка.
  */
 export function achievementCardHash(input: AchievementCardInput): string {
   const { facts } = input;
@@ -35,6 +35,7 @@ export function achievementCardHash(input: AchievementCardInput): string {
     input.template,
     input.themeId,
     facts.code,
+    facts.level,
     facts.object.kind,
     facts.object.id,
     input.objectTitle,

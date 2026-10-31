@@ -4,7 +4,14 @@ import { AchievementList, StoryCardStatus } from '@pokatim/contracts';
 import type { Job, Queue } from 'bullmq';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ACHIEVEMENTS, daysAgo, pastRide, raceAt, seedRouteRide } from '../../../test/achievements';
+import {
+  ACHIEVEMENTS,
+  daysAgo,
+  pastRide,
+  raceAt,
+  racesAt,
+  seedRouteRide,
+} from '../../../test/achievements';
 import { createHarness, type Harness } from '../../../test/harness';
 import { bearer, call } from '../../../test/identity';
 import { catalogCorridorRoute, ownCorridorRoute } from '../../../test/route-rides';
@@ -254,5 +261,27 @@ describe('worker (AC4)', () => {
     const text = logs.join('\n');
     expect(text).toContain('achievement race_win line: ready (badge)');
     for (const secret of [me.userId, 'Весенняя', token]) expect(text).not.toContain(secret);
+  });
+});
+
+describe('уровни (AC6)', () => {
+  it('серебро — картинка; +гонки до золота — новый хэш: pending и другой токен; уровень — во входах', async () => {
+    const season = await seedSeason(h);
+    await racesAt(h, season, me.userId, 15, 100);
+    expect(await sync(me)).toContain('races_5');
+    const silver = await h.worker.get(AchievementCardInputs).resolve(me.userId, 'races_5', 'line');
+    expect(silver?.input.facts.level).toBe('silver');
+    expect(await status(me, 'races_5')).toEqual({ status: 'pending' });
+    expect(await runJob()).toBe('ready');
+    const silverToken = await readyToken(me, 'races_5');
+
+    await racesAt(h, season, me.userId, 15, 50);
+    expect(await sync(me)).toContain('races_5');
+    const gold = await h.worker.get(AchievementCardInputs).resolve(me.userId, 'races_5', 'line');
+    expect(gold?.input.facts.level).toBe('gold');
+    expect(gold?.hash).not.toBe(silver?.hash);
+    expect(await status(me, 'races_5')).toEqual({ status: 'pending' });
+    expect(await runJob()).toBe('ready');
+    expect(await readyToken(me, 'races_5')).not.toBe(silverToken);
   });
 });

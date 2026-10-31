@@ -42,12 +42,24 @@ paths:
   при `undetermined` — системный запрос первым, в том же нажатии (Safari), затем сохранение; при `missing`/`expired` —
   тихая подписка; включённый тумблер без доставки (`delivers === false`) — подпись `notifications.settings.pushBlocked`; группа
   «Мероприятия» (PR D) — свой подресурс (`useEventNotificationSettings`, ключ `['notifications','settings','events']`, своё
-  сохранение и баннер; 404 старого API — группы нет, `isEventSettingsMissing`), её push-тумблер — с тем же
-  `usePushPermission`; цель `ticket` → `/tickets/<код>` (и в SW); выход — снятие на
+  сохранение и баннер; 404 старого API — группы нет, `isSettingsResourceMissing`), её push-тумблер — с тем же
+  `usePushPermission`; группа «Маршруты» — так же (`useRouteNotificationSettings({ enabled: push })`, ключ
+  `['notifications','settings','routes']`), только push, после «Райдов»; без push — блока и запроса нет; после
+  `PUT settings` её запрос инвалидируется (нет своего тумблера — сервер отдаёт значение «Райдов»); цель `ticket` → `/tickets/<код>` (и в SW); выход — снятие на
   сервере и `unsubscribe()` в браузере; нажатие на уведомление — сообщение SW `pokatim:open` → `onOpen(target)`): разрешение — только по нажатию строки
   «Включить push-уведомления» (N5), токен — при наличии `extra.eas.projectId` и на устройстве, регистрация —
   `PushNotifications` рядом со `Stack` корневого layout после входа и онбординга, снятие — `useSignOut` до отзыва сессии (кроме
   `serverEnded`: токены снял сервер), последний токен — `secureStorage` `pokatim.pushToken`.
+  Подсказка в момент пользы (N5, 2026-10-30) — `PushSoftPrompt` (`push-soft-prompt.tsx`): предложение —
+  `offerPushSoftPrompt(context, id)` (`push-soft-prompt-store.ts`) только из `onSuccess` хуков мутаций (`useRideRsvp`
+  «Я иду», `useEnterRace` — новая активная заявка, не повышение), не из `mutate(…, { onSuccess })`: форма к ответу
+  размонтирована; «Не иду» — `closePushSoftPromptFor`. Место — `<PushSoftPrompt>` с тем же id под действием; показ
+  закреплён за первым местом на сфокусированном экране (`useIsFocused` expo-router: лента и Главная под карточкой
+  показ не забирают), фазы (`checking`/`offer`/`denied`/`closed`) — в сторе; владелец размонтирован или потерял фокус
+  — закрыта до перезапуска (до решения — как не предлагали); предложение без захвата за `SOFT_PROMPT_CLAIM_MS` (3 с)
+  снимается — показ не потрачен, открытие объекта позже её не покажет. «Включить» — `usePushPermission().press` строки, отказ — `deniedRow()` +
+  `announceForAccessibility`; показ — чистая `softPromptVisible` (`push-soft-prompt-state.ts`), «Не сейчас» —
+  `pokatim.pushSoftPrompt` на 30 дней (`push-soft-prompt-storage(.web).ts`: SecureStore / `localStorage`).
   Service worker (`scripts/service-worker.ts`, ADR-0022): `push` — уведомление по payload сервера и сигнал окнам
   `pokatim:push`; `notificationclick` — фокус открытого окна и цель приложению или новое окно по пути цели (копия
   белого списка в SW — паритет с `notification-target.ts` держит тест, песочница — `scripts/service-worker-harness.ts`).
@@ -384,25 +396,30 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   60 с; сервер сверяет выдачи на каждом GET — чаще не запрашивать), публичные — `['riders','achievements',id]`
   (`useRiderAchievements`, только клиент — RC-5, только после найденного профиля; 404 — блока нет).
 - Каталог — `achievement-catalog.ts` (`ACHIEVEMENT_CATALOG satisfies Record<AchievementCode, …>`: ключи i18n, иконка,
-  число на значке, `shareable` — «Сторис результата», только `race_*`). Незнакомый код (`'unknown'`, RC-8) — `knownItems`
+  `shareable` — «Сторис результата», только `race_*`). Уровни: пороги — только `ACHIEVEMENT_LEVEL_TARGETS` контрактов
+  (копий нет); `displayLevel` (счётное с `null` — бронза, `'unknown'` — без уровня), `badgeCount`,
+  `achievementCondition(code, level)` (`{count}` — порог; незнакомый уровень — бронзы), `levelLabel`/`itemLevelLabel`
+  (метка текстом, роль `text.secondary` — уровень цветом не кодируется), `isLevelUp` (серебро/золото — «Новый
+  уровень»), `achievementA11y` — с уровнем. Незнакомый код (`'unknown'`, RC-8) — `knownItems`
   отбрасывает везде (список, вспышка, публичный блок); «Поделиться» — карточка достижения у любого известного кода;
   незнакомый вид объекта — без «Сторис результата» (`shareRaceId`). Иконка кода — зеркало в
   `apps/api/.../achievement-card.icons.ts` (сменил — поменяй там). Дата — только
   `factDate` (день по Минску, RC-7), всегда с годом (`factDateText`).
 - Вспышка: хост `AchievementFlashHost` рядом со `Stack` корневого layout с тем же `ready`, что у push; маршрут
   `achievements/flash` (`presentation: 'fullScreenModal'`) и `achievements/[code]` — внутри `Stack.Protected`
-  вкладок. Очередь — `flashQueue` (неувиденные, от старых к новым) минус `hiddenCodes(dataUpdatedAt)`
-  (`flash-session.ts`: показанные в этом запуске — сбой `seen` не зацикливает вспышку; вся очередь вспышки — пока
+  вкладок. Очередь — `flashQueue` (неувиденные, от старых к новым) минус `hiddenKeys(dataUpdatedAt)`
+  (`flash-session.ts`, ключ — `flashKey` `code:level`, RC-L4: показанная бронза не скрывает серебро; показанные в этом запуске — сбой `seen` не зацикливает вспышку; вся очередь вспышки — пока
   экран открыт, всегда (`openPresented`), после ухода — до ответа сервера новее последнего на момент ухода
   (`closePresented`): «назад» или «Поделиться» посреди очереди не открывают её сразу снова);
   снимок — при открытии экрана; правки кэша (`seen`) `dataUpdatedAt` не меняют (`updatedAt` в `setQueryData`).
   Открыта по адресу без данных — `AsyncContent` (скелетон карточки, ошибка/офлайн с повтором) и «Закрыть».
   Маршруты `achievements/*` — за `useSettingsShell` (как `/profile`): до восстановления сессии — скелетон или ошибка
   с повтором `hydrate()`, запроса достижений нет. Смоук без сессии — гард ведёт гостя на `/welcome`.
-  Показанное помечается сразу (`useMarkAchievementsSeen`, оптимистично, откат — только своих кодов). Поверх
+  Показанное помечается сразу (`useMarkAchievementsSeen`, оптимистично `{ ...list, items }` — `progress` не теряется,
+  откат — только своих кодов; `POST seen` — по коду). Поверх
   `/achievements`, `/races/story/`, ссылок писем, `devices/return`, удаления аккаунта — не открывается. Ошибка запроса
   хоста — тишина. «Поделиться» — `replace(achievementStoryPath(code))`.
-- Значок «Эмаль» — `achievement-badge.tsx` (роли `surface.default`, `text.primary`, `text.accent`, `action.*`;
+- Значок «Эмаль» — `achievement-badge.tsx` (проп `level`: число — порог уровня; роли `surface.default`, `text.primary`, `text.accent`, `action.*`;
   диаметр — `layout.badgeGrid` / `layout.badgeHero`, пропорции — `badgeShape` из `@pokatim/design-tokens`; follow-up
   `size.badge*` в базе). Появление на вспышке — `Animated` только при `useReducedMotion() === false`; пока ответ
   неизвестен — значок скрыт (без мигания), последний ответ процесса кэшируется.
@@ -410,6 +427,11 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   `publicOnly` — только гоночные, `publicItems`, защита от регресса API): пусто
   без ошибки — блока нет; ошибка — `TabFailure` блока, экран не ломается; pull-to-refresh экранов перезапрашивает
   блок.
+- «Следующие цели» — `AchievementProgressBlock` сразу под `AchievementsBlock` в `/profile`, тот же `useAchievements()`
+  (второго запроса нет): известные `progress` (код и уровень не `'unknown'`); нет данных или прогресса — `null` (ошибку
+  показывает блок «Достижения»); строка «Гонщик · Серебро» и «7 из 15» скрыты от диктора, полоса — общий
+  `components/progress-bar.tsx` (`progressbar`, подпись «Гонщик, серебро: 7 из 15», `accessibilityValue`; он же — в
+  `devices/upload-progress.tsx`; follow-up `ProgressBar` в `@rkarakulov/ui`).
 
 ## Маршруты (routes-01, `docs/product/routes.md`)
 

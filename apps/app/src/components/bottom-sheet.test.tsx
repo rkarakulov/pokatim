@@ -160,6 +160,8 @@ describe('BottomSheet native (routes-04d, L2, L4, RC-2, RC-17)', () => {
       });
     const setValue = jest.spyOn(Animated.Value.prototype, 'setValue');
     const onChange = jest.fn();
+    // время снапа — только по таймерам теста: на настоящих он успевал завершиться (300 мс) до захвата под нагрузкой
+    jest.useFakeTimers();
     try {
       await render(<Harness onChange={onChange} />);
       await act(async () => undefined);
@@ -176,9 +178,13 @@ describe('BottomSheet native (routes-04d, L2, L4, RC-2, RC-17)', () => {
       // значение уходит нативному драйверу: проверяем, что передано (до фикса — 10, от развёрнутого положения)
       expect(setValue).toHaveBeenLastCalledWith(160);
       await act(async () => pan.end({ translationY: 10, velocityY: -SHEET_FLING_VELOCITY * 2 }));
-      await act(async () => undefined);
+      await act(async () => {
+        jest.advanceTimersByTime(SHEET_ANIMATION_MS + 100);
+      });
       expect(grabber()).toHaveProp('accessibilityState', { expanded: true });
+      expect(onChange).not.toHaveBeenCalled();
     } finally {
+      jest.useRealTimers();
       setValue.mockRestore();
       stop.mockRestore();
     }

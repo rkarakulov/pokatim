@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { type AchievementCode, minskToday } from '@pokatim/contracts';
 
 import { AchievementFactsReader } from './achievement-facts.reader';
+import { levelName } from './achievements.policy';
 import type { AchievementCardFacts, AchievementsForSharing } from './achievements-for-sharing.port';
 import { AchievementsRepository } from './achievements.repository';
 
@@ -14,8 +15,8 @@ export class AchievementsSharing implements AchievementsForSharing {
   ) {}
 
   async cardFacts(userId: string, code: AchievementCode): Promise<AchievementCardFacts | null> {
-    const [earned, grants] = await Promise.all([
-      this.facts.earned(userId),
+    const [{ earned }, grants] = await Promise.all([
+      this.facts.evaluate(userId),
       this.repository.listOf(userId),
     ]);
     const item = earned.get(code);
@@ -27,6 +28,7 @@ export class AchievementsSharing implements AchievementsForSharing {
       code,
       object: { kind: titled.object.kind, id: titled.object.id, title: titled.title },
       factDate: minskToday(titled.factAt),
+      level: titled.level === null ? null : levelName(titled.level),
     };
   }
 }

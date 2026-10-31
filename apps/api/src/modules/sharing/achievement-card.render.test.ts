@@ -1,14 +1,15 @@
 import { ACHIEVEMENT_CODES } from '@pokatim/contracts';
 import { appThemes } from '@pokatim/design-tokens';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import { ACHIEVEMENT_BADGE_ICONS } from './achievement-card.icons';
+import { ACHIEVEMENT_BADGE_ICONS, badgeCount } from './achievement-card.icons';
 import { type AchievementCardInput, achievementCardHash } from './achievement-card.inputs';
 import { achievementCardRenderInput, renderAchievementCardSvg } from './achievement-card.png';
 import { achievementCardTree } from './achievement-card.render';
 import { achievementCardTexts } from './achievement-card.texts';
 import { storyCardFonts, symbolsFont } from './story-card.fonts';
 import { renderCardSvg } from './story-card.png';
+import { STORY_CARD_POLICY } from './sharing.policy';
 import { node, type StoryCardNode } from './story-card.render';
 
 /** Входы по умолчанию (синтетика): «Победа» в гонке 4 октября 2026. */
@@ -26,6 +27,7 @@ function input(
       code: 'race_win',
       object: { kind: 'race', id: 'race', title: 'Минская сотка' },
       factDate: '2026-10-04',
+      level: null,
       ...facts,
     },
   };
@@ -86,6 +88,37 @@ describe('тексты карточки достижения', () => {
     expect(achievementCardTexts(hidden).object).toBeNull();
     expect(achievementCardTexts(hidden).riderName).toBe('Анна К.');
   });
+
+  it('счётное: название, условие уровня (порог), метка уровня в kicker (RC-L7)', () => {
+    const silver = achievementCardTexts(input({}, { code: 'races_5', level: 'silver' }));
+    expect(silver).toMatchObject({
+      kicker: 'Достижение · Серебро',
+      title: 'Гонщик',
+      condition: 'Финиш в зачёте 15 разных гонок',
+    });
+    const gold = achievementCardTexts(input({}, { code: 'rides_10', level: 'gold' }));
+    expect(gold).toMatchObject({
+      kicker: 'Достижение · Золото',
+      title: 'Завсегдатай',
+      condition: '50 прошедших кофе-райдов',
+    });
+    expect(achievementCardTexts(input({}, { code: 'routes_5', level: 'bronze' }))).toMatchObject({
+      kicker: 'Достижение · Бронза',
+      title: 'Путешественник',
+      condition: 'Пройденные заезды по 5 разным маршрутам',
+    });
+  });
+});
+
+describe('число на значке', () => {
+  it('порог текущего уровня у счётных; у разовых — нет; счётное без уровня — бронза', () => {
+    expect(badgeCount('races_5', 'bronze')).toBe(5);
+    expect(badgeCount('races_5', 'silver')).toBe(15);
+    expect(badgeCount('routes_5', 'gold')).toBe(30);
+    expect(badgeCount('rides_10', 'silver')).toBe(25);
+    expect(badgeCount('rides_10', null)).toBe(10);
+    expect(badgeCount('race_win', null)).toBeUndefined();
+  });
 });
 
 describe('ключ кэша', () => {
@@ -104,6 +137,20 @@ describe('ключ кэша', () => {
     const hashes = new Set(variants.map(achievementCardHash));
     expect(hashes.size).toBe(variants.length);
     expect(hashes.has(base)).toBe(false);
+  });
+
+  it('версия рендера 3 (уровни) входит в ключ', () => {
+    expect(STORY_CARD_POLICY.renderVersion).toBe(3);
+    const before = achievementCardHash(input());
+    const spy = vi.spyOn(STORY_CARD_POLICY, 'renderVersion', 'get').mockReturnValue(4 as 3);
+    expect(achievementCardHash(input())).not.toBe(before);
+    spy.mockRestore();
+  });
+
+  it('различает уровни при равных прочих входах (AC6)', () => {
+    const at = (level: 'bronze' | 'silver' | 'gold') =>
+      achievementCardHash(input({}, { code: 'races_5', level }));
+    expect(new Set([at('bronze'), at('silver'), at('gold')]).size).toBe(3);
   });
 
   it('название объекта из фактов (не публичное) в ключ не входит — только `objectTitle`', () => {
@@ -130,8 +177,10 @@ describe('разметка', () => {
         expect(texts).toContain(value);
       }
       expect(texts).toContain(String.fromCodePoint(ACHIEVEMENT_BADGE_ICONS.race_win.glyph));
-      const counted = strings(tree(input({ template }, { code: 'rides_10' })));
-      expect(counted).toContain('10');
+      const counted = strings(tree(input({ template }, { code: 'rides_10', level: 'silver' })));
+      expect(counted).toContain('25');
+      expect(counted).toContain('Достижение · Серебро');
+      expect(counted).not.toContain('10');
     }
   });
 

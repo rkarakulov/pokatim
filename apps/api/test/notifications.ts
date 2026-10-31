@@ -4,7 +4,7 @@ import { getQueueToken } from '@nestjs/bullmq';
 
 import type { OutboxJobData } from '@rkarakulov/api-kit/core';
 import { uuidv7 } from '@rkarakulov/api-kit/mongo';
-import type { Job, Queue } from 'bullmq';
+import { type Job, type Queue, Worker } from 'bullmq';
 
 import { OUTBOX_COLLECTION, type MongoOutboxDoc } from '../src/db';
 import { QUEUE } from '../src/queues';
@@ -16,6 +16,7 @@ import {
 } from '../src/modules/notifications/notifications-intake.processor';
 import {
   NOTIFICATIONS_EMAIL_JOB,
+  NOTIFICATIONS_FANOUT_JOB,
   NOTIFICATIONS_PUSH_JOB,
   NOTIFICATIONS_RECEIPTS_JOB,
   NOTIFICATIONS_REDELIVER_JOB,
@@ -212,4 +213,82 @@ export async function deliveryJobs(h: Harness) {
       delay: job.opts.delay ?? 0,
     }))
     .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+}
+
+/** Очередь приёма графа worker (туда intake ставит задачи-пачки `notifications.fanout`). */
+export const intakeQueue = (h: Harness): Queue =>
+  h.worker.get(getQueueToken(QUEUE.notificationsIntake), { strict: false });
+
+/**
+ * Задача приёма по событию — настоящая задача очереди (jobId = id события, как у публикатора outbox): данные, записанные
+ * `job.updateData` (план раскладки), видны повтору. Отложена на час — прогон пачек (`completeIntakeJobs`) её не берёт.
+ */
+export async function runQueuedIntake(
+  h: Harness,
+  type: string,
+  eventId: string,
+): Promise<IntakeOutcome> {
+  const queue = intakeQueue(h);
+  const job =
+    (await queue.getJob(eventId)) ??
+    (await queue.add(type, { outboxEventId: eventId }, { jobId: eventId, delay: 3_600_000 }));
+  return h.worker.get(NotificationsIntakeProcessor).process(job);
+}
+
+/** Задачи-пачки в очереди приёма в любом состоянии, по jobId. */
+export async function fanoutJobs(h: Harness): Promise<Job[]> {
+  const jobs = await intakeQueue(h).getJobs([
+    'waiting',
+    'delayed',
+    'active',
+    'completed',
+    'failed',
+  ]);
+  return jobs
+    .filter((job) => job.name === NOTIFICATIONS_FANOUT_JOB)
+    .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+}
+
+/** Задача-пачка, как её отдал бы worker (процессор напрямую, состояние задачи в очереди не меняется). */
+export const runFanout = (h: Harness, job: Job): Promise<IntakeOutcome> =>
+  h.worker.get(NotificationsIntakeProcessor).process(job);
+
+/**
+ * Выполнить все ждущие задачи очереди приёма как worker: взять (`getNextJob`), обработать процессором, перевести в
+ * `completed` (BullMQ хранит её — как после настоящего прогона). Итоги по порядку.
+ */
+export async function completeIntakeJobs(h: Harness): Promise<IntakeOutcome[]> {
+  const queue = intakeQueue(h);
+  const worker = new Worker(queue.name, null, { connection: queue.opts.connection });
+  const outcomes: IntakeOutcome[] = [];
+  try {
+    const next = () => worker.getNextJob('lock-token', { block: false });
+    for (let job = await next(); job; job = await next()) {
+      const outcome = await runFanout(h, job);
+      outcomes.push(outcome);
+      await job.moveToCompleted(outcome, 'lock-token', false);
+    }
+  } finally {
+    await worker.close();
+  }
+  return outcomes;
+}
+
+/** `n` живых пользователей минимальными документами `users` (аудитория пачек; входа у них нет); id. */
+export async function seedLiveUsers(h: Harness, n: number): Promise<string[]> {
+  const now = h.clock.now();
+  const ids = Array.from({ length: n }, () => uuidv7());
+  await collections(h).users.insertMany(
+    ids.map((_id) => ({
+      _id,
+      email: `${_id}@example.by`,
+      passwordHash: null,
+      birthDate: null,
+      emailVerifiedAt: now,
+      createdAt: now,
+      deletedAt: null,
+      version: 0,
+    })),
+  );
+  return ids;
 }

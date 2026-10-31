@@ -236,7 +236,10 @@ paths:
 - Производные данные маршрута (routes-03): «готовый маршрут не меняется» — про линии и длину; производные исходника
   — `route_geometries.profile` (`[distanceM, elevationM][]` ≤ 300 | `null` — нет высот), `derivedVersion`,
   `derivedFailure { version, code, at }` и коллекция `route_exports { _id: routeId, gpx: Binary, kml?: Binary,
-  tcx?: Binary, sizeBytes, derivedVersion }` (очищенный экспорт: GPX ≤ ~1,2 МБ, TCX ≤ ~4,6 МБ; `kml`/`tcx` — с версии 2) — пишут только `RoutesRepository.markReady` (разбор) и `recordDerived`
+  tcx?: Binary, encoding?: 'gzip', sizeBytes, derivedVersion }` (очищенный экспорт: GPX ≤ ~1,2 МБ, TCX ≤ ~4,6 МБ до
+  сжатия; `kml`/`tcx` — с версии 2; route-exports-gzip: файлы сжаты gzip worker'ом **до** транзакции —
+  `exportFilesOf`, уровень 6 явно (детерминизм); `encoding: 'gzip'` — у всех новых записей, нет поля — старый несжатый
+  документ, читается как есть, пережмётся при росте версии; откат образа на релиз до route-exports-gzip запрещён — старый API отдал бы gzip без `Content-Encoding`, а документы назад не разожмутся; `sizeBytes` — сумма **хранимых** байт) — пишут только `RoutesRepository.markReady` (разбор) и `recordDerived`
   (бэкфилл), обе — с экспортом в одной транзакции: есть `derivedVersion` ⇒ есть экспорт (`gpxAvailable` и `exportFormats` — `routeExportFormats(derivedVersion)` — без чтения
   `route_exports`). Пересчёт — только регламент `routes-maintenance` по росту `ROUTE_DERIVED_VERSION`
   (`@pokatim/tracks/parse`); детерминированный отказ разбора — метка `derivedFailure` этой версии (не берётся до роста
@@ -448,6 +451,11 @@ paths:
 - Выдача — проекция фактов, не append-only: отзыв — `revokedAt` (документ остаётся, чтобы вернувшийся факт сохранил
   `seenAt`), объект и `factAt` переписываются сверкой; `seenAt`/`grantedAt` пишут только вставка и «показано».
   Названия объектов не хранятся. Каждая запись — одна условная операция по `{ userId, code, … }` без транзакции.
+- Уровни (achievements-levels): `level` (ранг 1–3 счётного, разовые — `null`) переписывает сверка вместе с объектом;
+  `seenLevel` — наибольший показанный ранг, пишут только вставка (первая сверка — `= level`) и «показано». Оба поля
+  необязательные: у документов v1 нет — ≡ 1 (без миграции и бэкфилла, индексы прежние). «Показано» — `updateMany`
+  update pipeline одной условной операцией: фильтр `$expr` (`seenAt` нет или `seenLevel < level`, `$ifNull` → 1),
+  `$set` `seenAt: $ifNull(seenAt, now)`, `seenLevel: $max(seenLevel, level)` — уровень из документа, монотонно.
 
 ## Билеты (event-tickets, ADR-0023)
 
@@ -516,12 +524,16 @@ paths:
   (TTL 90 дней по `expireAt`; `notifications_event_user_unique { sourceEventId, userId }`, частичный
   `notifications_collapse_unique { userId, collapseKey }`, список `{ userId, createdAt: -1, _id: -1 }`, частичные
   индексы непрочитанных и сроков доставки push/e-mail), `notification_settings` (`_id` = `userId`; нет документа —
-  умолчания; `push.events`/`email.events` (PR D) — без миграции, нет поля — включено; запись — `$set` по путям, не
-  `replaceOne`), `push_tokens` (`token` уникален, ≤ 10 на пользователя; Web Push — `platform: 'web'`, `token` = endpoint, ключи — `webPush`, ADR-0022), `push_tickets` (TTL 24 ч; `userId` владельца —
+  умолчания; `push.events`/`email.events` (PR D) — без миграции, нет поля — включено; `push.routes` (группа
+  «Маршруты») — без миграции, нет поля — значение `push.rides` (`deliverySettingsOf`, «живое» наследование); запись —
+  `$set` по путям, не `replaceOne`; `$setOnInsert` подресурсов — общий `settingsOnInsert()` без путей подресурсов), `push_tokens` (`token` уникален, ≤ 10 на пользователя; Web Push — `platform: 'web'`, `token` = endpoint, ключи — `webPush`, ADR-0022), `push_tickets` (TTL 24 ч; `userId` владельца —
   стирание аккаунта по нему, индекс `push_tickets_user_idx` из `0027_push_tickets_user`). Чтения сами проверяют
   `expireAt > now` (TTL — только уборка). Токены при доставке снимаются по снимку `{ _id, userId, sessionId }`, не по
   одному `_id`. Регистрация переписывает токен только сессией не старше записанной (`sessionId $lte`, uuidv7 входа):
   поздняя регистрация прежней сессии устройства после выхода — без записи (`token_stale`).
+- `group` уведомления — снимок при записи: `route_*` до группы «Маршруты» остаются `group: 'rides'` (тумблер «Райдов»),
+  без миграции. Доставка пачки получателей (`notifications.fanout`) — `pendingDeliveriesOf(eventId, userIds)`: фильтр
+  `userId $in` по тому же индексу `notifications_event_user_unique`, нового индекса нет.
 - Схлопывание (N7) — по порядковому номеру события в объекте, не по `sourceEventId` (uuidv7 внутри миллисекунды не
   упорядочен): райд — `seq` payload (`rides.noticeSeq` после записи: `+1` в `join` и `update`, нет поля — `0`, без
   миграции), маршрут — `decidedAt` события. Уведомление хранит `collapseSeq`, замена — только при `collapseSeq <`

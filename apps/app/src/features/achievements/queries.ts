@@ -36,6 +36,8 @@ export function useMarkAchievementsSeen() {
       (list) =>
         list
           ? {
+              // `progress` не теряется: блок «Следующие цели» не исчезает после вспышки (RC-L3)
+              ...list,
               items: list.items.map((item) =>
                 codes.includes(item.code as AchievementCode) ? { ...item, seen } : item,
               ),

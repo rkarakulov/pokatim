@@ -130,6 +130,30 @@ describe('api-client: уведомления', () => {
     ]);
   });
 
+  it('настройки «Маршруты» — подресурс GET и PUT, только push', async () => {
+    const { calls, api } = client(200, { push: false });
+    await expect(api.getRouteNotificationSettings('t')).resolves.toEqual({ push: false });
+    await expect(api.updateRouteNotificationSettings('t', { push: false })).resolves.toEqual({
+      push: false,
+    });
+    expect(
+      calls.map(({ url, method, body, authorization }) => ({ url, method, body, authorization })),
+    ).toEqual([
+      {
+        url: 'https://api.test/v1/notifications/settings/routes',
+        method: 'GET',
+        body: undefined,
+        authorization: 'Bearer t',
+      },
+      {
+        url: 'https://api.test/v1/notifications/settings/routes',
+        method: 'PUT',
+        body: { push: false },
+        authorization: 'Bearer t',
+      },
+    ]);
+  });
+
   it('push-токены — PUT регистрации и POST снятия, 204', async () => {
     const { calls, api } = client(204, null);
     await api.registerPushToken('t', { token: TOKEN, platform: 'android' });

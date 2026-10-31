@@ -1,20 +1,30 @@
-import type { AchievementCode } from '@pokatim/contracts';
+import type { Achievement, AchievementCode } from '@pokatim/contracts';
 import { badgeShape, radius, space, stroke } from '@pokatim/design-tokens';
 import { textStyle, useTheme } from '@rkarakulov/ui';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { Icon } from '@/components/icon';
 
-import { catalogEntry } from './achievement-catalog';
+import { badgeCount, catalogEntry } from './achievement-catalog';
 
 /**
  * Значок достижения «Эмаль» (achievements): круг фона с контуром текста, кольцо акцента, диск основного действия с
- * иконкой кода; у счётных («Пять гонок») — число на кольце снизу. Диаметр — `layout.badgeGrid` / `layout.badgeHero`,
+ * иконкой кода; у счётных — порог текущего уровня (5/15/30) на кольце снизу (L6; уровень цветом не кодируется, метку
+ * даёт родитель). Диаметр — `layout.badgeGrid` / `layout.badgeHero`,
  * пропорции — `badgeShape` (`@pokatim/design-tokens`), цвета — роли темы. Декоративный: подпись даёт родитель.
  */
-export function AchievementBadge({ code, size }: { code: AchievementCode; size: number }) {
+export function AchievementBadge({
+  code,
+  level,
+  size,
+}: {
+  code: AchievementCode;
+  level: Achievement['level'];
+  size: number;
+}) {
   const theme = useTheme();
   const entry = catalogEntry(code);
+  const count = badgeCount(code, level);
   const disc = Math.round(size * badgeShape.disc);
   return (
     <View
@@ -54,9 +64,9 @@ export function AchievementBadge({ code, size }: { code: AchievementCode; size: 
           color={theme.action.onPrimary}
         />
       </View>
-      {entry.count !== undefined ? (
+      {count !== undefined ? (
         <View style={[styles.count, { backgroundColor: theme.surface.default }]}>
-          <Text style={[textStyle('label'), { color: theme.text.primary }]}>{entry.count}</Text>
+          <Text style={[textStyle('label'), { color: theme.text.primary }]}>{count}</Text>
         </View>
       ) : null}
     </View>
