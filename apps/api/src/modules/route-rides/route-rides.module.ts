@@ -5,6 +5,7 @@ import { QUEUE } from '../../queues';
 import { IdentityModule } from '../identity';
 import { RoutesCoreModule } from '../routes';
 import { TracksCoreModule } from '../tracks';
+import { RouteRideAutoProcessor } from './route-ride-auto.processor';
 import { RouteRideCheckProcessor } from './route-ride-check.processor';
 import { RouteRideEvaluator } from './route-ride-evaluator';
 import { RiderRouteRidesService } from './rider-route-rides';
@@ -47,9 +48,15 @@ export class RouteRidesCoreModule {}
 })
 export class RouteRidesModule {}
 
-/** Задачи `route-rides` в worker: сверка заезда с маршрутом (поток разбора). */
+/**
+ * Задачи `route-rides` в worker: сверка заезда с маршрутом (поток разбора) — ручная (`route-ride-check`) и автопроверка
+ * новой активности (`route-ride-auto`, route-rides-03); сверка — общий `RouteRideEvaluator`.
+ */
 @Module({
-  imports: [RouteRidesCoreModule, BullModule.registerQueue({ name: QUEUE.routeRideCheck })],
-  providers: [RouteRideEvaluator, RouteRideCheckProcessor],
+  imports: [
+    RouteRidesCoreModule,
+    BullModule.registerQueue({ name: QUEUE.routeRideCheck }, { name: QUEUE.routeRideAuto }),
+  ],
+  providers: [RouteRideEvaluator, RouteRideCheckProcessor, RouteRideAutoProcessor],
 })
 export class RouteRidesWorkerModule {}

@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { MONGO_DB } from '@rkarakulov/api-kit/mongo';
+import { isDuplicateKey, MONGO_DB } from '@rkarakulov/api-kit/mongo';
 import type { Db, Filter } from 'mongodb';
 
 import { type ChangedCursor, changedSort, changedWithin } from '../../changed-since';
@@ -9,7 +9,7 @@ import {
   type RouteRidesCollections,
   routeRidesCollections,
 } from './route-rides.collection';
-import type { RouteRideFacts } from './route-rides.policy';
+import type { RiddenRoute, RouteRideFacts } from './route-rides.policy';
 
 /** Индекс дедупликации заезда группы (`0032_route_rides`): параллельный POST — `isDuplicateKey`. */
 export const ROUTE_RIDES_UNIQUE_INDEX = 'route_rides_user_route_activity_unique';
@@ -73,6 +73,43 @@ export class RouteRidesRepository {
 
   async insert(session: DbSession, doc: RouteRideDoc): Promise<void> {
     await this.c.rides.insertOne(doc, { session });
+  }
+
+  /**
+   * Готовый заезд автопроверки одной записью, без транзакции и outbox (route-rides-03, 8.1 AC-9). `false` — заезд
+   * группы уже есть (дубль уникального индекса: ручной POST или повтор задачи успели раньше).
+   */
+  async insertChecked(doc: RouteRideDoc): Promise<boolean> {
+    try {
+      await this.c.rides.insertOne(doc);
+      return true;
+    } catch (error) {
+      if (isDuplicateKey(error, ROUTE_RIDES_UNIQUE_INDEX)) return false;
+      throw error;
+    }
+  }
+
+  /**
+   * Свои заезды по маршрутам (route-rides-03, план автопроверки): `$match { userId }` — префикс уникального индекса,
+   * группировка по маршруту (id активностей, последняя дата заезда), маршруты с поздним последним заездом первыми, не
+   * больше `limit`. Видимость и живость активностей — у вызывающего.
+   */
+  ridesByRoute(userId: string, limit: number): Promise<RiddenRoute[]> {
+    return this.c.rides
+      .aggregate<RiddenRoute>([
+        { $match: { userId } },
+        {
+          $group: {
+            _id: '$routeId',
+            lastStartedAt: { $max: '$activity.startedAt' },
+            activityIds: { $push: '$activityId' },
+          },
+        },
+        { $sort: { lastStartedAt: -1, _id: 1 } },
+        { $limit: limit },
+        { $project: { _id: 0, routeId: '$_id', lastStartedAt: 1, activityIds: 1 } },
+      ])
+      .toArray();
   }
 
   /**

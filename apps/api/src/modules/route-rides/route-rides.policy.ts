@@ -7,7 +7,7 @@ import type {
 import { boundsNear, type Bounds } from '@pokatim/tracks';
 import { uuidv7 } from '@rkarakulov/api-kit/mongo';
 
-import type { ActivityRef } from '../tracks';
+import type { ActivityRef, ActivitySource } from '../tracks';
 import type { RouteRideDoc, RouteRideOrigin, RouteRideStatus } from './route-rides.collection';
 import type { RouteRideResult } from './route-rides.repository';
 
@@ -27,6 +27,100 @@ export const ROUTE_RIDE_POLICY = {
   stuckQueuedMs: 2 * 3_600_000,
   stuckCheckingMs: 15 * 60_000,
 } as const;
+
+/**
+ * Автопроверка новой активности (route-rides-03, `[ASSUMPTION]` V1/V2/8.1 AC-4): только `cycling`/`unknown`, старт не
+ * раньше 7 сут до приёма файла, ≤ 20 прогонов движка; скан «уже ездил» — ≤ 200 маршрутов, рамки — пачками по 25.
+ */
+export const ROUTE_RIDE_AUTO_POLICY = {
+  recentDays: 7,
+  maxRoutes: 20,
+  riddenRoutesScan: 200,
+  boundsBatch: 25,
+  sports: ['cycling', 'unknown'],
+} as const;
+
+const DAY_MS = 86_400_000;
+
+/** Активность годится для автопроверки (V1, 8.1 AC-3): спорт и старт `≥ uploadCreatedAt − 7 сут`. */
+export function autoEligible(
+  activity: Pick<ActivityRef, 'sport' | 'startedAt' | 'uploadCreatedAt'>,
+): boolean {
+  const sports: readonly string[] = ROUTE_RIDE_AUTO_POLICY.sports;
+  return (
+    sports.includes(activity.sport) &&
+    activity.startedAt.getTime() >=
+      activity.uploadCreatedAt.getTime() - ROUTE_RIDE_AUTO_POLICY.recentDays * DAY_MS
+  );
+}
+
+/** Маршрут со своими заездами райдера (`RouteRidesRepository.ridesByRoute`). */
+export interface RiddenRoute {
+  routeId: string;
+  lastStartedAt: Date;
+  activityIds: string[];
+}
+
+/**
+ * Порядок кандидатов автопроверки (V2, V4, 8.1 AC-4), до видимости и рамки: (а) маршруты со своими живыми заездами по
+ * дате последнего заезда ↓, затем (б) свои готовые маршруты в данном порядке (новые → старые) без повторов (а).
+ * Пропуск — у маршрута уже есть заезд группы `primaryId` или живых заездов ≥ квоты; пропущенный (а) в (б) не попадает.
+ */
+export function autoPlan(input: {
+  primaryId: string;
+  heads: ReadonlyMap<string, { primaryId: string }>;
+  ridden: readonly RiddenRoute[];
+  own: readonly string[];
+}): string[] {
+  const { heads, primaryId } = input;
+  const seen = new Set<string>();
+  const ridden = input.ridden
+    .map((route) => {
+      seen.add(route.routeId);
+      const alive = route.activityIds.filter((activityId) => heads.has(activityId));
+      const skip =
+        alive.length === 0 ||
+        alive.length >= ROUTE_RIDE_POLICY.maxPerRoute ||
+        alive.some((activityId) => heads.get(activityId)?.primaryId === primaryId);
+      return { route, skip };
+    })
+    .filter(({ skip }) => !skip)
+    .map(({ route }) => route)
+    .sort((a, b) => b.lastStartedAt.getTime() - a.lastStartedAt.getTime());
+  const own = [...new Set(input.own)].filter((routeId) => !seen.has(routeId));
+  return [...ridden.map((route) => route.routeId), ...own];
+}
+
+/** Первые `room` маршрутов по порядку, видимых (есть рамка) и с рамкой у рамки активности (600 м). */
+export function nearRoutes(
+  ordered: readonly string[],
+  bounds: ReadonlyMap<string, Bounds>,
+  activityBounds: Bounds,
+  room: number,
+): string[] {
+  return ordered
+    .filter((routeId) => {
+      const routeBounds = bounds.get(routeId);
+      return (
+        routeBounds !== undefined &&
+        boundsNear(activityBounds, routeBounds, ROUTE_RIDE_POLICY.boundsMarginM)
+      );
+    })
+    .slice(0, Math.max(0, room));
+}
+
+/**
+ * Основная активность группы сейчас (RC-7): основная — она сама, дубль — его основная; основную успели удалить или
+ * сменить между чтениями — `null` (как неизвестная). Общая для ручного POST и автопроверки.
+ */
+export async function primaryOfGroup(
+  activities: Pick<ActivitySource, 'activity'>,
+  userId: string,
+  activity: ActivityRef,
+): Promise<ActivityRef | null> {
+  if (activity.isPrimary) return activity;
+  return activities.activity(userId, activity.primaryId);
+}
 
 /** Поля заезда, нужные правилам (список читается без `trackMap`). */
 export type RouteRideFacts = Omit<RouteRideDoc, 'trackMap'>;

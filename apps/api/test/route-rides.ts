@@ -3,6 +3,7 @@ import { uuidv7 } from '@rkarakulov/api-kit/mongo';
 import type { Job } from 'bullmq';
 import { Binary } from 'mongodb';
 
+import { RouteRideAutoProcessor } from '../src/modules/route-rides/route-ride-auto.processor';
 import { RouteRideCheckProcessor } from '../src/modules/route-rides/route-ride-check.processor';
 import { routeRidesCollections } from '../src/modules/route-rides/route-rides.collection';
 import { routeRidesOutboxRoutes } from '../src/modules/route-rides/route-rides.events';
@@ -86,7 +87,7 @@ export async function ownCorridorRoute(
   return id;
 }
 
-const job = (name: string, outboxEventId: string, attemptsMade = 0) =>
+export const job = (name: string, outboxEventId: string, attemptsMade = 0) =>
   ({
     name,
     data: { outboxEventId },
@@ -94,13 +95,19 @@ const job = (name: string, outboxEventId: string, attemptsMade = 0) =>
     opts: { attempts: 5 },
   }) as unknown as Job<OutboxJobData>;
 
+const GROUP_CREATED = 'tracks.activity-group-created';
+
 /**
  * Обработчик событий outbox `route-rides` в тесте (как публикатор + worker): проверки заездов по порядку записи, каждое
- * событие — один раз. События гонок не трогает.
+ * событие — один раз. События гонок не трогает. Автопроверка новой активности (`tracks.activity-group-created` →
+ * `RouteRideAutoProcessor`, route-rides-03) — только с `{ auto: true }`: прежние тесты ручной проверки автозаездов не
+ * получают.
  */
-export function routeRidesWorker(h: Harness) {
+export function routeRidesWorker(h: Harness, { auto = false }: { auto?: boolean } = {}) {
   const handled = new Set<string>();
-  const types = Object.keys(routeRidesOutboxRoutes);
+  const types = Object.keys(routeRidesOutboxRoutes).filter(
+    (type) => auto || type !== GROUP_CREATED,
+  );
   return {
     handled,
     async drain(): Promise<number> {
@@ -113,7 +120,11 @@ export function routeRidesWorker(h: Harness) {
         for (const event of events) {
           handled.add(event._id);
           processed += 1;
-          await h.worker.get(RouteRideCheckProcessor).process(job(event.type, event._id));
+          const processor =
+            event.type === GROUP_CREATED
+              ? h.worker.get(RouteRideAutoProcessor)
+              : h.worker.get(RouteRideCheckProcessor);
+          await processor.process(job(event.type, event._id));
         }
       }
     },
@@ -123,3 +134,7 @@ export function routeRidesWorker(h: Harness) {
 /** События проверки заездов в outbox. */
 export const checkEvents = async (h: Harness) =>
   (await outboxEvents(h)).filter((event) => event.type === 'route-rides.check-requested');
+
+/** События автопроверки (`tracks.activity-group-created`) в outbox. */
+export const autoEvents = async (h: Harness) =>
+  (await outboxEvents(h)).filter((event) => event.type === GROUP_CREATED);

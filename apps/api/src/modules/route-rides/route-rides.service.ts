@@ -11,6 +11,7 @@ import {
   effectiveStatus,
   findExisting,
   newRideDoc,
+  primaryOfGroup,
   ROUTE_RIDE_POLICY,
   stuckBounds,
 } from './route-rides.policy';
@@ -100,9 +101,8 @@ export class RouteRidesService {
       activity = upload.activity;
       if (!activity) throw notReady();
     }
-    if (activity.isPrimary) return activity;
     // основная группы сменилась или удалена между чтениями — как неизвестная
-    const primary = await this.activities.activity(userId, activity.primaryId);
+    const primary = await primaryOfGroup(this.activities, userId, activity);
     if (!primary) throw notFound();
     return primary;
   }
