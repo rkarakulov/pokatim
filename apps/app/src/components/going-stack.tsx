@@ -26,7 +26,7 @@ export function GoingStack({
 }) {
   const theme = useTheme();
   return (
-    <View style={styles.stack} accessible accessibilityLabel={caption}>
+    <View testID="going-stack" style={styles.stack} accessible accessibilityLabel={caption}>
       {Array.from({ length: Math.min(count, MAX_AVATARS) }, (_, index) => (
         <View
           key={index}

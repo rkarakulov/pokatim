@@ -922,7 +922,10 @@ describe('участники и явка (P2, K4, K5)', () => {
     const router = await withRiders();
     expect(await screen.findByText('Райдер 1')).toBeOnTheScreen();
     expect(rideParticipants).toHaveBeenCalledWith(liveSession.accessToken, ID);
-    expect(screen.getAllByTestId('rider-avatar-photo').length).toBeGreaterThanOrEqual(1);
+    // фото — в самой стопке (`avatarIds`), не только в строках списка
+    expect(
+      within(screen.getByTestId('going-stack')).getAllByTestId('rider-avatar-photo').length,
+    ).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('Райдер 5')).toBeOnTheScreen();
     expect(screen.queryByText('Райдер 6')).toBeNull();
     expect(screen.getByText('и ещё 2')).toBeOnTheScreen();
@@ -1095,24 +1098,29 @@ describe('участники и явка (P2, K4, K5)', () => {
     expect(await screen.findByText('Вы отметили, что не были на райде')).toBeOnTheScreen();
 
     markRideAttended.mockRejectedValueOnce(
+      new ApiHttpError(429, { code: 'RATE_LIMITED', message: 'x', details: { retryAfterSec: 30 } }),
+    );
+    await fireEvent.press(screen.getByRole('button', { name: 'Я был на райде' }));
+    expect(await screen.findByText('Слишком часто. Повторите через 30 с.')).toBeOnTheScreen();
+
+    // окно закрылось, пока карточка открыта: перечитанные флаги убирают кнопку, причина отказа остаётся
+    markRideAttended.mockRejectedValueOnce(
       new ApiHttpError(409, {
         code: 'SOCIAL_ACTION_BLOCKED',
         message: 'x',
         details: { reason: 'attendance_window' },
       }),
     );
+    rideParticipants.mockResolvedValue(
+      participants({ attendance: attendance('declined', { canMark: false, canDecline: false }) }),
+    );
     const calls = rideParticipants.mock.calls.length;
     await fireEvent.press(screen.getByRole('button', { name: 'Я был на райде' }));
-    expect(
-      await screen.findByText('Отметить явку можно с начала райда и 7 дней после'),
-    ).toBeOnTheScreen();
     await waitFor(() => expect(rideParticipants.mock.calls.length).toBeGreaterThan(calls));
-
-    markRideAttended.mockRejectedValueOnce(
-      new ApiHttpError(429, { code: 'RATE_LIMITED', message: 'x', details: { retryAfterSec: 30 } }),
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Я был на райде' })).toBeNull(),
     );
-    await fireEvent.press(await screen.findByRole('button', { name: 'Я был на райде' }));
-    expect(await screen.findByText('Слишком часто. Повторите через 30 с.')).toBeOnTheScreen();
+    expect(screen.getByText('Отметить явку можно с начала райда и 7 дней после')).toBeOnTheScreen();
   });
 
   it('подсказка имени (K3): непубличный профиль с блоком явки — «Добавить имя» → редактирование; публичный — нет', async () => {

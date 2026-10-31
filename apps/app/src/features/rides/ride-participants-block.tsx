@@ -94,9 +94,6 @@ function AttendanceActions({
       ) : null}
       {attendance.state === 'attended' ? null : markButton}
       {attendance.state === 'declined' ? null : declineLink}
-      {mutation.error ? (
-        <Banner tone="error" message={attendanceErrorText(mutation.error)} />
-      ) : null}
     </View>
   );
 }
@@ -132,6 +129,10 @@ function ParticipantsContent({
       )}
       {attendance && actionable ? (
         <AttendanceActions attendance={attendance} mutation={mutation} />
+      ) : null}
+      {/* вне `actionable`: после 409 перечитанные флаги закрывают действия, а причина отказа остаётся видна */}
+      {attendance && mutation.error ? (
+        <Banner tone="error" message={attendanceErrorText(mutation.error)} />
       ) : null}
       {attendance && (actionable || rode) ? <NameHint /> : null}
     </View>
