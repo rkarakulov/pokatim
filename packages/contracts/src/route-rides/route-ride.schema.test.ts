@@ -3,11 +3,15 @@ import { describe, expect, it } from 'vitest';
 import { ErrorCode } from '../common.ts';
 import {
   ROUTE_RIDE_CANDIDATES_MAX,
+  ROUTE_RIDE_LEADERBOARD_DEFAULT,
+  ROUTE_RIDE_LEADERBOARD_MAX,
   ROUTE_RIDE_MAX_PER_ROUTE,
   ROUTE_RIDE_ORIGINS,
   ROUTE_RIDE_STATUSES,
   RouteRideCandidates,
   RouteRideDetail,
+  RouteRideLeaderboard,
+  RouteRideLeaderboardQuery,
   RouteRidePage,
   RouteRideRequest,
   RouteRideTrack,
@@ -172,5 +176,52 @@ describe('заезд по маршруту (route-rides-01): контракты'
       'ROUTE_RIDE_UPLOAD_FAILED',
       'ROUTE_RIDE_QUOTA_EXCEEDED',
     ]);
+  });
+});
+
+describe('таблица «Другие» (route-rides-04): контракты', () => {
+  const leaderRow = { place: 1, elapsedSec: 780, rideDate: '2026-10-27' };
+
+  it('query: по умолчанию 10, строка приводится, 1–100 целые, лишний ключ — ошибка', () => {
+    expect(ROUTE_RIDE_LEADERBOARD_DEFAULT).toBe(10);
+    expect(ROUTE_RIDE_LEADERBOARD_MAX).toBe(100);
+    expect(RouteRideLeaderboardQuery.parse({})).toEqual({ limit: 10 });
+    expect(RouteRideLeaderboardQuery.parse({ limit: '5' })).toEqual({ limit: 5 });
+    expect(RouteRideLeaderboardQuery.parse({ limit: '100' })).toEqual({ limit: 100 });
+    for (const limit of ['0', '101', '1.5', 'abc']) {
+      expect(RouteRideLeaderboardQuery.safeParse({ limit }).success).toBe(false);
+    }
+    expect(RouteRideLeaderboardQuery.safeParse({ limit: '5', cursor: 'x' }).success).toBe(false);
+  });
+
+  it('строка без имени, ссылки, фото и rideId — null; своя — с rideId', () => {
+    const parsed = RouteRideLeaderboard.parse({
+      rows: [leaderRow, { ...leaderRow, place: 2, rideId: ID }],
+      total: 2,
+      me: { place: 2, elapsedSec: 780, rideDate: '2026-10-27', rideId: ID },
+      shared: false,
+    });
+    expect(parsed.rows[0]).toEqual({
+      ...leaderRow,
+      riderName: null,
+      riderPublicId: null,
+      riderAvatar: null,
+      rideId: null,
+    });
+    expect(parsed.rows[1]?.rideId).toBe(ID);
+    expect(RouteRideLeaderboard.parse({ rows: [], total: 0, me: null, shared: true }).me).toBe(
+      null,
+    );
+  });
+
+  it('дата заезда — только день (с временем суток — ошибка); строк > 100 — ошибка', () => {
+    const table = (rows: unknown[]) => ({ rows, total: rows.length, me: null, shared: true });
+    expect(RouteRideLeaderboard.safeParse(table([{ ...leaderRow, rideDate: AT }])).success).toBe(
+      false,
+    );
+    const many = (n: number) =>
+      Array.from({ length: n }, (_, i) => ({ ...leaderRow, place: i + 1 }));
+    expect(RouteRideLeaderboard.safeParse(table(many(100))).success).toBe(true);
+    expect(RouteRideLeaderboard.safeParse(table(many(101))).success).toBe(false);
   });
 });

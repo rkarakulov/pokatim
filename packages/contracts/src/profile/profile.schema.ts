@@ -18,6 +18,12 @@ const isRideReason = (code: string): code is RideReason =>
  */
 export const PUBLIC_NAME_CONSENT_VERSION = '2026-10-27';
 
+/**
+ * Версия текста согласия «Показывать мои заезды в таблицах маршрутов» (route-rides-04); ключи i18n — в приложении.
+ * Пишет сервер в `profile_consent_events` (`kind: 'route_rides'`); клиент присылает только флаг.
+ */
+export const ROUTE_RIDES_CONSENT_VERSION = '2026-10-31';
+
 export const RIDER_PUBLIC_NAME_MIN = 2;
 export const RIDER_PUBLIC_NAME_MAX = 80;
 /** Одна строка без управляющих (`\p{Cc}`) и форматирующих (`\p{Cf}`: RTL-override, нулевая ширина) символов (RC-8). */
@@ -69,6 +75,8 @@ export const ProfileView = z.object({
    * `null` — запрета нет или он истёк. Во всех ответах `ProfileView` (приложение кладёт их в кэш целиком).
    */
   avatarUploadBlockedUntil: z.iso.datetime().nullable().default(null),
+  /** route-rides-04: показ своих заездов в таблицах маршрутов каталога; старый сервер — `false`. */
+  showRouteRides: z.boolean().default(false),
 });
 export type ProfileView = z.output<typeof ProfileView>;
 
@@ -78,19 +86,21 @@ export type UpdateProfileThemeRequest = z.infer<typeof UpdateProfileThemeRequest
 
 /**
  * `PATCH /v1/profile` — частичное обновление: ключа нет — поле не меняется; `publicName: null` или `""` — имя
- * очищено; так же `club` (rider-profile). Нужен хотя бы один ключ (`REQUIRED` на корне), лишние ключи — ошибка.
+ * очищено; так же `club` (rider-profile); `showRouteRides` — согласие на показ заездов (route-rides-04). Нужен хотя бы один ключ (`REQUIRED` на корне), лишние ключи — ошибка.
  */
 export const UpdateProfileRequest = z
   .strictObject({
     publicName: RiderPublicName.optional(),
     showNameInResults: z.boolean({ error: fieldError('INVALID') }).optional(),
     club: RiderClub.optional(),
+    showRouteRides: z.boolean({ error: fieldError('INVALID') }).optional(),
   })
   .refine(
     (body) =>
       body.publicName !== undefined ||
       body.showNameInResults !== undefined ||
-      body.club !== undefined,
+      body.club !== undefined ||
+      body.showRouteRides !== undefined,
     { error: 'REQUIRED' },
   );
 export type UpdateProfileRequest = z.infer<typeof UpdateProfileRequest>;
