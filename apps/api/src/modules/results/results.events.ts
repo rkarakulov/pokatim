@@ -41,8 +41,8 @@ export const ResultsAttemptVerdictChanged = z.object({
 export type ResultsAttemptVerdictChanged = z.infer<typeof ResultsAttemptVerdictChanged>;
 
 /**
- * Протокол гонки опубликован (D-22): маршрут — у подписчика `notifications` (`notificationsOutboxRoutes`, ADR-0017);
- * рейтинг сезона (слайс 08) пока сверяет регламентом; подписка — через fan-out outbox (`mergeOutboxRoutes`, ADR-0017 п. 5).
+ * Протокол гонки опубликован (D-22): маршруты — у подписчиков `notifications` (`notificationsOutboxRoutes`, ADR-0017)
+ * и `standings` (`standingsOutboxRoutes`), fan-out outbox (`mergeOutboxRoutes`, ADR-0017 п. 5).
  */
 export const RESULTS_PROTOCOL_PUBLISHED = 'results.protocol-published';
 export const ResultsProtocolPublished = z.object({
@@ -51,7 +51,7 @@ export const ResultsProtocolPublished = z.object({
 });
 export type ResultsProtocolPublished = z.infer<typeof ResultsProtocolPublished>;
 
-/** Новая ревизия опубликованного протокола (D-27, D-28): маршрут — у `notifications`, как `protocol-published`. */
+/** Новая ревизия опубликованного протокола (D-27, D-28): подписчики — `notifications` и `standings`, как `protocol-published`. */
 export const RESULTS_RESULT_REVISED = 'results.result-revised';
 export const ResultsResultRevised = z.object({
   raceId: z.uuid(),

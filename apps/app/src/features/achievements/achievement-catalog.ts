@@ -26,7 +26,7 @@ interface CatalogEntry {
   shareable: boolean;
   /** виден в публичном профиле (A7, R9: публично — только протоколы) — гоночные и сезонные (S6) */
   public: boolean;
-  /** «Поделиться» → карточка достижения для сторис; у сезонных карточки нет (S7) */
+  /** «Поделиться» → карточка достижения для сторис (у сезонных — с сезоном, C1) */
   storyCard: boolean;
   /** выдача — на сезон, объект — сезон (S3): ключ — код + сезон, «К сезону» */
   seasonal: boolean;
@@ -34,7 +34,7 @@ interface CatalogEntry {
 
 const RACE = { shareable: true, public: true, storyCard: true, seasonal: false } as const;
 const PRIVATE = { shareable: false, public: false, storyCard: true, seasonal: false } as const;
-const SEASON = { shareable: false, public: true, storyCard: false, seasonal: true } as const;
+const SEASON = { shareable: false, public: true, storyCard: true, seasonal: true } as const;
 
 /**
  * Каталог (A1): ключи i18n, значок, шеринг. Исчерпывающий: новый код contracts без строки — ошибка типов. Пороги уровней

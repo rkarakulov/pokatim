@@ -196,7 +196,7 @@ paths:
   повтор публикации после частичного сбоя ставит задачу в очереди, где её ещё нет.
 
 - Брокер — BullMQ на Redis; RabbitMQ не используем (переход — только через ADR; outbox оставляет к нему путь).
-- Регламенты «по курсору» без событий (DV-1): `standings-recalc`, `og-sync`, `tickets-maintenance`,
+- Регламенты «по курсору» без событий: `og-sync`, `tickets-maintenance`,
   `achievements-sync` (achievements-push N2: `achievements.sweep` → `achievements.rider`); новый источник курсора —
   метод порта владельца с keyset `changed-since.ts`, не чтение чужой коллекции.
 - Тяжёлая работа — только в worker: разбор трека, геопересчёт (коридор), рендер Skia/ffmpeg, OG-картинки,
@@ -339,14 +339,15 @@ paths:
 ## Достижения (`achievements`, ADR-0020 Proposed)
 
 - Модуль-композиция (образец `riders` + `standings`): `achievements → identity, profile, results, rides, route-rides,
-  standings, panel` только через `index.ts` (`panel` — achievements-panel, `panel` об `achievements` не знает) (`standings` — порт `RIDER_SEASON_STANDINGS`, `StandingsCoreModule` импортирует
-  только `AchievementsSyncModule` и `AchievementsWorkerModule`; `AchievementsReadModule` и `sharing` его не получают); на `achievements` ссылаются только `AppModule` (`AchievementsModule`), `WorkerModule` (`AchievementsWorkerModule`, N2),
+  standings, panel` только через `index.ts` (`panel` — achievements-panel, `panel` об `achievements` не знает) (`standings` — порт `RIDER_SEASON_STANDINGS`, `StandingsCoreModule` импортируют
+  `AchievementsReadModule` (право и название сезонной карточки, achievement-season-story-card), `AchievementsSyncModule`
+  и `AchievementsWorkerModule`; `sharing` его напрямую не получает — только через `AchievementsReadModule`); на `achievements` ссылаются только `AppModule` (`AchievementsModule`), `WorkerModule` (`AchievementsWorkerModule`, N2),
   `AccountWorkerModule` (`AchievementsCoreModule`, порт стирания), `sharing` (`AchievementsReadModule`, порт
   `ACHIEVEMENTS_FOR_SHARING`) и `NotificationsWorkerModule` (`AchievementsSyncModule`, порт `ACHIEVEMENT_NOTICES`,
   achievements-push). Источники и `notifications` о нём не знают в обратную сторону — циклов нет.
   `AchievementsCoreModule` — `AchievementsRepository` + `AchievementErasure` (модулей не импортирует);
   `AchievementsReadModule` — `AchievementFactsReader` (факты портов + правила, только чтение) и порт карточки
-  (`ResultsCoreModule`, `RidesCoreModule`, `RouteRidesCoreModule`, `AchievementsCoreModule`);
+  (`ResultsCoreModule`, `RidesCoreModule`, `RouteRidesCoreModule`, `StandingsCoreModule`, `AchievementsCoreModule`);
   `AchievementsSyncModule` (achievements-push) — `AchievementsReconciler` и порт `ACHIEVEMENT_NOTICES`
   (`AchievementsCoreModule`, `AchievementsReadModule`, `StandingsCoreModule`; транзакции и outbox — глобальные модули
   базы); `AchievementsModule` — + `IdentityModule`, `ProfileCoreModule`, `ResultsCoreModule`, `AchievementsReadModule`,
@@ -425,8 +426,12 @@ paths:
   `≥ SEASON_REGULAR_MIN_RACES` ячеек `placed` в одной таблице, RC-S3), `seasonalAchievements` (`earned` по ключу
   `code:seasonId`, `factAt = endsBefore − 1 мс`; `settled` — `final`-сезоны), `seasonalPlan` (insert/restore/revoke
   только по `settled`; `refresh` нет). `sync`: оба плана → маркер после обоих → ответ: сезонные — видимые ∩
-  заработанные (`final`), в `pending` — видимая остаётся с названием из исхода. Лог — счётчики `seasonal_*`. Карточка:
-  сезонный код → `cardFacts` `null` (409), `ACHIEVEMENT_BADGE_ICONS` — `Record<FactAchievementCode, …>`. Сбой порта сезонов — `seasonOutcomes` → `[]`
+  заработанные (`final`), в `pending` — видимая остаётся с названием из исхода. Лог — счётчики `seasonal_*`. Карточка
+  (achievement-season-story-card): `cardFacts(userId, { code, seasonId })` — выдача `listSeasonalOf` не отозвана, исход —
+  `RIDER_SEASON_STANDINGS.outcomesOf(userId, [seasonId])` **напрямую** (сбой — исключение: HTTP 500, worker — ретрай;
+  не 409, RC-5); ручная (`manuallyGranted`, `achievements.policy.ts` — одна для списка, публичного и карточки) — при
+  любом исходе, иначе только `final` и `seasonalAchievements([outcome]).earned`; `pending` без ручной — `null` (409,
+  RC-2; список её показывает). Ответ — как сезонный элемент списка (дата `grant.factAt`). Сбой порта сезонов в списке — `seasonOutcomes` → `[]`
   (лог `achievements.seasons_unavailable`): сезонные не трогаются и не отдаются, остальной список — как обычно;
   серверная сверка (`origin: 'server'`) зовёт порт напрямую — сбой уходит в ретрай задачи.
 
@@ -451,12 +456,17 @@ paths:
   `rideInviteTree` (`ride-invite.render.ts`, узлы, `statRow`, `cardTrackView` и линия — `story-card.render.ts`/
   `story-card.png.ts`).
   `SharingModule`/`SharingWorkerModule` импортируют `RidesCoreModule`; `rides` о `sharing` не знает.
-- Карточка достижения: `AchievementCardController` (`GET achievements/:code/story-card`, `AuthGuard`, `no-store`) →
-  `AchievementCardService` → `AchievementCardInputs` (порт `achievements` `ACHIEVEMENTS_FOR_SHARING.cardFacts` — факты
-  ∩ не отозванная выдача, без записи; маршрут — название только из `ROUTES_FOR_SHARING.ogFacts`) → `CardRequests` →
-  задача `achievement-card.render` → `buildAchievementCard` → `achievementCardTree` (значок — глиф Material Symbols,
-  `achievement-card.icons.ts` — зеркало иконок каталога приложения; число — `badgeCount(code, level)` из
-  `ACHIEVEMENT_LEVEL_TARGETS`). Порт отдаёт `level` (строка или `null`); уровень — в `achievementCardHash` явно после
+- Карточка достижения: `AchievementCardController` (`GET achievements/:code/story-card`, query
+  `AchievementStoryCardQuery`, `AuthGuard`, `no-store`) → `AchievementCardService` (адрес `cardRef(code, seasonId)` —
+  `AchievementCardRef`; сезонный без `seasonId` — 400 `seasonId:REQUIRED`, несезонный с ним — `seasonId:INVALID`, **до**
+  `consumeRead`) → `AchievementCardInputs.resolve(userId, ref, template)` (порт `achievements`
+  `ACHIEVEMENTS_FOR_SHARING.cardFacts` — факты ∩ не отозванная выдача, без записи; маршрут — название только из
+  `ROUTES_FOR_SHARING.ogFacts`; сезон — название из фактов) → `CardRequests` → задача `achievement-card.render`
+  (`AchievementCardJob.seasonId` — `Uuid.nullable().default(null)`; worker собирает тот же `cardRef`, лог без сезона) →
+  `buildAchievementCard` → `achievementCardTree` (значок — глиф Material Symbols, `achievement-card.icons.ts` — зеркало
+  иконок каталога приложения, `Record<AchievementCode, …>`, сезонные — без числа; число — `badgeCount(code, level)` из
+  `ACHIEVEMENT_LEVEL_TARGETS`; условие «Сезона в зачёте» — `{count}` = `SEASON_REGULAR_MIN_RACES`, смена константы —
+  подъём `renderVersion`). Сезон в хэше — `object.id` и название (отдельный `seasonId` не добавлять, RC-7). Порт отдаёт `level` (строка или `null`); уровень — в `achievementCardHash` явно после
   кода; тексты — метка уровня в kicker (`achievementCard.kickerLevel`), условие с `{count}` порога; сменил строки или
   вёрстку — подними `STORY_CARD_POLICY.renderVersion` (сейчас 3). `SharingModule`/`SharingWorkerModule` импортируют
   `AchievementsReadModule`.
@@ -521,8 +531,8 @@ RC-A1, ADR-0019).
   `lockEntry`, идемпотентно по `checkedAt < requestedAt`). Пока есть незавершённые проверки — публикация и
   «Применить пересчёт» отвечают 409.
 - `results.protocol-published` / `results.result-revised` / `results.attempt-verdict-changed` — маршрут в
-  `notifications-intake` (объявляет подписчик, ADR-0017). Рейтинг сезона (08) событий не слушает — регламент сверки
-  (DV-1); fan-out outbox есть (api-kit 0.6.0), подписка рейтинга на события — follow-up.
+  `notifications-intake` (объявляет подписчик, ADR-0017); `protocol-published` и `result-revised` — ещё и в
+  `standings-recalc` (`standingsOutboxRoutes`, fan-out).
 - Отказы состояния — `409 RESULTS_ACTION_BLOCKED { reason, count? }`, `409 RESULTS_PUBLISH_BLOCKED { blockedBy,
   checklist }`.
 
@@ -531,15 +541,18 @@ RC-A1, ADR-0019).
 - Модуль `standings` (`results ──► standings`): `StandingsCoreModule` (репозиторий снимка, `StandingsSource`,
   `StandingsRecalc`; imports `RacesCoreModule`, `ResultsCoreModule`), `StandingsModule` (API: + `IdentityModule`,
   `PanelModule`, `ProfileCoreModule`), `StandingsWorkerModule` (`WorkerModule`). Порты — только через `index.ts`:
-  `SEASON_RACES` (`races`: гонки с протоколом, `seasonExists`, `seesAllRaces`, `finishedSeasons`, `awaitingProtocol`),
+  `SEASON_RACES` (`races`: гонки с протоколом, `protocolRaceSeason`, `seasonExists`, `seesAllRaces`, `finishedSeasons`, `awaitingProtocol`),
   `RESULTS_FOR_STANDINGS` (`results`:
   `currentRevisions` одним `aggregate`, `protocolRows` ревизии), `RIDER_NAMES` (`profile`). `races`/`results` о
   `standings` не знают.
 - Правила зачёта — чистые функции `standings.policy.ts` (`pointsForPlace`, `racesCounted`, `selectCounted`,
   `compareRiders`, `buildSeasonStandings`, `sourceFingerprint`), версия `STANDINGS_FORMULA_VERSION` в снимке: смена —
   полный пересчёт всех сезонов. Клиент ничего не считает.
-- Пересчёт — **регламент** вместо событий (DV-1): очередь `standings-recalc`, `StandingsSchedules` — `standings.sync`
-  каждую минуту (Минск) + разовая `standings.sync.boot` при старте worker; `StandingsRecalc.sync` сверяет отпечаток
+- Пересчёт — **события** `results.protocol-published` / `results.result-revised` (`standingsOutboxRoutes` →
+  `standings-recalc`, standings-outbox-events) + регламент-страховка: `StandingsSchedules` — `standings.sync` каждые
+  15 мин (Минск) + разовая `standings.sync.boot` при старте worker (смена формулы, события до выката). Задача события →
+  `StandingsRecalc.syncRace` (сезон — `SEASON_RACES.protocolRaceSeason`; нет — `skipped`) → `sync([seasonId])`;
+  невалидный payload — лог `standings.event_skipped`. `StandingsRecalc.sync(seasonIds?)` сверяет отпечаток
   источника сезона (гонки, ревизии, класс, схема, формула) с отпечатком снимка и пересчитывает изменившиеся сезоны
   целиком. Отказ сезона — лог `standings.recompute_failed`, остальные идут; после прохода — исключение
   (`standings.sync_failed`, failed-набор BullMQ), следующий прогон повторяет. Гонка с протоколом без ревизии —

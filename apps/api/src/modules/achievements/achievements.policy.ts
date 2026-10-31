@@ -264,6 +264,15 @@ export interface AchievementOverride {
   byUserId: string;
 }
 
+/**
+ * Видимая ручная выдача (achievements-panel): решение `granted`, не отозвана. Одна для списка, публичного списка и
+ * карточки (`AchievementsSharing`).
+ */
+export const manuallyGranted = (grant: {
+  revokedAt: Date | null;
+  override?: AchievementOverride | null;
+}) => grant.revokedAt === null && grant.override?.decision === 'granted';
+
 /** Сохранённая выдача (поля сверки); `level`/`seenLevel` нет у документов v1 — ≡ 1. */
 export interface StoredGrant {
   code: FactAchievementCode;

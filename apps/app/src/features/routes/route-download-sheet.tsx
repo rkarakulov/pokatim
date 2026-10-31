@@ -8,7 +8,7 @@ import { ModalSheet } from '@/components/modal-sheet';
 
 /**
  * Шит «Скачать маршрут» (routes-formats, RC-8): по secondary-кнопке на доступный формат во всю ширину с подписью
- * «для чего формат» (связана с кнопкой группой `role="group"`) и явное «Закрыть». Выбор — `onPick(format)`: экран
+ * «для чего формат» (она же `accessibilityHint` кнопки) и явное «Закрыть». Выбор — `onPick(format)`: экран
  * вызывает `downloadFile` синхронно в том же обработчике (web: `<a download>` до любого await) и закрывает шит.
  * Монтируется только после монтирования экрана.
  */
@@ -33,24 +33,15 @@ export function RouteDownloadSheet({
       </Text>
       <View style={styles.options}>
         {formats.map((format) => (
-          // подпись «для чего формат» связана с кнопкой группой (у `Button` UI-кита нет `accessibilityHint`): web —
-          // имя группы, native — подпись читается сразу после кнопки
-          <View
-            key={format}
-            role="group"
-            aria-label={t('routes.detail.formatOption', {
-              format: t(`routes.detail.format.${format}`),
-              hint: t(`routes.detail.formatHint.${format}`),
-            })}
-            testID={`route-download-option-${format}`}
-            style={styles.option}
-          >
+          // «для чего формат» — подсказка скринридеру у кнопки; видимая подпись дублирует её и от скринридера скрыта
+          <View key={format} testID={`route-download-option-${format}`} style={styles.option}>
             <Button
               label={t(`routes.detail.format.${format}`)}
+              accessibilityHint={t(`routes.detail.formatHint.${format}`)}
               variant="secondary"
               onPress={() => onPick(format)}
             />
-            <Text style={[textStyle('meta'), { color: theme.text.secondary }]}>
+            <Text aria-hidden style={[textStyle('meta'), { color: theme.text.secondary }]}>
               {t(`routes.detail.formatHint.${format}`)}
             </Text>
           </View>

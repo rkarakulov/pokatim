@@ -296,12 +296,16 @@ describe('карточка маршрута каталога: гость по с
     for (const name of ['GPX', 'KML', 'TCX']) {
       expect(within(sheet).getByRole('button', { name })).toBeOnTheScreen();
     }
-    expect(within(sheet).getByText('Google Earth и Google Мои карты')).toBeOnTheScreen();
-    // подпись формата связана с кнопкой: группа «формат: для чего» (у Button UI-кита нет accessibilityHint)
+    // «для чего формат» — подсказка скринридеру у кнопки; видимая подпись на экране, но от скринридера скрыта
     const option = within(sheet).getByTestId('route-download-option-kml');
-    expect(option.props.role).toBe('group');
-    expect(option.props['aria-label']).toBe('KML: Google Earth и Google Мои карты');
-    expect(within(option).getByRole('button', { name: 'KML' })).toBeOnTheScreen();
+    expect(within(option).getByRole('button', { name: 'KML' })).toHaveProp(
+      'accessibilityHint',
+      'Google Earth и Google Мои карты',
+    );
+    expect(within(option).queryByText('Google Earth и Google Мои карты')).toBeNull();
+    expect(
+      within(option).getByText('Google Earth и Google Мои карты', { includeHiddenElements: true }),
+    ).toHaveProp('aria-hidden', true);
     expect(download).not.toHaveBeenCalled();
 
     // нажатие формата: downloadFile вызван в том же обработчике (до await), шит закрыт

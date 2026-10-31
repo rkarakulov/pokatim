@@ -51,6 +51,15 @@ describe('workerOutboxRoutes', () => {
     ]);
   });
 
+  it('события протокола results — и уведомлениям, и рейтингу сезона (standings-outbox-events, AC1)', () => {
+    for (const type of ['results.protocol-published', 'results.result-revised']) {
+      expect(queuesOf(workerOutboxRoutes[type])).toEqual([
+        'notifications-intake',
+        'standings-recalc',
+      ]);
+    }
+  });
+
   it('у каждого типа есть очередь', () => {
     for (const route of Object.values(workerOutboxRoutes)) {
       expect(queuesOf(route).length).toBeGreaterThan(0);

@@ -59,8 +59,9 @@ export const QUEUE = {
   /** Регламент уведомлений: квитанции Expo (`DeviceNotRegistered` снимает токен), перепостановка зависших доставок. */
   notificationsMaintenance: 'notifications-maintenance',
   /**
-   * Регламент рейтинга сезона (race-results-08, DV-1): сверка отпечатков источника сезонов каждую минуту и при старте
-   * worker, без событий outbox; пересчёт изменившихся сезонов целиком (запись снимка под условием версии).
+   * Рейтинг сезона (race-results-08, standings-outbox-events): события `results.protocol-published`/`result-revised`
+   * (сезон гонки) и регламент-страховка сверки отпечатков каждые 15 мин и при старте worker; пересчёт изменившихся
+   * сезонов целиком (запись снимка под условием версии).
    */
   standingsRecalc: 'standings-recalc',
   /**

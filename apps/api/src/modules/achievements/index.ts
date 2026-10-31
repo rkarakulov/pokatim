@@ -23,9 +23,9 @@ export { type LevelRank, levelName } from './achievements.policy';
 export {
   ACHIEVEMENTS_FOR_SHARING,
   type AchievementCardFacts,
+  type AchievementCardRef,
   type AchievementsForSharing,
+  cardRef,
 } from './achievements-for-sharing.port';
-/** Несезонные коды (у них есть карточка и значок; сезонные — `RIDER_SEASON_STANDINGS`, без карточки, S7). */
-export type { FactAchievementCode } from './achievements.policy';
 /** Порт стирания достижений удалённого аккаунта (модуль `account`). */
 export { AchievementErasure } from './achievement-erasure';

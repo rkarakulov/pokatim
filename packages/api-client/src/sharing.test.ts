@@ -69,6 +69,14 @@ describe('карточка достижения', () => {
     expect(calls[0]!.method).toBe('GET');
     expect(calls[0]!.headers.get('authorization')).toBe('Bearer jwt');
   });
+
+  it('сезонное — шаблон и сезон в query', async () => {
+    const { api, calls } = client(200, { status: 'pending' });
+    await api.getAchievementCard('jwt', 'season_champion', { template: 'night', seasonId: ID });
+    expect(calls[0]!.url).toBe(
+      `https://api.test/v1/achievements/season_champion/story-card?template=night&seasonId=${ID}`,
+    );
+  });
 });
 
 describe('карточка маршрута', () => {

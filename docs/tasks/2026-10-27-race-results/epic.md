@@ -165,8 +165,8 @@ results ──► standings (события outbox)
   - `results-intake` (слайс 03) — события `tracks.activity-ready/-removed` и `results.entry-created` → попытки;
   - `results-maintenance` — повторная постановка зависших `checking`/`queued` (`dns` — при чтении, слайс 03);
   - `dispute-series` (слайс 06b) — ряды пульса/мощности по запросу панели, результат — кэш Redis с TTL, не БД;
-  - `standings-recalc` (слайс 08) — регламент сверки отпечатков сезонов каждую минуту и при старте worker (DV-1:
-    без событий outbox; fan-out — follow-up).
+  - `standings-recalc` (слайс 08) — события `results.protocol-published`/`result-revised` (fan-out outbox,
+    standings-outbox-events) и регламент-страховка сверки отпечатков каждые 15 мин и при старте worker.
 - **Финальный провал** — попытка `failed` → строка-ошибка чек-листа публикации и действие «Исключить трек» (D-23).
 - **Пересчёт при смене коридора:** до первой заявки попыток нет — пересчитывать нечего; после заявки коридор
   зафиксирован. Пересчёт гонки «по сохранённым трекам» (экстренный или до публикации) — новая `checkRevision` всех

@@ -55,10 +55,15 @@
    бэкфилл не нужен. Fan-out и подписка рейтинга на события — follow-up.
    **Отметка (outbox-fanout, 2026-10-31):** fan-out outbox сделан в `@rkarakulov/api-kit` 0.6.0 (app-foundation PR #21):
    `OutboxRoutes` — очередь или массив очередей, задача в каждой очереди с jobId = id события, `mergeOutboxRoutes`
-   объединяет маршруты подписчиков (pokatim — `src/outbox-routes.ts`). `route-rides` подписан на
-   `tracks.activity-removed` (2026-10-31, `docs/tasks/2026-10-31-route-rides-activity-removed`). Регламенты
-   `standings.sync` и `achievements` пока не заменены: подписка каждого на события — отдельная задача (бэкфилл уже опубликованных
+   объединяет маршруты подписчиков (pokatim — `src/outbox-routes.ts`). Регламенты `standings.sync`, `achievements` и
+   сверка `route-rides` пока не заменены: подписка каждого на события — отдельная задача (бэкфилл уже опубликованных
    событий не нужен — регламент остаётся страховкой или убирается с ней).
+   **Отметка (standings-outbox-events, 2026-10-31):** `standings` подписан на `results.protocol-published` и
+   `results.result-revised` (`standingsOutboxRoutes` → `standings-recalc`); регламент `standings.sync` — страховка раз
+   в 15 мин и при старте worker (бэкфилл не нужен).
+   **Отметка (route-rides-activity-removed, 2026-10-31):** `route-rides` подписан на `tracks.activity-removed`
+   (`routeRidesOutboxRoutes` → `route-rides-intake`, удаление заездов активности); фильтр на чтении по живым активностям
+   и уборка сирот в транзакции нового заезда — страховка.
    **Дополнение (notifications-fanout, 2026-10-30) — пачки получателей.** Не путать с fan-out outbox выше (тип → несколько
    очередей, api-kit 0.6.0): это раскладка **одного** события по получателям внутри `notifications`. Аудитория
    события (сумма уникальных получателей непустых черновиков) больше `NOTIFICATIONS_POLICY.fanoutChunk` (200) — intake

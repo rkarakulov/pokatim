@@ -116,7 +116,7 @@ const routeCases: { name: string; facts: RouteCardInput['facts'] }[] = [
   },
 ];
 
-/** Карточка достижения: обычная, счётная с длинным объектом и именем, без публичного объекта. */
+/** Карточка достижения: обычная, счётная с длинным объектом и именем, без публичного объекта, три сезонных. */
 const achievementCases: {
   name: string;
   input: Omit<AchievementCardInput, 'template' | 'themeId'>;
@@ -128,6 +128,7 @@ const achievementCases: {
         code: 'race_win',
         object: { kind: 'race', id: 'preview', title: 'Минская сотка' },
         factDate: '2026-10-04',
+        level: null,
       },
       objectTitle: 'Минская сотка',
       riderName: null,
@@ -140,6 +141,7 @@ const achievementCases: {
         code: 'rides_10',
         object: { kind: 'ride', id: 'preview', title: 'x' },
         factDate: '2026-05-02',
+        level: 'silver',
       },
       objectTitle: 'Длинный кофе-райд через три озера, два леса и обратно к кофейне на берегу моря',
       riderName: 'Анна Кравченко',
@@ -152,11 +154,25 @@ const achievementCases: {
         code: 'route_first',
         object: { kind: 'route', id: 'preview', title: 'Свой' },
         factDate: '2026-06-14',
+        level: null,
       },
       objectTitle: null,
       riderName: null,
     },
   },
+  ...(['season_regular', 'season_podium', 'season_champion'] as const).map((code) => ({
+    name: code.replace('_', '-'),
+    input: {
+      facts: {
+        code,
+        object: { kind: 'season' as const, id: 'preview', title: 'Сезон 2025' },
+        factDate: '2025-10-31',
+        level: null,
+      },
+      objectTitle: 'Сезон 2025',
+      riderName: 'Анна К.',
+    },
+  })),
 ];
 
 /** OG-картинки: вид × линия × длина текстов (тема — `OG_THEME_ID`, как у выдачи; схема — `scheme` фикстуры). */
