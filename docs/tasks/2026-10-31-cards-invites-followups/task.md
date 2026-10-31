@@ -77,4 +77,23 @@ Follow-up карточек для сторис (PR #139, #142) и приглаш
 
 # 12. Outcome
 
-Заполняется после проверок.
+PR #166 (`fix/story-cards-and-panel-invites-followups` → `develop`), коммиты `b6ae0223`, `1900423b` (ревью pass 1),
+`63933b9b` (Codex pass 2), merge `develop` (конфликт только в `pokatim-app.md`: ключ карточки достижения — сезон из
+#161 + тема).
+
+**Сделано:** A1–A3 и B4–B6 по §4. Ревью: Codex pass 1–2 — APPROVE (оба MEDIUM исправлены), independent-reviewer —
+APPROVE (MEDIUM-1, LOW-1, LOW-3, LOW-4 исправлены, LOW-2 принят в ADR-0026) — `findings-codex.md`,
+`findings-claude.md`.
+
+**Проверки:**
+
+- jest `apps/app` — карточки, тема, мета, оболочка, SEO, достижения: 212/212 после merge `develop`; typecheck app и
+  api — чисто.
+- int api: `panel-members` + `panel-invitations` 41/41, `panel-cli` 8/8 (Mongo RS `127.0.0.1:27117`, Redis `:6479/11`).
+  Новые тесты B4 (3) и A1 (тема, отсчёт, инвалидация, запрос в полёте) — красные без исправлений.
+- `pnpm e2e:admin` локально (свой Mailpit `:8125/:1125`, БД `pokatim_invite_e2e`, Redis db 10): 4/4.
+- Полный `pnpm check` (`pokatim_cards_followups_test`, Redis db 9) целиком зелёным не прошёл: под нагрузкой (load
+  36–47, параллельные сессии) таймауты 5 с в файлах вне diff (`apps/app`: 10 файлов — отдельно зелёные;
+  `apps/admin`: `SeasonScreen.test.tsx` и др. — отдельно 2 из 3 прогонов). Format, lint, arch, typecheck и тесты
+  пакетов — зелёные. Push — `--no-verify` с согласия пользователя; финальный гейт — CI.
+- NOT VERIFIED: экран карточки на iOS/Android вручную.
