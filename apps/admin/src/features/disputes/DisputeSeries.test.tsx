@@ -98,11 +98,9 @@ describe('«Пульс и мощность» на разборе спора (06b
     expect(await screen.findByText('Ряды готовятся…')).toBeTruthy();
     expect(mocked.getDisputeSeries).toHaveBeenCalledWith(ID);
 
-    const heart = await screen.findByRole(
-      'img',
-      { name: 'Пульс по дистанции: среднее 160, максимум 172 уд/мин' },
-      { timeout: 5000 },
-    );
+    const heart = await screen.findByRole('img', {
+      name: 'Пульс по дистанции: среднее 160, максимум 172 уд/мин',
+    });
     expect(heart).toBeTruthy();
     expect(
       screen.getByRole('img', { name: 'Скорость по дистанции: средняя 39,6 км/ч' }),
@@ -134,7 +132,7 @@ describe('«Пульс и мощность» на разборе спора (06b
     ]);
     expect(screen.getAllByRole('row')).toHaveLength(SERIES.distanceM.length + 1);
     expect(screen.getAllByRole('row')[1]!.textContent).toBe('1,00 км150 уд/мин36,5 км/ч');
-  }, 10_000);
+  });
 
   it('рядов нет — причина; отказ разбора — «Повторить» запрашивает снова', async () => {
     mocked.getDisputeSeries
@@ -176,8 +174,8 @@ describe('«Пульс и мощность» на разборе спора (06b
   it('ошибка запроса — состояние ошибки с повтором', async () => {
     mocked.getDisputeSeries.mockRejectedValue(new Error('boom'));
     show();
-    await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy(), { timeout: 5000 });
-  }, 10_000);
+    await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy());
+  });
 });
 
 describe('геометрия графика', () => {
