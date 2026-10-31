@@ -198,7 +198,19 @@ Contracts-first уже выполнен (PR A). TDD; отдельный комм
 
 ## 8.2 Deviations from spec
 
-(заполняет coder)
+- **«Все (N)» и сноска — `othersTruncated`, не `total > rows.length` (RC-B2).** `total` включает зрителя: при своей
+  строке вне `rows` (`me`) все строки уже видны, а `total > rows.length` дал бы ложное «Все (1)» у единственной своей
+  строки и сноску на экране. Условие: `total > rows.length + (me отдельно ? 1 : 0)`; unit-тест в
+  `route-ride-format.test.ts`. Смысл RC-B2 (показать вход, когда сервер отдал не всех) сохранён.
+- **Возврат с экрана — `routeCardPath(routeId, false)`** вместо `routePath` из `routes/route-detail.tsx`: тот же адрес,
+  уже есть в `route-ride-format.ts` (как у экрана выбора); импорт экрана карточки ради строки не нужен.
+- **Строки — общий `OthersRows`** (своя отдельно + «Включить показ» + пусто) в `route-ride-others-rows.tsx` для блока и
+  экрана; `OthersRow`/`OthersMeRow` — один внутренний `OthersRowItem` с флагом `separated`. Подпись «Видно только вам»
+  добавлена и в метку кнопки своей строки (скринридер).
+- **Вне scope, но нужно для зелёного typecheck:** `__tests__/home.test.tsx` — в фикстуре профиля не хватало
+  `showRouteRides` (ошибка TS после слияния PR A в develop); добавлено `showRouteRides: false`.
+- Шаги §11 5 и 6 закоммичены раздельно (переключатель; e2e + доки + pr-b.md). Полный `pnpm check` не запускался —
+  решение пользователя; вместо него — таргетные проверки (§12).
 
 ## 8.3 Security checklist
 
@@ -390,4 +402,23 @@ API/контракты/api-client; таблица у «Моих маршруто
 
 ## 12. Outcome (заполняет coder)
 
-—
+Статус: реализовано по §11, шаги 1–6 (коммиты `61c8fd11`, `b108c18a`, `dfffa85e`, `ce54d912`, `205f53bb` + последний —
+e2e, доки, pr-b.md). Отклонения — §8.2.
+
+Файлы: `features/route-rides/{route-ride-format.ts,queries.ts,route-ride-others-rows.tsx,route-ride-others-block.tsx,
+route-ride-others.tsx}`, `app/routes/others/[routeId].tsx`, `features/routes/route-detail.tsx`,
+`features/profile/{profile-form.tsx,queries.ts}`, `app/_layout.tsx`, `lib/seo.ts`, `packages/i18n/src/ru.ts`; тесты —
+`__tests__/route-ride-others.test.tsx` (новый, 26), `route-ride-format.test.ts`, `profile-screen.test.tsx`,
+`route-ride(-pick).test.tsx`, `route-detail.test.tsx`, `route-rides-block.test.tsx`, `app-routes.ts`,
+`protected-shell.test.tsx`, `app-routes-manifest.server.test.ts`, `home.test.tsx`; e2e — `e2e/web.spec.ts`.
+
+Проверки (2026-11-01):
+- `pnpm --filter @pokatim/app typecheck` — 0 ошибок.
+- jest затронутых и соседних наборов (карточка, «Мои заезды», результат, выбор, профиль, сторожа манифеста/SEO/оболочки,
+  темы, `features/{route-rides,profile,routes}`) — 39 наборов, 515 тестов, зелёные; все наборы на `__tests__/app-routes.ts`
+  — 53 набора, 924 теста, зелёные.
+- `pnpm --filter @pokatim/i18n test` — 2 файла, 16 тестов, зелёные.
+- eslint затронутых путей — 0 замечаний; `pnpm format:check` — чисто; `pnpm arch:check` — 0 нарушений.
+- TDD: тесты форматтеров, инвалидаций, блока и формы профиля падали до реализации (красный → зелёный).
+- NOT VERIFIED: полный `pnpm check` (решение пользователя; CI — полный), e2e `pnpm e2e:web` (нужны сборка web и API),
+  ручная проверка на iOS/Android/web, AC7 «CI зелёный» — после push.
