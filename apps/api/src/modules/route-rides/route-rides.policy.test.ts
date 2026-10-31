@@ -267,6 +267,13 @@ describe('автопроверка (route-rides-03)', () => {
   const activity = (overrides: Partial<ActivityRef> = {}) =>
     ({ sport: 'cycling', startedAt: uploaded, uploadCreatedAt: uploaded, ...overrides }) as const;
 
+  it('срок обработки события короче хранения плана: повтор после TTL плана не строит новый план', () => {
+    expect(ROUTE_RIDE_AUTO_POLICY.processDeadlineMs).toBe(7 * DAY_MS);
+    expect(ROUTE_RIDE_AUTO_POLICY.processDeadlineMs).toBeLessThan(
+      ROUTE_RIDE_AUTO_POLICY.planTtlDays * DAY_MS,
+    );
+  });
+
   it('autoEligible: cycling и unknown — да; cycling_indoor и other — нет; старт ровно за 7 сут до приёма — да, на 1 мс раньше — нет', () => {
     expect(ROUTE_RIDE_AUTO_POLICY).toMatchObject({ recentDays: 7, maxRoutes: 20 });
     expect(autoEligible(activity())).toBe(true);

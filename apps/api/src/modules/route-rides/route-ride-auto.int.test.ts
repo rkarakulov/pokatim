@@ -4,7 +4,7 @@ import { RouteRideDetail, RouteRidePage } from '@pokatim/contracts';
 import { uuidv7 } from '@rkarakulov/api-kit/mongo';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createHarness, type Harness } from '../../../test/harness';
+import { createHarness, DAY, type Harness } from '../../../test/harness';
 import { call } from '../../../test/identity';
 import {
   autoEvents,
@@ -404,6 +404,26 @@ describe('AC3: план события детерминирован (ревью 
     expect(evaluate.mock.calls.map(([doc]) => doc.routeId)).toEqual([failing]);
     expect(await rides().countDocuments({ activityId: fresh })).toBe(19);
     expect(await rides().countDocuments({ routeId: newer })).toBe(0);
+  });
+
+  it('поздний повтор события после TTL плана (pass 4, Codex): срок обработки истёк — без плана и сверок', async () => {
+    const r = await rider(h);
+    await ownCorridorRoute(h, r.userId);
+    const fresh = await ride(r.auth, rideGpx('clean.gpx', at(0)));
+    const [event] = (await autoEvents(h)).filter(
+      (item) => (item.payload as { activityId: string }).activityId === fresh,
+    );
+    const evaluate = vi.spyOn(evaluator(), 'evaluate').mockResolvedValue(verdict(false));
+    expect(await auto().process(job(event!.type, event!._id))).toEqual({ planned: 1, passed: 0 });
+    // план убран TTL, прошёл месяц, появился новый свой маршрут
+    await routeRidesDb(h).autoPlans.deleteMany({});
+    h.clock.advance(31 * DAY);
+    await ownCorridorRoute(h, r.userId);
+    evaluate.mockClear();
+    expect(await auto().process(job(event!.type, event!._id))).toBe('skipped');
+    expect(evaluate).not.toHaveBeenCalled();
+    expect(await routeRidesDb(h).autoPlans.countDocuments({})).toBe(0);
+    expect(await rides().countDocuments({ activityId: fresh })).toBe(0);
   });
 
   it('квота своего маршрута вне скана истории — до отсечения 20 (pass 3, Codex MEDIUM)', async () => {

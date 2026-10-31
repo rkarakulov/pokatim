@@ -43,6 +43,11 @@ export const ROUTE_RIDE_AUTO_POLICY = {
   boundsBatch: 25,
   /** хранение плана события (TTL) — дольше ретраев и повторов outbox */
   planTtlDays: 30,
+  /**
+   * срок обработки события от приёма файла: без сохранённого плана позже — задача без плана и сверок (повтор после
+   * TTL плана не строит новый, ревью pass 4); строго меньше `planTtlDays` (unit-тест)
+   */
+  processDeadlineMs: 7 * 86_400_000,
   sports: ['cycling', 'unknown'],
 } as const;
 

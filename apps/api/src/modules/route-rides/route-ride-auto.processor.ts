@@ -83,12 +83,17 @@ export class RouteRideAutoProcessor extends WorkerHost {
   ): Promise<RouteRideAutoOutcome> {
     const started = Date.now();
     const activity = await this.activities.activity(userId, activityId);
-    const primary = activity ? await primaryOfGroup(this.activities, userId, activity) : null;
+    if (!activity) return 'skipped';
+    const primary = await primaryOfGroup(this.activities, userId, activity);
     if (!primary || !autoEligible(primary)) return 'skipped';
 
     const planned = eventId
-      ? await this.eventPlan(eventId, userId, primary)
+      ? await this.eventPlan(eventId, userId, primary, activity.uploadCreatedAt)
       : await this.plan(userId, primary);
+    if (!planned) {
+      this.logger.log(`route-ride-auto activity ${primary.id}: deadline passed, skipped`);
+      return 'skipped';
+    }
     let passed = 0;
     for (const routeId of planned) {
       if (await this.checkRoute(userId, routeId, primary, finalAttempt)) passed += 1;
@@ -100,16 +105,22 @@ export class RouteRideAutoProcessor extends WorkerHost {
     return { planned: planned.length, passed };
   }
 
-  /** План события: сохранённый — как есть; нет — построить и зафиксировать (гонка — план победителя). */
+  /**
+   * План события: сохранённый — как есть; нет — построить и зафиксировать (гонка — план победителя). Срок обработки
+   * от приёма файла истёк (`processDeadlineMs` < TTL плана) — `null`: поздний повтор не строит новый план (pass 4).
+   */
   private async eventPlan(
     eventId: string,
     userId: string,
     primary: ActivityRef,
-  ): Promise<string[]> {
+    uploadedAt: Date,
+  ): Promise<string[] | null> {
     const saved = await this.repository.autoPlanOf(eventId);
     if (saved) return saved;
-    const routeIds = await this.plan(userId, primary);
     const now = this.clock.now();
+    if (now.getTime() - uploadedAt.getTime() > ROUTE_RIDE_AUTO_POLICY.processDeadlineMs)
+      return null;
+    const routeIds = await this.plan(userId, primary);
     return this.repository.saveAutoPlan({
       _id: eventId,
       userId,
