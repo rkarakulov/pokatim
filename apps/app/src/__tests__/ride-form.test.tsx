@@ -49,6 +49,7 @@ const ride: RideDetailForOrganizer = {
   rescheduledAt: null,
   route: null,
   start: null,
+  photo: null,
   description: 'Едем',
   version: 2,
 };

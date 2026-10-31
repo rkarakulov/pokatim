@@ -314,13 +314,11 @@ export class RidesService {
     }
   }
 
-  /** Ответ мутации: маршрут — видимый организатору сейчас; `reported` — по жалобам зрителя (если не задан). */
-  private async viewOf(
-    doc: RideDoc,
-    userId: string,
-    now: Date,
-    reported?: boolean,
-  ): Promise<RideView> {
+  /**
+   * Ответ мутации: маршрут — видимый организатору сейчас; `reported` — по жалобам зрителя (если не задан). Общий с
+   * `RidePhotosService` (ride-photo).
+   */
+  async viewOf(doc: RideDoc, userId: string, now: Date, reported?: boolean): Promise<RideView> {
     const [isReported, routes] = await Promise.all([
       reported ?? this.reports.exists(doc._id, userId),
       lookupRoutes(this.rideRoutes, [doc], userId),
@@ -328,14 +326,18 @@ export class RidesService {
     return rideViewOf(doc, userId, now, routes, isReported);
   }
 
-  /** Свой райд организатора; чужой и неизвестный — 404 (не 403: существование чужого не раскрывается). */
-  private async ownRide(userId: string, id: string): Promise<RideDoc> {
+  /**
+   * Свой райд организатора; чужой и неизвестный — 404 (не 403: существование чужого не раскрывается). Общий с
+   * `RidePhotosService` (ride-photo) — копии проверки нет.
+   */
+  async ownRide(userId: string, id: string): Promise<RideDoc> {
     const doc = await this.repository.findForViewer(id, userId);
     if (!doc || doc.organizerUserId !== userId) throw domainError('NOT_FOUND', 404);
     return doc;
   }
 
-  private assertUpcoming(doc: RideDoc, now: Date): void {
+  /** Будущий опубликованный (не прошёл, не отменён, не скрыт); иначе 409 `RIDE_INVALID_STATE`. */
+  assertUpcoming(doc: RideDoc, now: Date): void {
     if (ridePhase(doc, now) !== 'upcoming') throw domainError('RIDE_INVALID_STATE', 409);
   }
 }

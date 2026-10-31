@@ -5,6 +5,7 @@ import { uuidv7 } from '@rkarakulov/api-kit/mongo';
 import type { Job, Queue } from 'bullmq';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { twoToneImage } from '../../../test/avatars';
 import { createHarness, DAY, type Harness } from '../../../test/harness';
 import { bearer, call } from '../../../test/identity';
 import { routesDb, seedRiderRoute } from '../../../test/routes';
@@ -276,5 +277,68 @@ describe('линия — только маршрут каталога (AC3)', ()
     expect(line).not.toHaveBeenCalled();
     expect(await readyToken(other, ride.id)).not.toBe(first);
     expect((await ridesDb(h).findOne({ _id: ride.id }))?.routeId).toBe(routeId);
+  });
+});
+
+describe('4a с фото организатора (ride-photo, AC5)', () => {
+  const uploadPhoto = async (rideId: string): Promise<string> => {
+    const res = await h.app.inject({
+      method: 'PUT',
+      url: `${RIDES}/${rideId}/photo`,
+      headers: { 'content-type': 'application/octet-stream', ...bearer(organizer.token) },
+      payload: await twoToneImage('jpeg', { width: 1200, height: 900 }),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    return (JSON.parse(res.body) as { ride: { photo: { id: string } } }).ride.photo.id;
+  };
+  const night = '?template=night';
+
+  it('night с фото — новый ключ и картинка после замены фото; line — тот же ключ', async () => {
+    const ride = await createRide(h, organizer);
+    await status(other, ride.id);
+    await runJob();
+    const lineToken = await readyToken(other, ride.id);
+    await status(other, ride.id, night);
+    await runJob();
+    const plain = await readyToken(other, ride.id, night);
+
+    await uploadPhoto(ride.id);
+    const photoSpy = vi.spyOn(h.worker.get<RidesForSharing>(RIDES_FOR_SHARING), 'invitePhoto');
+    expect(await status(other, ride.id, night)).toEqual({ status: 'pending' });
+    expect(await runJob()).toBe('ready');
+    expect(photoSpy).toHaveBeenCalledTimes(1);
+    const withPhoto = await readyToken(other, ride.id, night);
+    expect(withPhoto).not.toBe(plain);
+    const png = (await image(`${withPhoto}.png`)).rawPayload;
+    expect(png.readUInt32BE(16)).toBe(1080);
+    expect(png.readUInt32BE(20)).toBe(1920);
+    // line фото не рисует — картинка прежняя, без постановки
+    expect(await readyToken(other, ride.id)).toBe(lineToken);
+
+    await uploadPhoto(ride.id);
+    expect(await status(other, ride.id, night)).toEqual({ status: 'pending' });
+    expect(await runJob()).toBe('ready');
+    expect(await readyToken(other, ride.id, night)).not.toBe(withPhoto);
+  });
+
+  it('фото снято между постановкой и рендером — skipped без картинки и без ретрая', async () => {
+    const ride = await createRide(h, organizer);
+    await uploadPhoto(ride.id);
+    await status(other, ride.id, night);
+    const job = await takeJob();
+    const removed = await authed(h, organizer, 'POST', `${RIDES}/${ride.id}/photo/delete`, {});
+    expect(removed.status).toBe(200);
+    expect(await processor().buildRideInvite(job.data, { finalAttempt: true })).toBe('skipped');
+  });
+
+  it('порт invitePhoto: только текущее фото нескрытого райда', async () => {
+    const ride = await createRide(h, organizer);
+    const id = await uploadPhoto(ride.id);
+    const port = h.worker.get<RidesForSharing>(RIDES_FOR_SHARING);
+    expect((await port.invitePhoto(ride.id, id))?.byteLength).toBeGreaterThan(0);
+    const otherRide = await createRide(h, other);
+    expect(await port.invitePhoto(otherRide.id, id)).toBeNull();
+    await hideInDb(h, ride.id);
+    expect(await port.invitePhoto(ride.id, id)).toBeNull();
   });
 });

@@ -87,6 +87,7 @@ import {
   RiderRouteModerationPage,
   type RiderRouteModerationQuery,
   type RestoreRideRequest,
+  type ResetRidePhotoRequest,
   type DisputeDecisionRequest,
   PanelDispute,
   PanelDisputeSeries,
@@ -371,6 +372,11 @@ export function createAdminApiClient({ baseUrl, fetchImpl }: AdminApiClientOptio
       post(`${moderationRide(id)}/restore`, ModerationRideDetail, body),
     dismissRideReports: (id: string, body: DismissRideReportsRequest) =>
       post(`${moderationRide(id)}/dismiss-reports`, ModerationRideDetail, body),
+    /** Удалить фото организатора (ride-photo): `photoId` из карточки, фото уже другое — 409 `CONFLICT`. */
+    resetRidePhoto: (id: string, body: ResetRidePhotoRequest) =>
+      post(`${moderationRide(id)}/photo-reset`, ModerationRideDetail, body),
+    /** Адрес фото райда для карточки (тот же origin, без запроса); у скрытого райда — 404. */
+    ridePhotoUrl: (id: string) => `${baseUrl}/v1/ride-photos/${encodeURIComponent(id)}`,
 
     // --- модерация маршрутов райдеров (routes.moderate, routes-06): конфликт версии — 409 CONFLICT ---
     listRiderRoutes: (params: RiderRouteListParams = {}) =>

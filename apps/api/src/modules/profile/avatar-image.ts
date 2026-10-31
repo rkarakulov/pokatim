@@ -1,21 +1,19 @@
-import {
-  AVATAR_MAX_INPUT_PIXELS,
-  AVATAR_MAX_PNG_PIXELS,
-  AVATAR_MIN_CROP_PX,
-  AVATAR_SIZE_PX,
-} from '@pokatim/contracts';
+import { AVATAR_MIN_CROP_PX, AVATAR_SIZE_PX } from '@pokatim/contracts';
 import sharp from 'sharp';
 
-/**
- * Обработка аватара (rider-profile, ADR-0019): ограниченное перекодирование в HTTP-обработчике (RC-A1) — вход до
- * 10 МиБ, JPEG/WebP до 100 Мп с shrink-on-load, PNG до 25 Мп, таймаут 10 с, одна обработка на процесс;
- * декодирование — в пуле libvips, не в event loop. Вывод — только JPEG 512×512 без метаданных (EXIF, GPS, XMP и ICC не пишутся: `keepMetadata`/`withMetadata`/`withExif` не вызываются).
- * Кэш операций sharp выключен (байты чужих фото не держатся в памяти), один поток libvips на операцию.
- */
-sharp.cache(false);
-sharp.concurrency(1);
+import { decodeOriented, type ImageFormat, inspectImage, MEDIA_POLICY } from '../media';
 
-export type AvatarFormat = 'jpeg' | 'png' | 'webp';
+/**
+ * Обработка аватара (rider-profile, ADR-0019) поверх общего конвейера `media` (ADR-0028): ограниченное
+ * перекодирование в HTTP-обработчике (RC-A1) — вход до 10 МиБ, JPEG/WebP до 100 Мп с shrink-on-load, PNG до 25 Мп,
+ * таймаут 10 с, одна обработка на процесс (`ImageProcessing`); настройки sharp — только в `media/image-pipeline.ts`.
+ * Вывод — только JPEG 512×512 без метаданных.
+ */
+
+/** Формат по сигнатуре — старое имя для импортов профиля (реализация — `media`). */
+export { detectImageFormat } from '../media';
+
+export type AvatarFormat = ImageFormat;
 
 /** Квадрат обрезки в пикселях ориентированного изображения. */
 export interface CropRect {
@@ -35,23 +33,6 @@ export interface CropIntent {
 export type AvatarResult =
   | { ok: true; bytes: Uint8Array; format: AvatarFormat }
   | { ok: false; error: 'unsupported' | 'invalid'; format?: AvatarFormat };
-
-/** Таймаут конвейера sharp, с. */
-export const AVATAR_TIMEOUT_SEC = 10;
-/** Качество JPEG аватара. */
-const AVATAR_JPEG_QUALITY = 82;
-
-const startsWith = (bytes: Uint8Array, prefix: readonly number[], offset = 0) =>
-  bytes.length >= offset + prefix.length && prefix.every((b, i) => bytes[offset + i] === b);
-const ascii = (text: string) => [...text].map((char) => char.charCodeAt(0));
-
-/** Формат по сигнатуре: JPEG `FF D8 FF`, PNG `89 50 4E 47 0D 0A 1A 0A`, WebP `RIFF????WEBP`; иначе `null`. */
-export function detectImageFormat(bytes: Uint8Array): AvatarFormat | null {
-  if (startsWith(bytes, [0xff, 0xd8, 0xff])) return 'jpeg';
-  if (startsWith(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return 'png';
-  if (startsWith(bytes, ascii('RIFF')) && startsWith(bytes, ascii('WEBP'), 8)) return 'webp';
-  return null;
-}
 
 /**
  * Квадрат обрезки (чистая): без намерения — центральный квадрат меньшей стороны; иначе сторона `size · min(w, h)`,
@@ -77,10 +58,6 @@ export function cropRect(width: number, height: number, crop: CropIntent | null)
  * трети короткой стороны — без увеличения.
  */
 export const AVATAR_DECODE_EDGE_PX = 2048;
-
-/** Предел пикселей по формату: у PNG shrink-on-load нет. */
-const maxPixels = (format: AvatarFormat) =>
-  format === 'png' ? AVATAR_MAX_PNG_PIXELS : AVATAR_MAX_INPUT_PIXELS;
 
 /**
  * Квадрат обрезки исходника → в координатах уменьшенного кадра (чистая): масштаб — по ширине; сторона ≥ 1 и в рамках.
@@ -112,46 +89,27 @@ export async function processAvatar(
   bytes: Uint8Array,
   crop: CropIntent | null,
 ): Promise<AvatarResult> {
-  const format = detectImageFormat(bytes);
-  if (!format) return { ok: false, error: 'unsupported' };
-  const limit = maxPixels(format);
-  const input = () =>
-    sharp(bytes, {
-      limitInputPixels: limit,
-      failOn: 'error',
-      animated: false,
-      sequentialRead: true,
-    });
-  let oriented: { width: number; height: number };
-  try {
-    const meta = await input().metadata();
-    if (meta.format !== format) return { ok: false, error: 'unsupported', format };
-    if (meta.width * meta.height > limit) return { ok: false, error: 'invalid', format };
-    oriented = meta.autoOrient;
-  } catch {
-    return { ok: false, error: 'invalid', format };
+  const inspected = await inspectImage(bytes);
+  // `too_small` у заголовка не бывает; отказ аватара — только `unsupported` | `invalid`
+  if (!inspected.ok) {
+    return {
+      ok: false,
+      error: inspected.error === 'unsupported' ? 'unsupported' : 'invalid',
+      format: inspected.format,
+    };
   }
+  const { format, oriented } = inspected;
   const rect = cropRect(oriented.width, oriented.height, crop);
   if (!rect) return { ok: false, error: 'invalid', format };
   try {
-    const { data, info } = await input()
-      .autoOrient()
-      .resize({
-        width: AVATAR_DECODE_EDGE_PX,
-        height: AVATAR_DECODE_EDGE_PX,
-        fit: 'inside',
-        withoutEnlargement: true,
-      })
-      .raw()
-      .timeout({ seconds: AVATAR_TIMEOUT_SEC })
-      .toBuffer({ resolveWithObject: true });
+    const { data, info } = await decodeOriented(bytes, format, AVATAR_DECODE_EDGE_PX);
     const output = await sharp(data, {
       raw: { width: info.width, height: info.height, channels: info.channels },
     })
       .extract(scaleRect(rect, oriented, info))
       .resize(AVATAR_SIZE_PX, AVATAR_SIZE_PX)
-      .jpeg({ quality: AVATAR_JPEG_QUALITY })
-      .timeout({ seconds: AVATAR_TIMEOUT_SEC })
+      .jpeg({ quality: MEDIA_POLICY.jpegQuality })
+      .timeout({ seconds: MEDIA_POLICY.timeoutSec })
       .toBuffer();
     return { ok: true, bytes: new Uint8Array(output), format };
   } catch {

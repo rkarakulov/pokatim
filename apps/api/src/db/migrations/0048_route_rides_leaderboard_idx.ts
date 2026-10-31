@@ -23,7 +23,7 @@ export const ROUTE_RIDES_LEADERBOARD_INDEX = {
  * без бэкфилла, идемпотентна. После `0046_route_ride_auto_plans`.
  */
 export const routeRidesLeaderboardIdx: MongoMigration = {
-  id: '0047_route_rides_leaderboard_idx',
+  id: '0048_route_rides_leaderboard_idx',
   async up(db) {
     const { key, options } = ROUTE_RIDES_LEADERBOARD_INDEX;
     await db.collection(ROUTE_RIDES_COLLECTIONS.rides).createIndex(key, options);

@@ -141,15 +141,22 @@ paths:
 
 - `profile`: клуб и `publicId` — `PATCH /v1/profile` (`club`), аватар — `ProfileAvatarsController`
   (`@Controller('profile/avatar')`, `AuthGuard`: `PUT` сырыми байтами — query `AvatarCropQuery` до слота и тела,
-  `ProfileAvatarService.admit` (лимит `profile-avatar:<uid>` 20/ч, свои `UploadSlots` чтения 4/1 — слот до лимита) → `readLimited` 10 МиБ (таймауты 10/60 с) → место обработки
-  `AvatarProcessingGate` (1 на процесс, ожидание ≤ 5 с, иначе 429) →
+  `ProfileAvatarService.admit` (лимит `profile-avatar:<uid>` 20/ч, общие `ImageUploadSlots` чтения 4/1 — слот до лимита) → `readLimited` 10 МиБ (таймауты 10/60 с) → место обработки
+  `ImageProcessing` (`modules/media`, 1 на процесс на все фото, ожидание ≤ 5 с, иначе 429) →
   `processAvatar`; `POST delete` — лимит `profile-update`), отдача — `AvatarsPublicController` (`avatars/:id`,
   `PublicReadGuard`, заголовки через `HttpAdapterHost` после чтения). Порт `RIDER_PROFILES`
   (`RiderProfileDirectory.findPublic`) — в `ProfileCoreModule`.
 - **Исключение RC-A1 (ADR-0019):** перекодирование аватара `sharp` (`avatar-image.ts`) — в HTTP-обработчике: вход
   ≤ 10 МиБ, JPEG/WebP ≤ 100 Мп (две стадии: shrink-on-load до 2048 px, затем квадрат), PNG ≤ 25 Мп, `failOn: 'error'`,
   `timeout` 10 с, 1 обработка на процесс (память — ADR-0019), пул libvips вне event loop. «Рендер в HTTP-обработчике»
-  красных флагов — Skia, ffmpeg, OG; другие изображения — только по этому образцу и с ADR.
+  красных флагов — Skia, ffmpeg, OG; другие изображения — только по этому образцу и с ADR. Фото организатора райда
+  (ADR-0028) — тот же конвейер `modules/media` (`processCover`: поворот + вписать в 1600 px, одна стадия).
+- **`media` (ADR-0028)** — инфраструктурный модуль-лист `modules/media` (правило `media-leaf`): `detectImageFormat`,
+  `inspectImage`, `decodeOriented`, `processCover`, `replyJpeg`, `MEDIA_POLICY`; настройки sharp — только
+  `image-pipeline.ts`. `MediaModule` (не `@Global`, провайдеры `ImageProcessing` и `ImageUploadSlots`) импортируют
+  `ProfileModule` и `RidesModule` — один экземпляр гейта и слотов на процесс; `ProfileModule`/`RidesModule` их не
+  объявляют. Worker — только чистые функции (`sharing`, рендер 4a). Хранение, права и модерация фото — у модуля-владельца
+  (`profile_avatars` — `profile`, `ride_photos` — `rides`).
 - Истории своего профиля — в модулях-владельцах: `results` — `ProfileRacesController` (`profile/races`) →
   `ResultsHistoryService` (`entriesOfUserPage` + `ResultsReadService.entryResult` в одной snapshot-сессии, места не
   дублируются); `rides` — `ProfileRidesController` (`profile/rides`) → `RidesHistoryService` (`pastOf`,
@@ -468,7 +475,7 @@ paths:
   `ACHIEVEMENT_LEVEL_TARGETS`; условие «Сезона в зачёте» — `{count}` = `SEASON_REGULAR_MIN_RACES`, смена константы —
   подъём `renderVersion`). Сезон в хэше — `object.id` и название (отдельный `seasonId` не добавлять, RC-7). Порт отдаёт `level` (строка или `null`); уровень — в `achievementCardHash` явно после
   кода; тексты — метка уровня в kicker (`achievementCard.kickerLevel`), условие с `{count}` порога; сменил строки или
-  вёрстку — подними `STORY_CARD_POLICY.renderVersion` (сейчас 3). `SharingModule`/`SharingWorkerModule` импортируют
+  вёрстку — подними `STORY_CARD_POLICY.renderVersion` (сейчас 4 — ride-photo). `SharingModule`/`SharingWorkerModule` импортируют
   `AchievementsReadModule`.
 - Карточка маршрута каталога (route-story-card): `RouteCardController` (`GET routes/:routeId/story-card`, `AuthGuard`,
   `no-store`) → `RouteCardService` (не в каталоге — 404) → `RouteCardInputs` (`ROUTES_FOR_SHARING.ogFacts`/`ogLine`,
@@ -613,6 +620,12 @@ RC-A1, ADR-0019).
   каталоге, иначе центр города; кандидаты — только по публичным данным (города круга | маршруты каталога со стартом в
   круге, `publicStartsWithin`), отбор после чтения пачками (≤ 5). `RideErasure` сбрасывает точки райдов на маршрутах
   удалённого (`restarted`), шаг `ride-starts` после `routes` — на висячих маршрутах (`resetDanglingStarts`).
+- Фото организатора (ride-photo, ADR-0028): `RidePhotosController` (`rides/:id/photo`, `AuthGuard`: `PUT` — `admit`
+  (`RidesService.ownRide` → `assertUpcoming` → `ImageUploadSlots` → лимит `ride-photo:<uid>`) до тела, `POST delete`) и
+  `RidePhotosPublicController` (`ride-photos/:id`, `PublicReadGuard`) → `RidePhotosService` (гейт `ImageProcessing`,
+  `processCover`, транзакции «райд первым»); проверки «свой будущий райд» — методы `RidesService`, без копий. Сброс —
+  `RidesModerationService.resetPhoto`; стирание — шаг `RideErasure`; порт `RIDES_FOR_SHARING` — `photoId` в фактах и
+  `invitePhoto` (байты только текущего фото нескрытого райда).
 
 ## Заезд по маршруту (`route-rides`, route-rides-01)
 

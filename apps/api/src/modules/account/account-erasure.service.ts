@@ -76,7 +76,7 @@ export class AccountErasureService {
     });
     await this.step(userId, 'rides', run, async () => {
       const result = await this.rides.erase(userId, this.clock.now());
-      return `cancelled=${result.cancelled} left=${result.left} unsigned=${result.unsigned} restarted=${result.restarted}`;
+      return `cancelled=${result.cancelled} left=${result.left} unsigned=${result.unsigned} restarted=${result.restarted} photos=${result.photos}`;
     });
     await this.step(userId, 'routes', run, async () => {
       return `deleted=${await this.routes.erase(userId)}`;

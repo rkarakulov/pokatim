@@ -299,6 +299,7 @@ export function createApiClient({
   const myRoutesUploadPath = (title: string) => `/v1/routes/mine${queryString({ title })}`;
   /** Путь загрузки аватара: обрезка — доли `x, y, size` ориентированного изображения (без них — центр). */
   const avatarPath = (crop?: AvatarCrop) => `/v1/profile/avatar${crop ? queryString(crop) : ''}`;
+  const ridePhotoPath = (id: string) => `/v1/rides/${encodeURIComponent(id)}/photo`;
   const octetStream = (accessToken: string) => ({
     authorization: `Bearer ${accessToken}`,
     'content-type': 'application/octet-stream',
@@ -692,6 +693,29 @@ export function createApiClient({
     /** «Не иду» (идемпотентно); организатор — 409 `RIDE_INVALID_STATE`. */
     leaveRide: (accessToken: string, id: string) =>
       postAuthorized(accessToken, `/v1/rides/${encodeURIComponent(id)}/leave`, RideView, {}),
+    /**
+     * Фото организатора райда (ride-photo, ADR-0028): сырые байты JPEG/PNG/WebP ≤ 10 МиБ (`application/octet-stream`);
+     * поворот, вписывание в 1600 px и снятие метаданных — сервер. Ответ — `RideView` с `ride.photo`; отказы —
+     * `ApiHttpError` (404, 409 `RIDE_INVALID_STATE`, 413/415/422 `IMAGE_*`, 429).
+     */
+    uploadRidePhoto: (accessToken: string, id: string, body: Blob | Uint8Array) =>
+      request(ridePhotoPath(id), RideView, {
+        method: 'PUT',
+        body: body as BodyInit,
+        headers: octetStream(accessToken),
+        ...withCredentials,
+      }),
+    /** Тот же запрос для платформенной отправки (upload task в native): ответ разбирается `RideView`. */
+    ridePhotoUploadRequest: (accessToken: string, id: string) => ({
+      url: `${baseUrl}${ridePhotoPath(id)}`,
+      method: 'PUT' as const,
+      headers: octetStream(accessToken),
+    }),
+    /** Удалить фото своего райда (идемпотентно, любой статус); ответ — `RideView` с `ride.photo: null`. */
+    deleteRidePhoto: (accessToken: string, id: string) =>
+      postAuthorized(accessToken, `${ridePhotoPath(id)}/delete`, RideView, {}),
+    /** Адрес картинки фото райда (публичный, без запроса). */
+    ridePhotoUrl: (id: string) => `${baseUrl}/v1/ride-photos/${encodeURIComponent(id)}`,
     /** Жалоба на райд (05b, идемпотентно); организатор — 409 `RIDE_INVALID_STATE`, лимит — 429. */
     reportRide: (accessToken: string, id: string, body: CreateRideReportRequest) =>
       postAuthorized(accessToken, `/v1/rides/${encodeURIComponent(id)}/reports`, RideView, body),

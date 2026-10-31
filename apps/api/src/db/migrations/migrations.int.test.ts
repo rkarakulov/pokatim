@@ -58,10 +58,12 @@ import { ACHIEVEMENT_SEASON_INDEXES, achievementsSeasonal } from './0043_achieve
 import { ROUTE_RIDES_PASSED_INDEX, routeRidesPassedIdx } from './0044_route_rides_passed_idx';
 import { social } from './0045_social';
 import { routeRideAutoPlans } from './0046_route_ride_auto_plans';
+import { ridePhotos } from './0047_ride_photos';
+import { RIDE_PHOTOS_COLLECTIONS } from '../../modules/rides/ride-photos.collection';
 import {
   ROUTE_RIDES_LEADERBOARD_INDEX,
   routeRidesLeaderboardIdx,
-} from './0047_route_rides_leaderboard_idx';
+} from './0048_route_rides_leaderboard_idx';
 import { SOCIAL_COLLECTIONS } from '../../modules/social/social.collection';
 import { PRODUCT_EVENTS_COLLECTIONS } from '../../modules/product-events/product-events.collection';
 import { TICKETS_COLLECTIONS } from '../../modules/tickets/tickets.collection';
@@ -182,7 +184,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0044_route_rides_passed_idx',
       '0045_social',
       '0046_route_ride_auto_plans',
-      '0047_route_rides_leaderboard_idx',
+      '0047_ride_photos',
+      '0048_route_rides_leaderboard_idx',
     ]);
   });
 
@@ -1915,7 +1918,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     expect(await indexesOf(ROUTE_RIDES_COLLECTIONS.rides)).toEqual(expected);
   });
 
-  it('0045_social: коллекции и индексы «Свои» и журнала метрик; последняя; уникальности; повторный up — без изменений', async () => {
+  it('0045_social: коллекции и индексы «Свои» и журнала метрик; уникальности; повторный up — без изменений', async () => {
     const ids = migrations.map((migration) => migration.id);
     expect(ids.indexOf('0045_social')).toBe(ids.indexOf('0044_route_rides_passed_idx') + 1);
     const index = (key: Record<string, number>, unique = false) => ({
@@ -2014,11 +2017,45 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     expect(await indexesOf(ROUTE_RIDES_COLLECTIONS.autoPlans)).toEqual(expected);
   });
 
-  it('0047_route_rides_leaderboard_idx: частичный (routeId, время, дата, _id) по passed; последняя; повторный up — без изменений', async () => {
+  it('0047_ride_photos: коллекция и индексы фото райда; после 0046; одно фото на райд; повторный up — без изменений', async () => {
     const ids = migrations.map((migration) => migration.id);
-    expect(ids.at(-1)).toBe('0047_route_rides_leaderboard_idx');
-    expect(ids.indexOf('0047_route_rides_leaderboard_idx')).toBe(
-      ids.indexOf('0046_route_ride_auto_plans') + 1,
+    expect(ids.indexOf('0047_ride_photos')).toBe(ids.indexOf('0046_route_ride_auto_plans') + 1);
+    const expected = {
+      ride_photos_ride_unique: {
+        key: { rideId: 1 },
+        unique: true,
+        partialFilterExpression: undefined,
+        expireAfterSeconds: undefined,
+      },
+      ride_photos_organizer_idx: {
+        key: { organizerUserId: 1 },
+        unique: false,
+        partialFilterExpression: undefined,
+        expireAfterSeconds: undefined,
+      },
+    };
+    expect(await indexesOf(RIDE_PHOTOS_COLLECTIONS.photos)).toEqual(expected);
+    const photos = h.db.collection<Record<string, unknown> & { _id: string }>(
+      RIDE_PHOTOS_COLLECTIONS.photos,
+    );
+    try {
+      await photos.insertOne({ _id: 'p-0047-1', rideId: 'ride-0047', organizerUserId: 'u-a' });
+      await expect(
+        photos.insertOne({ _id: 'p-0047-2', rideId: 'ride-0047', organizerUserId: 'u-a' }),
+      ).rejects.toThrow(/duplicate key/);
+    } finally {
+      await photos.deleteMany({ _id: /^p-0047-/ });
+    }
+    await ridePhotos.up(h.db);
+    await ridePhotos.up(h.db);
+    expect(await indexesOf(RIDE_PHOTOS_COLLECTIONS.photos)).toEqual(expected);
+  });
+
+  it('0048_route_rides_leaderboard_idx: частичный (routeId, время, дата, _id) по passed; последняя; повторный up — без изменений', async () => {
+    const ids = migrations.map((migration) => migration.id);
+    expect(ids.at(-1)).toBe('0048_route_rides_leaderboard_idx');
+    expect(ids.indexOf('0048_route_rides_leaderboard_idx')).toBe(
+      ids.indexOf('0047_ride_photos') + 1,
     );
     const leaderboard = {
       route_rides_leaderboard_idx: {

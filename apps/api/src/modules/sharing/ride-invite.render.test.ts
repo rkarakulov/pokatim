@@ -29,6 +29,7 @@ function input(
       paceMinKmh: 22,
       paceMaxKmh: 24,
       routeId: null,
+      photoId: null,
       ...facts,
     },
   };
@@ -112,6 +113,16 @@ describe('rideInviteHash', () => {
     ].map(rideInviteHash);
     expect(new Set([base, ...changed]).size).toBe(changed.length + 1);
   });
+
+  it('ride-photo: смена фото меняет ключ `night`, не меняет `line`', () => {
+    const night = (photoId: string | null) =>
+      rideInviteHash(input({ template: 'night' }, { photoId }));
+    const line = (photoId: string | null) =>
+      rideInviteHash(input({ template: 'line' }, { photoId }));
+    expect(new Set([night(null), night('photo-a'), night('photo-b')]).size).toBe(3);
+    expect(line('photo-a')).toBe(line(null));
+    expect(line('photo-b')).toBe(line(null));
+  });
 });
 
 describe('rideInviteTree — раскладки 4b (`line`) и 4a без фото (`night`)', () => {
@@ -153,6 +164,22 @@ describe('rideInviteTree — раскладки 4b (`line`) и 4a без фот�
     const dark = rideInviteRenderInput(input({ template: 'night' }), null);
     expect(light.colors.background).toBe(theme.schemes.light.surface.default);
     expect(dark.colors.background).toBe(theme.schemes.dark.surface.default);
+  });
+
+  it('ride-photo: `night` с фото — прозрачный фон, текст и линии — onPhoto; `line` фото не рисует', () => {
+    const theme = appThemes.classic;
+    const onPhoto = theme.schemes.dark.text.onPhoto;
+    const withPhoto = rideInviteRenderInput(input({ template: 'night' }), null, { photo: true });
+    expect(withPhoto.colors).toMatchObject({
+      background: 'transparent',
+      ink: onPhoto,
+      muted: onPhoto,
+      accent: onPhoto,
+      rule: onPhoto,
+      track: onPhoto,
+    });
+    const line = rideInviteRenderInput(input({ template: 'line' }), null, { photo: true });
+    expect(line.colors.background).toBe(theme.schemes.light.surface.default);
   });
 });
 

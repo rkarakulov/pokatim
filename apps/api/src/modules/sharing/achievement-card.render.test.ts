@@ -202,16 +202,16 @@ describe('ключ кэша', () => {
     );
   });
 
-  it('ключ несезонного входа не изменился (без перерендера существующих карточек, RC-7)', () => {
+  it('ключ несезонного входа стабилен (RC-7; эталон пересчитан при renderVersion 4 — ride-photo)', () => {
     expect(achievementCardHash(input())).toBe(
-      'dab42deedac3f4f808610618e87966b33f30ae259feac943d8cd55455240bc7a',
+      '017a7c5574603fac79338f96583eb7060bba31da29a7f6e8d1384a862725e800',
     );
   });
 
-  it('версия рендера 3 (уровни) входит в ключ', () => {
-    expect(STORY_CARD_POLICY.renderVersion).toBe(3);
+  it('версия рендера 4 (ride-photo; 3 — уровни) входит в ключ', () => {
+    expect(STORY_CARD_POLICY.renderVersion).toBe(4);
     const before = achievementCardHash(input());
-    const spy = vi.spyOn(STORY_CARD_POLICY, 'renderVersion', 'get').mockReturnValue(4 as 3);
+    const spy = vi.spyOn(STORY_CARD_POLICY, 'renderVersion', 'get').mockReturnValue(5 as 4);
     expect(achievementCardHash(input())).not.toBe(before);
     spy.mockRestore();
   });

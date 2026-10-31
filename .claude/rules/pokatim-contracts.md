@@ -256,3 +256,12 @@ paths:
   `SocialActionBlockedDetails` (`409 SOCIAL_ACTION_BLOCKED`, код — в конце `ErrorCode`). Справочник продуктовых
   событий — не здесь (журнал наружу не уходит, RC-11): `apps/api/src/modules/product-events/product-events.types.ts`.
   `ERASURE_STEPS` — в порядке исполнения (`…, 'tickets', 'social', 'product-events', 'notifications', 'identity'`).
+- Фото организатора райда (ride-photo, ADR-0028): `src/rides/ride.schema.ts` — `RIDE_PHOTO_MAX_BYTES` (10 МиБ),
+  `RIDE_PHOTO_MAX_EDGE_PX` (1600), `RIDE_PHOTO_MIN_SHORT_PX` (400), `RidePhotoId` (= `OpaqueToken` из
+  `auth/verification.schema.ts`), `RidePhotoRef` (`{ id }`), `RideSummary.photo` (`.nullable().default(null)` — старый
+  сервер), `ImageInvalidDetails` (`reason: tolerantEnum(['too_small', 'unreadable'])`); `src/rides/ride-moderation.schema.ts`
+  — `ModerationRideDetail.photo` (`.nullable().default(null)`), `ResetRidePhotoRequest` (`strictObject { photoId,
+  reason: ActionReason }`). Коды `IMAGE_FORMAT_UNSUPPORTED` (415), `IMAGE_TOO_LARGE` (413), `IMAGE_INVALID` (422) — в
+  конце `ErrorCode`, для всех новых видов фото (аватар — `AVATAR_*`); действие журнала `ride.photo_reset` — в конце
+  `AUDIT_ACTIONS`. api-client — `uploadRidePhoto(token, id, body)`, `ridePhotoUploadRequest`, `deleteRidePhoto`,
+  `ridePhotoUrl`; admin — `resetRidePhoto(id, body)`, `ridePhotoUrl`.

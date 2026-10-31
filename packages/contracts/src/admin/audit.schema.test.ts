@@ -77,6 +77,7 @@ describe('AuditAction', () => {
       'achievement.granted_manually',
       'achievement.revoked_manually',
       'achievement.override_cleared',
+      'ride.photo_reset',
     ]);
     expect(AUDIT_SUBJECT_KINDS).toEqual([
       'season',

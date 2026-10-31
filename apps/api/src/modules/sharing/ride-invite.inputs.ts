@@ -16,7 +16,7 @@ export interface RideInviteInput {
 
 /**
  * Ключ кэша приглашения: sha256 hex канонического JSON (вид карточки — ключи кэша общие со сторис гонки, версия
- * рендера, шаблон, тема, поля райда на карточке, публичный маршрут). Зрителя в ключе нет — картинка одна на тему
+ * рендера, шаблон, тема, поля райда на карточке, публичный маршрут, фото организатора у `night`). Зрителя в ключе нет — картинка одна на тему
  * (тема — запрашивающего карточку, user-theme).
  */
 export function rideInviteHash(input: RideInviteInput): string {
@@ -34,6 +34,8 @@ export function rideInviteHash(input: RideInviteInput): string {
     facts.paceMinKmh,
     facts.paceMaxKmh,
     facts.routeId,
+    // фото организатора рисует только 4a (`night`): смена фото — новая картинка, у `line` ключ прежний
+    input.template === 'night' ? facts.photoId : null,
   ];
   return createHash('sha256').update(JSON.stringify(canonical)).digest('hex');
 }

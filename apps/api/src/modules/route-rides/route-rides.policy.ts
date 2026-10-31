@@ -218,7 +218,7 @@ export interface RideRankKey {
 
 /**
  * Порядок пройденных заездов (единственный компаратор): минимум времени; ничья — раньше заезд, затем меньший id.
- * Общий для «Моих заездов» (`bestOf`) и таблицы «Другие» (route-rides-04); тот же порядок у индекса `0047`.
+ * Общий для «Моих заездов» (`bestOf`) и таблицы «Другие» (route-rides-04); тот же порядок у индекса `0048`.
  */
 export function compareRides(a: RideRankKey, b: RideRankKey): number {
   return (

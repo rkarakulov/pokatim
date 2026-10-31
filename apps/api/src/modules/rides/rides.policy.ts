@@ -32,6 +32,13 @@ export const RIDES_POLICY = {
   reportLimit: { limit: 20, windowSec: 24 * 3600 },
   /** «Рядом» и карта ленты (05c, 8.3 п. 4): 60 в минуту, ключ `rides-near:<uid>` — ограничение перебора центров. */
   nearLimit: { limit: 60, windowSec: 60 },
+  /** Фото организатора (ride-photo): 20 загрузок в час, ключ `ride-photo:<uid>` — после слота приёма, до тела. */
+  photoUploadLimit: { limit: 20, windowSec: 3600 },
+  /**
+   * Таймауты тела фото (как аватар, ADR-0019): 10 с тишины, 60 с всего — медленная отправка не держит общий слот
+   * приёма (`ImageUploadSlots`) дольше минуты.
+   */
+  photoBodyTimeouts: { idleMs: 10_000, totalMs: 60_000 },
 } as const;
 
 type PhaseInput = Pick<RideDoc, 'status' | 'startsAt'>;

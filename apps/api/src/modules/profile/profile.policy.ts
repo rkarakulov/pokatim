@@ -17,16 +17,7 @@ export const PROFILE_POLICY = {
   verifiedUpdateLimit: { limit: 30, windowSec: 3600 },
   /** rider-profile: `PUT /v1/profile/avatar`, ключ `profile-avatar:<uid>` */
   avatarUploadLimit: { limit: 20, windowSec: 3600 },
-  /**
-   * rider-profile: одновременных **чтений тела** аватара — на процесс API и на пользователя (ревью PR A, MEDIUM-B):
-   * чтение держит ≤ 10 МиБ буфера, память libvips — отдельное место обработки (`avatarProcessing`).
-   */
-  avatarSlots: { maxTotal: 4, maxPerUser: 1 },
-  /**
-   * rider-profile: обработка sharp — одна на процесс (пик памяти — ADR-0019, лимит контейнера API 512 МБ); занято —
-   * ожидание до 5 с, затем `429`.
-   */
-  avatarProcessing: { concurrency: 1, waitMs: 5_000 },
+  // слоты чтения тела и место обработки sharp — общие с фото райда: `MEDIA_POLICY` (`modules/media`, ADR-0028)
   /**
    * rider-profile: таймауты тела аватара (MEDIUM-2 ревью) — короче общих (`DEFAULT_BODY_TIMEOUTS` 30/180 с): 10 МиБ на
    * 2 Мбит/с ≈ 42 с; медленная отправка не держит единственный слот процесса дольше минуты.
