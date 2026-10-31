@@ -654,7 +654,9 @@ RC-A1, ADR-0019).
   `processDeadlineMs` (7 сут < TTL плана 30 сут, unit-тест) — задача без плана и сверок (поздний повтор после TTL). По маршруту: заезд группы уже есть — пропуск без прогона; иначе сверка → только `passed`:
   повторно активность, `findExisting`, квота → `insertChecked` (`origin: 'auto'`). Одна задача на активность: сбой
   окружения — ретрай всей задачи, на последней попытке маршрут пропускается с логом.
-  Правила — `ROUTE_RIDE_AUTO_POLICY` (`route-rides.policy.ts`).
+  Правила — `ROUTE_RIDE_AUTO_POLICY` (`route-rides.policy.ts`). Отдельный тип нужен и при fan-out: «новая группа»
+  решается только в транзакции записи под замком активностей — подписчик `tracks.activity-ready`, читающий группу
+  «сейчас», её не восстановит (поздний дубль уже перехватил основную, 8.1 AC-2).
 - Таблица «Другие» (route-rides-04): `RouteRidesController.leaderboard` (`leaderboard` до `:rideId`) →
   `RouteRideLeaderboardService.table`: лимит `route-rides-leaderboard:<uid>` → `RouteRideRoutes.catalogRoute` (поверх
   `RoutesRepository.inCatalogByIds`, не `rideable`: автор одобренного маршрута тоже получает таблицу) →
@@ -663,9 +665,8 @@ RC-A1, ADR-0019).
   заезды» (`listOwn` → `liveActivities` → `bestOf`, RC-2) → чистые `firstAlive`/`rankLeaderboard`
   (`route-ride-leaderboard.ts`, ключ — `compareRides`). Ребро `route-rides → profile` — только у HTTP-модуля
   `RouteRidesModule` (`ProfileCoreModule`); `RouteRidesCoreModule` (account, achievements, worker) о `profile` не
-  знает. Правила — `ROUTE_RIDE_LEADERBOARD_POLICY`. Отдельный тип нужен и при fan-out: «новая группа»
-  решается только в транзакции записи под замком активностей — подписчик `tracks.activity-ready`, читающий группу
-  «сейчас», её не восстановит (поздний дубль уже перехватил основную, 8.1 AC-2).
+  знает. Правила — `ROUTE_RIDE_LEADERBOARD_POLICY`; скан читает `scanRiders + 1` — лог
+  `route_rides.leaderboard_truncated` только при фактическом усечении.
 
 ## Уведомления (`notifications`, ADR-0017)
 

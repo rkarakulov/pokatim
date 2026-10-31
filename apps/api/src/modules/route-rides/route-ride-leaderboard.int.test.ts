@@ -362,19 +362,31 @@ describe('злоупотребления и запрос', () => {
     ]);
 
     const original = repository.leaderboardTop.bind(repository);
-    vi.spyOn(repository, 'leaderboardTop').mockImplementation(async (id) => {
-      const rows = await original(id, 3, 3);
-      return Array.from({ length: ROUTE_RIDE_LEADERBOARD_POLICY.scanRiders }, (_, i) => ({
-        ...rows[i % rows.length]!,
-        userId: `${rows[i % rows.length]!.userId}-${i}`,
-      }));
-    });
+    const { scanRiders } = ROUTE_RIDE_LEADERBOARD_POLICY;
+    // агрегат отдаёт `found` райдеров (не больше запрошенного предела)
+    const scanOf = (found: number) =>
+      vi.spyOn(repository, 'leaderboardTop').mockImplementation(async (id, limit) => {
+        const rows = await original(id, 3, 3);
+        return Array.from({ length: Math.min(found, limit) }, (_, i) => ({
+          ...rows[i % rows.length]!,
+          userId: `${rows[i % rows.length]!.userId}-${i}`,
+        }));
+      });
     const warn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
     const me = await rider(h, 'me@example.com');
+    const truncated = `route_rides.leaderboard_truncated route=${routeId}`;
+    const logs = () => warn.mock.calls.map((args) => String(args[0]));
+
+    // ровно предел — не усечение, лога нет
+    scanOf(scanRiders);
     expect((await board(me.auth, routeId)).status).toBe(200);
-    const logs = warn.mock.calls.map((args) => String(args[0]));
-    expect(logs).toContain(`route_rides.leaderboard_truncated route=${routeId}`);
-    expect(logs.join('\n')).not.toContain(riders[0]!.userId);
+    expect(logs()).not.toContain(truncated);
+
+    // на одного больше — лог, без userId
+    scanOf(scanRiders + 1);
+    expect((await board(me.auth, routeId)).status).toBe(200);
+    expect(logs()).toContain(truncated);
+    expect(logs().join('\n')).not.toContain(riders[0]!.userId);
   });
 
   it('план агрегата — IXSCAN по route_rides_leaderboard_idx', async () => {

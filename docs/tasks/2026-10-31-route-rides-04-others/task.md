@@ -176,6 +176,8 @@ Coder, 2026-10-31 (уточнения реализации, решения §3 �
 
 - `rankLeaderboard` получает и `shared` (иначе сервис дописывал бы поле в ответ после чистой функции);
   `leaderboardTop(routeId, scanRiders, topPerRider)` — `n` параметром из политики.
+- Ревью pass 1 (LOW): сервис читает `scanRiders + 1` и режет до `scanRiders`; лог усечения — только при фактическом
+  усечении (ровно 5000 райдеров — без лога; §11 п. 3 писал «длина = `scanRiders`»), тест на границу.
 - Имя индекса для `hint` — константа `ROUTE_RIDES_LEADERBOARD_INDEX` в `route-rides.repository.ts` (модуль не
   импортирует миграции; совпадение держит int-тест плана `IXSCAN route_rides_leaderboard_idx`).
 - `chunks` экспортирован из `rider-route-rides.ts` (переиспользование пачек, без копии).

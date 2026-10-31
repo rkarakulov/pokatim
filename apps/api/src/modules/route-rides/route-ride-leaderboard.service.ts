@@ -43,8 +43,10 @@ export class RouteRideLeaderboardService {
     if (!(await this.routes.catalogRoute(routeId))) throw domainError('NOT_FOUND', 404);
 
     const { scanRiders, topPerRider, liveBatch } = ROUTE_RIDE_LEADERBOARD_POLICY;
-    const scanned = await this.repository.leaderboardTop(routeId, scanRiders, topPerRider);
-    if (scanned.length >= scanRiders) {
+    // на одного больше предела: лог — только при фактическом усечении (ровно 5000 райдеров — не усечение)
+    const fetched = await this.repository.leaderboardTop(routeId, scanRiders + 1, topPerRider);
+    const scanned = fetched.slice(0, scanRiders);
+    if (fetched.length > scanRiders) {
       this.logger.warn(`route_rides.leaderboard_truncated route=${routeId}`);
     }
     const riders = scanned.filter((row) => row.userId !== userId);
