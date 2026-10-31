@@ -50,6 +50,8 @@ describe('«Настройки уведомлений» без push (web)', () =
     expect(screen.queryByRole('header', { name: 'Маршруты' })).toBeNull();
     expect(api.getRouteNotificationSettings).not.toHaveBeenCalled();
     expect(api.getAchievementNotificationSettings).not.toHaveBeenCalled();
+    expect(api.getSocialNotificationSettings).not.toHaveBeenCalled();
+    expect(screen.queryByRole('header', { name: 'Свои' })).toBeNull();
     expect(screen.queryByText(/push/i)).toBeNull();
     expect(
       screen.getByText('В центре уведомлений видно всё. Здесь — письма на e-mail.'),
