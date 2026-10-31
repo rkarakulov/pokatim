@@ -189,6 +189,12 @@ paths:
 
 ## Очереди (worker)
 
+- **Outbox: маршруты** (api-kit ≥ 0.6.0, fan-out): подписчик объявляет `<модуль>OutboxRoutes` (тип → очередь), composition
+  root `worker.module.ts` объединяет их **только** `mergeOutboxRoutes(...)` (`@rkarakulov/api-kit/core`, сборка —
+  `src/outbox-routes.ts`): тип у нескольких подписчиков — задача в каждой очереди, jobId = id события в каждой. Spread
+  `{ ...a, ...b }` молча оставил бы последнего подписчика (сторож — `outbox-routes.test.ts`). Обработчик идемпотентен:
+  повтор публикации после частичного сбоя ставит задачу в очереди, где её ещё нет.
+
 - Брокер — BullMQ на Redis; RabbitMQ не используем (переход — только через ADR; outbox оставляет к нему путь).
 - Регламенты «по курсору» без событий (DV-1): `standings-recalc`, `og-sync`, `tickets-maintenance`,
   `achievements-sync` (achievements-push N2: `achievements.sweep` → `achievements.rider`); новый источник курсора —
@@ -208,8 +214,8 @@ paths:
 - `results` (race-results-03): заявки и попытки; другие модули — только порты через `index.ts`: `RaceRegistry`
   (`races`: гонка, окно, `admitEntry` — фиксация V-12 в транзакции заявки, видимость в панели), `RouteGeometry`
   (`routes`: линия сверки и рамка, кэш в процессе; `races` — линия показа для карты), `ActivitySource` (`tracks`: группа дублей, свои активности и
-  загрузки, исходник для worker). События `tracks.activity-ready/-removed` — свои типы подписчика: outbox базы
-  отправляет тип в одну очередь. Сверка — `runParseThread('analyzeAttempt')` в worker; потоки разбора на процесс
+  загрузки, исходник для worker). События `tracks.activity-ready/-removed` — свои типы подписчика (до api-kit 0.6.0
+  outbox вёл тип в одну очередь; теперь — fan-out, раздел «Outbox: маршруты»). Сверка — `runParseThread('analyzeAttempt')` в worker; потоки разбора на процесс
   ограничены семафором `PARSE_THREADS_MAX` (`src/parse-thread.ts`).
 - Сверка заезда с коридором гонки — `matchCorridor` / `analyzeAttempt` из `@pokatim/tracks/parse` (ADR-0012 п. 5):
   только worker (`worker_threads`), по исходнику без прореживания; `engineVersion` пишется в попытку, смена версии
@@ -515,7 +521,7 @@ RC-A1, ADR-0019).
   «Применить пересчёт» отвечают 409.
 - `results.protocol-published` / `results.result-revised` / `results.attempt-verdict-changed` — маршрут в
   `notifications-intake` (объявляет подписчик, ADR-0017). Рейтинг сезона (08) событий не слушает — регламент сверки
-  (DV-1); fan-out outbox в app-foundation — follow-up.
+  (DV-1); fan-out outbox есть (api-kit 0.6.0), подписка рейтинга на события — follow-up.
 - Отказы состояния — `409 RESULTS_ACTION_BLOCKED { reason, count? }`, `409 RESULTS_PUBLISH_BLOCKED { blockedBy,
   checklist }`.
 
@@ -613,7 +619,7 @@ RC-A1, ADR-0019).
   `ROUTE_RIDE_POLICY.corridorWidthM` (пишется в документ), окно — время заезда ± 1 мин; итог — одна запись своей
   ревизией без транзакции и событий. Финальная попытка — `failed: error`; dead-letter в панель неприменим (личные
   данные, организатора нет): зависшие (`queued` > 2 ч, `checking` > 15 мин) — «ленивый» `failed: error` при чтении,
-  POST перепоставляет (RC-5). Подписки на `tracks.*` нет (outbox — тип в одну очередь, RC-1).
+  POST перепоставляет (RC-5). Подписки на `tracks.*` нет (RC-1: решение до fan-out outbox; подписка — follow-up).
 
 ## Уведомления (`notifications`, ADR-0017)
 

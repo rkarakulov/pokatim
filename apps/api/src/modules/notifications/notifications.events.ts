@@ -26,8 +26,8 @@ import { ACHIEVEMENTS_GRANT_NOTICED } from '../achievements';
 
 /**
  * Маршруты событий модулей-источников в очередь приёма уведомлений (ADR-0017): объявляет подписчик (как
- * `resultsOutboxRoutes` для `tracks.*`), подключает worker.module.ts. Тип события → одна очередь: другим подписчикам
- * этих типов нужен fan-out outbox (ADR-0017 п. 5). Имя задачи = тип события, jobId = id события.
+ * `resultsOutboxRoutes` для `tracks.*`), подключает `src/outbox-routes.ts` (`mergeOutboxRoutes`: другие подписчики тех
+ * же типов получают свою задачу — fan-out, ADR-0017 п. 5). Имя задачи = тип события, jobId = id события.
  */
 export const notificationsOutboxRoutes = {
   [RESULTS_ATTEMPT_VERDICT_CHANGED]: QUEUE.notificationsIntake,
