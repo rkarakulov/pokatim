@@ -23,6 +23,7 @@ import { ROUTE_PUBLICATION_DECIDED } from '../routes';
 import { TICKETS_REMINDER_DUE } from '../tickets';
 import { PROFILE_FIELD_RESET } from '../profile';
 import { ACHIEVEMENTS_GRANT_NOTICED } from '../achievements';
+import { SocialNoticeParams } from './social-notices';
 
 /**
  * Маршруты событий модулей-источников в очередь приёма уведомлений (ADR-0017): объявляет подписчик (как
@@ -99,6 +100,8 @@ export const FanoutJobData = z.object({
   collapse: z.object({ key: z.string(), seq: z.number().int().optional() }).optional(),
   /** в центр без push (`reason: 'in_app'`): райдер сейчас в приложении (achievements-push, P1) */
   inApp: z.boolean().optional(),
+  /** «Свои» (social-p1): действующее лицо (id) и название объекта; задачи без поля — обычный снимок */
+  social: z.object({ actor: z.uuid(), params: SocialNoticeParams }).optional(),
   userIds: z.array(z.uuid()).min(1).max(FANOUT_CHUNK_MAX),
 });
 export type FanoutJobData = z.infer<typeof FanoutJobData>;

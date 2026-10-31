@@ -4,6 +4,7 @@ import { uuidv7 } from '@rkarakulov/api-kit/mongo';
 
 import type { Env } from '../../config/env';
 import { IdentityAccounts } from '../identity';
+import { type PublicRiderCard, RIDER_NAMES, type RiderNameDirectory } from '../profile';
 import { DeliveryJobs } from './delivery-jobs';
 import { renderPushSummary } from './notification-texts';
 import {
@@ -23,6 +24,7 @@ import {
   PUSH_SENDER,
   type PushSender,
 } from './push-sender';
+import { renderSocialNotice } from './social-notices';
 import { WEB_PUSH_SENDER, type WebPushSender } from './web-push.sender';
 
 export type PushOutcome = 'sent' | 'none' | 'deferred' | 'skipped' | 'limited' | 'failed';
@@ -51,6 +53,7 @@ export class PushDelivery {
     private readonly jobs: DeliveryJobs,
     @Inject(PUSH_SENDER) private readonly sender: PushSender,
     @Inject(WEB_PUSH_SENDER) private readonly webSender: WebPushSender | null,
+    @Inject(RIDER_NAMES) private readonly names: RiderNameDirectory,
     @Inject(ENV) private readonly env: Pick<Env, 'PUSH_ENABLED'>,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
@@ -113,7 +116,13 @@ export class PushDelivery {
       return 'limited';
     }
 
-    const content = contentOf(due);
+    // «Свои» одним уведомлением — имена на момент отправки (тихие часы: лица, добавленные за ожиданием, — в тексте)
+    const [only] = due;
+    const cards =
+      due.length === 1 && only?.group === 'social' && (only.actors?.length ?? 0) > 0
+        ? await this.names.publicRiders(only.actors ?? [])
+        : new Map<string, PublicRiderCard>();
+    const content = contentOf(due, cards);
     const expoTokens = usable.filter((token) => token.platform !== 'web');
     const webTokens = usable.filter((token) => token.platform === 'web');
     const unregistered: PushTokenSnapshot[] = [];
@@ -230,9 +239,18 @@ const snapshotOf = (
   token: { _id: string; sessionId?: string },
 ): PushTokenSnapshot => ({ _id: token._id, userId, sessionId: token.sessionId ?? null });
 
-/** Одно уведомление — его текст и цель; несколько — сводка «У вас N новых уведомлений» без цели (N7). */
-function contentOf(due: readonly ClaimedPush[]): Omit<PushMessage, 'to'> {
+/**
+ * Одно уведомление — его текст и цель («Свои» — с именами `cards`, `renderSocialNotice`); несколько — сводка «У вас N
+ * новых уведомлений» без цели и имён (N7).
+ */
+function contentOf(
+  due: readonly ClaimedPush[],
+  cards: ReadonlyMap<string, PublicRiderCard>,
+): Omit<PushMessage, 'to'> {
   const [only] = due;
-  if (due.length === 1 && only) return { title: only.title, body: only.body, target: only.target };
+  if (due.length === 1 && only) {
+    const stored = { title: only.title, body: only.body, target: only.target };
+    return only.group === 'social' ? renderSocialNotice({ ...only, ...stored }, cards) : stored;
+  }
   return { ...renderPushSummary(due.length), target: null };
 }

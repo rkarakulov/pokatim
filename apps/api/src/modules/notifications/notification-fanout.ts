@@ -3,6 +3,7 @@ import type { NotificationKind, NotificationTarget } from '@pokatim/contracts';
 import type { NoticeDraft } from './notification-intake';
 import { renderNotification } from './notification-texts';
 import { type FanoutJobData, fanoutJobId } from './notifications.events';
+import { type SocialNoticeParams, socialParamsOf } from './social-notices';
 
 /** Черновик после отрисовки текста (снимок): общий вход записи для прямого пути intake и пачки. */
 export interface RenderedDraft {
@@ -15,6 +16,8 @@ export interface RenderedDraft {
   collapse?: { key: string; seq?: number };
   /** в центр без push (`in_app`) */
   inApp?: boolean;
+  /** «Свои» (social-p1): действующее лицо и данные текста — накопление `actors` при записи */
+  social?: { actor: string; params: SocialNoticeParams };
 }
 
 export function renderDraft(draft: NoticeDraft): RenderedDraft {
@@ -27,6 +30,14 @@ export function renderDraft(draft: NoticeDraft): RenderedDraft {
     ...(draft.targets === undefined ? {} : { targets: draft.targets }),
     ...(draft.collapse === undefined ? {} : { collapse: draft.collapse }),
     ...(draft.inApp ? { inApp: true } : {}),
+    ...(draft.actor === undefined
+      ? {}
+      : {
+          social: {
+            actor: draft.actor,
+            params: socialParamsOf(draft.text),
+          },
+        }),
   };
 }
 
@@ -79,6 +90,7 @@ export function planFanout(
               }),
           ...(rendered.collapse === undefined ? {} : { collapse: rendered.collapse }),
           ...(rendered.inApp ? { inApp: true } : {}),
+          ...(rendered.social === undefined ? {} : { social: rendered.social }),
           userIds,
         },
       });

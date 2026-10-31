@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { AchievementCode } from '../achievements/achievement.schema.ts';
 import { fieldError, tolerantEnum, Uuid } from '../common.ts';
+import { RiderPublicId } from '../profile/rider-avatar.schema.ts';
 import { PageCursor } from '../races/race.schema.ts';
 import { TicketCodeCanonical } from '../tickets/ticket.schema.ts';
 
@@ -18,6 +19,8 @@ export const NOTIFICATION_GROUPS = [
   'routes',
   // achievements-push: новое достижение или уровень (только push)
   'achievements',
+  // social-p1: «Свои» (K10) — только push
+  'social',
 ] as const;
 export type NotificationGroup = (typeof NOTIFICATION_GROUPS)[number];
 
@@ -46,6 +49,13 @@ export const NOTIFICATION_KINDS = [
   'profile_club_reset',
   // achievements-push: новое достижение, новый уровень или сезонное (группа `achievements`)
   'achievement_granted',
+  // social-p1: «Свои» (K10, группа `social`); события привязывает P7
+  'social_riders_going',
+  'social_thanks',
+  'social_added',
+  'social_respect',
+  'social_invite_registered',
+  'social_ride_ask',
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
@@ -67,6 +77,11 @@ export const NotificationTarget = z.discriminatedUnion('type', [
    * сборки уходит в `unknown` (без перехода)
    */
   z.object({ type: z.literal('achievement'), code: AchievementCode, seasonId: Uuid.optional() }),
+  /**
+   * публичный профиль райдера (`/riders/<publicId>`, «Свои»): сервер выводит цель при чтении из действующего лица с
+   * публичным профилем (ADR-0027 п. 6); строгий токен — битый у старой сборки уходит в `unknown`
+   */
+  z.object({ type: z.literal('rider'), publicId: RiderPublicId }),
 ]);
 export type NotificationTarget = z.infer<typeof NotificationTarget>;
 
@@ -77,7 +92,10 @@ export const NotificationTargetView = z.union([
 ]);
 export type NotificationTargetView = z.output<typeof NotificationTargetView>;
 
-/** Уведомление центра: снимок текста на момент создания; `read` — нажатие или «Прочитать все». */
+/**
+ * Уведомление центра: снимок текста на момент создания, кроме группы `social` — её текст и цель `rider` сервер собирает
+ * при чтении из текущих публичных имён действующих лиц (K10, ADR-0027 п. 6); `read` — нажатие или «Прочитать все».
+ */
 export const NotificationView = z.object({
   id: Uuid,
   kind: tolerantEnum(NOTIFICATION_KINDS),
@@ -191,6 +209,19 @@ export type UpdateAchievementNotificationSettings = z.infer<
 export const DEFAULT_ACHIEVEMENT_NOTIFICATION_SETTINGS: AchievementNotificationSettingsView = {
   push: true,
 };
+
+/**
+ * Группа «Свои» (K10) — подресурс `GET|PUT /v1/notifications/settings/social`, как «Достижения» (RC-D1); писем нет —
+ * только push. Ответ терпит новые ключи, запрос — строгий.
+ */
+export const SocialNotificationSettingsView = z.object({ push: z.boolean() });
+export type SocialNotificationSettingsView = z.infer<typeof SocialNotificationSettingsView>;
+
+export const UpdateSocialNotificationSettings = z.strictObject({ push: Toggle });
+export type UpdateSocialNotificationSettings = z.infer<typeof UpdateSocialNotificationSettings>;
+
+/** Нет сохранённого тумблера — включено (N4, без наследования от других групп). */
+export const DEFAULT_SOCIAL_NOTIFICATION_SETTINGS: SocialNotificationSettingsView = { push: true };
 
 export const PUSH_PLATFORMS = ['ios', 'android'] as const;
 export type PushPlatform = (typeof PUSH_PLATFORMS)[number];

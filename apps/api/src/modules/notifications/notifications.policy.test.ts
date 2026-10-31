@@ -43,6 +43,12 @@ describe('groupOf: kind → группа настроек (N4)', () => {
       profile_avatar_reset: 'rides',
       profile_club_reset: 'rides',
       achievement_granted: 'achievements',
+      social_riders_going: 'social',
+      social_thanks: 'social',
+      social_added: 'social',
+      social_respect: 'social',
+      social_invite_registered: 'social',
+      social_ride_ask: 'social',
     });
   });
 
@@ -58,6 +64,7 @@ describe('groupOf: kind → группа настроек (N4)', () => {
         events: true,
         routes: true,
         achievements: true,
+        social: true,
       },
       email: { ...DEFAULT_NOTIFICATION_SETTINGS.email, events: true },
       quietHours: DEFAULT_NOTIFICATION_SETTINGS.quietHours,
@@ -210,6 +217,21 @@ describe('initialDelivery: состояние доставки нового ув
       initialDelivery('achievement_granted', off({ achievements: false }), day, true),
     ).toMatchObject({ push: { state: 'skipped', reason: 'disabled' }, email: null });
     expect(initialDelivery('achievement_granted', settings, night, true).push.notBefore).toEqual(
+      minsk('2026-10-23T08:00'),
+    );
+  });
+
+  it('«Свои»: push по push.social, письма нет; другие группы не влияют (social-p1)', () => {
+    for (const kind of ['social_riders_going', 'social_ride_ask'] as const) {
+      expect(
+        initialDelivery(kind, off({ rides: false, achievements: false }), day, true),
+      ).toMatchObject({ push: { state: 'pending', reason: null }, email: null });
+      expect(initialDelivery(kind, off({ social: false }), day, true)).toMatchObject({
+        push: { state: 'skipped', reason: 'disabled' },
+        email: null,
+      });
+    }
+    expect(initialDelivery('social_thanks', settings, night, true).push.notBefore).toEqual(
       minsk('2026-10-23T08:00'),
     );
   });
