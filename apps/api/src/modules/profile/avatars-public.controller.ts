@@ -4,6 +4,7 @@ import { AvatarId, FieldErrorCode } from '@pokatim/contracts';
 import { ZodValidationPipe } from '@rkarakulov/api-kit/core';
 
 import { PublicReadGuard } from '../../public-read.guard';
+import { replyJpeg } from '../media';
 import { ProfileAvatarService } from './profile-avatar.service';
 
 /** Кэш аватара: id новый при каждой замене — байты по id не меняются. */
@@ -11,8 +12,8 @@ export const AVATAR_CACHE_CONTROL = 'public, max-age=31536000, immutable';
 
 /**
  * Отдача аватара (rider-profile, ADR-0019): без входа, IP-лимит `public-read`; доступ — по непредсказуемому id
- * (согласие не проверяется — RC-A2). Заголовки файла ставятся после чтения: Nest пишет `@Header` до обработчика, а 404
- * должен уйти JSON-ом и без `immutable`. `sandbox` и `nosniff` — байты не исполняются и не угадываются.
+ * (согласие не проверяется — RC-A2). Заголовки файла — `replyJpeg` (`media`) после чтения: 404 уходит JSON-ом и без
+ * `immutable`.
  */
 @Controller('avatars')
 @UseGuards(PublicReadGuard)
@@ -28,11 +29,6 @@ export class AvatarsPublicController {
     @Res({ passthrough: true }) reply: unknown,
   ): Promise<Buffer> {
     const bytes = await this.avatars.bytes(id);
-    const adapter = this.adapterHost.httpAdapter;
-    adapter.setHeader(reply, 'Content-Type', 'image/jpeg');
-    adapter.setHeader(reply, 'Cache-Control', AVATAR_CACHE_CONTROL);
-    adapter.setHeader(reply, 'X-Content-Type-Options', 'nosniff');
-    adapter.setHeader(reply, 'Content-Security-Policy', "default-src 'none'; sandbox");
-    return bytes;
+    return replyJpeg(this.adapterHost.httpAdapter, reply, bytes, AVATAR_CACHE_CONTROL);
   }
 }
