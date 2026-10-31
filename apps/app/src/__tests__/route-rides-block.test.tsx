@@ -17,7 +17,7 @@ import RouteRidePickRoute from '../app/routes/pick/[routeId]';
 import { tabRoutes } from './app-routes';
 import { liveSession } from './auth-fixtures';
 import { createQueryWrapper } from './query-wrapper';
-import { rideCandidates, rideRow, ridesPage, ROUTE_ID } from './route-rides-fixtures';
+import { leaderboard, rideCandidates, rideRow, ridesPage, ROUTE_ID } from './route-rides-fixtures';
 
 jest.mock('@/lib/api');
 
@@ -102,6 +102,8 @@ beforeEach(() => {
   jest.mocked(api.getMyRoute).mockResolvedValue(myRoute());
   jest.mocked(api.getMyRouteMap).mockResolvedValue(geometry);
   jest.mocked(api.listRouteRideCandidates).mockResolvedValue(rideCandidates());
+  // route-rides-04 (RC-B9): таблица «Другие» на карточке вошедшего
+  jest.mocked(api.getRouteRideLeaderboard).mockResolvedValue(leaderboard());
   listRides.mockResolvedValue(
     ridesPage(
       [bestRow, rideRow({ status: 'not_passed', reason: 'off_corridor', elapsedSec: null })],

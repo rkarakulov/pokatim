@@ -665,6 +665,9 @@ test('выбор маршрута райда /rides/route-pick без сесси
 for (const [name, path, pickScreen] of [
   ['выбор своего заезда', `/routes/pick/${UNKNOWN_ROUTE_ID}`, true],
   ['результат заезда', `/routes/rides/${UNKNOWN_ROUTE_ID}/${UNKNOWN_ROUTE_ID}`, false],
+  // route-rides-04 (RC-B5): полный список «Другие» — тоже чанк `[routeId]`, проверка чанка здесь выбор не отличает;
+  // порядок манифеста держит jest-сторож `app-routes-manifest.server.test.ts`
+  ['таблица «Другие на маршруте»', `/routes/others/${UNKNOWN_ROUTE_ID}`, true],
 ] as const) {
   test(`заезд по маршруту (route-rides-02): ${name} без сессии — HTML без данных и OG, после гидрации — гард входа`, async ({
     page,
@@ -679,6 +682,7 @@ for (const [name, path, pickScreen] of [
     expect(html).toMatch(new RegExp(`/\\[${own}\\]-[0-9a-f]+\\.js`));
     expect(html).not.toMatch(new RegExp(`/\\[${other}\\]-[0-9a-f]+\\.js`));
     expect(html).not.toContain('Выбрать свой заезд');
+    expect(html).not.toContain('Другие на маршруте');
     // экран не публичный: без данных заездов и без OG
     expect(html).not.toContain('Подходящих заездов нет');
     expect(html).not.toContain('Заезд не найден');
@@ -1288,6 +1292,8 @@ test.describe('с API', () => {
       expect(html).not.toMatch(/@pokatim\.test|ownerUserId|sha256|noindex/);
       // route-rides-02: «Мои заезды» — только вошедшему на клиенте, в SSR-HTML блока нет
       expect(html).not.toContain('Мои заезды');
+      // route-rides-04: «Другие на маршруте» — так же
+      expect(html).not.toContain('Другие на маршруте');
       // routes-03: SSR рендерит профиль высоты и его текстовую альтернативу
       expect(html).toContain('Профиль высоты');
       expect(html).toMatch(/Профиль высоты: от \d+ до \d+ м/);
@@ -1299,8 +1305,9 @@ test.describe('с API', () => {
       await expect(page.getByText('Дистанция', { exact: true })).toBeVisible();
       await expect(page.getByText('В пути', { exact: true })).toBeVisible();
       await expect(page.getByText('Минск', { exact: true }).first()).toBeVisible();
-      // route-rides-02: гостю «Мои заезды» нет
+      // route-rides-02: гостю «Мои заезды» нет; route-rides-04: и «Другие на маршруте» нет
       await expect(page.getByText('Мои заезды', { exact: true })).toHaveCount(0);
+      await expect(page.getByText('Другие на маршруте', { exact: true })).toHaveCount(0);
       // routes-04: профиль — slider (клавиши ±1 км), hover — карточка «км · м · %», уход мыши — скрыта
       const profile = page.getByRole('slider', { name: /^Профиль высоты: от / });
       await expect(profile).toBeVisible();
@@ -1397,6 +1404,8 @@ test.describe('с API', () => {
       await expect(
         page.getByText('Проверьте свой заезд — покажем, пройден ли маршрут и за сколько'),
       ).toBeVisible();
+      // route-rides-04: вошедшему — блок «Другие на маршруте» после «Моих заездов»
+      await expect(page.getByText('Другие на маршруте', { exact: true })).toBeVisible();
       await page.getByRole('button', { name: 'Проверить свой заезд' }).click();
       await expect(page).toHaveURL(`${BASE_URL}/routes/pick/${route.id}`);
       await expect(page.getByText('Подходящих заездов нет')).toBeVisible();

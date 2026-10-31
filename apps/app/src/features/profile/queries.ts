@@ -16,6 +16,7 @@ import {
 
 import { withAccessToken } from '@/features/auth/authorized';
 import { fetchProfile, PROFILE_QUERY_KEY } from '@/features/home/queries';
+import { invalidateRouteRideLeaderboards } from '@/features/route-rides/queries';
 import { api } from '@/lib/api';
 import { DEFAULT_STALE_MS } from '@/lib/query-client';
 
@@ -135,8 +136,8 @@ export function useDeleteAvatar() {
 
 /**
  * Имя, клуб и согласие на показ (`PATCH /v1/profile`): ответ — полный профиль → кэш `['profile']` без лишнего
- * запроса; таблицы результатов и публичный профиль `['riders']` — инвалидация (имя меняется в чужих таблицах;
- * публичный кэш ответа — до 60 с).
+ * запроса; таблицы результатов, публичный профиль `['riders']` и таблицы «Другие» маршрутов (route-rides-04: согласие
+ * и имя своей строки) — инвалидация (имя меняется в чужих таблицах; публичный кэш ответа — до 60 с).
  */
 export function useUpdateProfile() {
   const queryClient = useQueryClient();
@@ -148,6 +149,8 @@ export function useUpdateProfile() {
       queryClient.setQueryData(PROFILE_QUERY_KEY, view);
       void queryClient.invalidateQueries({ queryKey: RACE_RESULTS_KEY });
       void queryClient.invalidateQueries({ queryKey: RIDERS_KEY });
+      // route-rides-04 (RC-B6): своё согласие и имя своей строки в таблицах «Другие»
+      void invalidateRouteRideLeaderboards(queryClient);
     },
   });
 }
