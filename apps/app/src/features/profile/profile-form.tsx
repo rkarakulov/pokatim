@@ -1,13 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import {
-  RIDER_CLUB_MIN,
-  RIDER_PUBLIC_NAME_MIN,
-  RiderClub,
-  RiderPublicName,
-  type ProfileView,
-} from '@pokatim/contracts';
+import { RIDER_CLUB_MIN, RiderClub, RiderPublicName, type ProfileView } from '@pokatim/contracts';
 import { space } from '@pokatim/design-tokens';
-import { t, type MessageKey } from '@pokatim/i18n';
+import { t } from '@pokatim/i18n';
 import { Banner, Button, TextField, Toggle, textStyle, useTheme } from '@rkarakulov/ui';
 import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
@@ -16,6 +10,7 @@ import { z } from 'zod';
 
 import { actionErrorMessage, serverFieldErrors } from '@/features/auth/error-messages';
 
+import { fieldText } from './profile-field-errors';
 import { useUpdateProfile } from './queries';
 
 /** Поля формы — те же схемы, что у `UpdateProfileRequest` (без корневого «хотя бы один ключ»: форма шлёт все). */
@@ -34,17 +29,6 @@ const valuesOf = (profile: ProfileView): ProfileFormValues => ({
   club: profile.club ?? '',
   showNameInResults: profile.showNameInResults,
 });
-
-/** Текст ошибки поля по коду (сообщение zod = код); `min` — предел поля; незнакомый код — «Проверьте значение». */
-export function fieldText(
-  code: string | undefined,
-  min = RIDER_PUBLIC_NAME_MIN,
-): string | undefined {
-  if (code === undefined) return undefined;
-  const key = `field.error.${code}` as MessageKey;
-  const text = t(key, { min });
-  return text === key ? t('field.error.INVALID') : text;
-}
 
 /**
  * Форма «Редактировать профиль» (profile-rider-name, rider-profile): «Как вас показывать в результатах», клуб и

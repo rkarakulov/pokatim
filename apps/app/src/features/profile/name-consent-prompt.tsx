@@ -11,7 +11,7 @@ import { z } from 'zod';
 import { ModalSheet } from '@/components/modal-sheet';
 import { actionErrorMessage, serverFieldErrors } from '@/features/auth/error-messages';
 
-import { fieldText } from './profile-form';
+import { fieldText } from './profile-field-errors';
 import { useProfile, useUpdateProfile } from './queries';
 import { nameConsentVisible } from './name-consent-state';
 import { loadNameConsentSnooze, saveNameConsentSnooze } from './name-consent-storage';
@@ -115,7 +115,14 @@ function NameConsentSheet({ profile }: { profile: ProfileView }) {
   });
 
   return (
-    <ModalSheet title={t('profile.consent.title')} onClose={snooze} testID="name-consent-sheet">
+    <ModalSheet
+      title={t('profile.consent.title')}
+      // пока сохраняется — не закрываем: согласие не должно прийти после «закрыл», ошибка не теряется (N5)
+      onClose={() => {
+        if (!update.isPending) snooze();
+      }}
+      testID="name-consent-sheet"
+    >
       <View style={styles.form}>
         <Text style={[textStyle('body'), { color: theme.text.secondary }]}>
           {t('profile.consent.lead')}

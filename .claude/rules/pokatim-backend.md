@@ -254,7 +254,7 @@ paths:
   `NotificationErasure` (`NotificationsCoreModule`, шаг
   между `tracks` и `identity`), `AccountErasure` (`IdentityErasureModule`); push-токены — `PushTokens.revokeAllOf(tx)`
   в транзакции удаления. Новый модуль с
-  данными пользователя — порт стирания и шаг. Строка таблиц удалённого — «Участник» (A3). Финальный провал шага — лог
+  данными пользователя — порт стирания и шаг. Строка таблиц удалённого — «Участник», в таблице гонки — «Райдер #N» (A3, name-consent-prompt N7). Финальный провал шага — лог
   `account.erasure_failed user=<uid> step=<s>`, failed-набор BullMQ, регламент; экран в панели — «Сбои удаления аккаунтов» (ниже).
 
 ## «Обзор» панели (`overview`, admin-overview)
