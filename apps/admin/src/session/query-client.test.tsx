@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { focusManager, QueryClientProvider, useQuery } from '@tanstack/react-query';
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createQueryClient } from './query-client';
@@ -35,6 +35,6 @@ describe('createQueryClient — без повторных GET (B12)', () => {
     // уход на другой экран и возврат — данные перечитываются
     view.rerender(screenWith(<span>другой экран</span>));
     view.rerender(screenWith(<List queryFn={queryFn} />));
-    await vi.waitFor(() => expect(queryFn).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(queryFn).toHaveBeenCalledTimes(2));
   });
 });
