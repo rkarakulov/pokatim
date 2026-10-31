@@ -432,7 +432,10 @@ paths:
 - `route_rides` — единственный писатель `RouteRidesRepository`; миграция `0032_route_rides` (expand-only): уникальный
   `route_rides_user_route_activity_unique { userId, routeId, activityId }` (дедуп параллельного POST группы; префикс —
   список, квота и стирание). `activityId` — основная группы на момент POST, `activity` — снимок сводки,
-  `corridorWidthM` — ширина на момент создания (RC-15).
+  `corridorWidthM` — ширина на момент создания (RC-15). `0044_route_rides_passed_idx` (achievements-push N2, expand):
+  частичный `route_rides_passed_updated_idx { updatedAt, _id }` по `status: 'passed'` — источник серверной сверки
+  достижений (`passedWithin`, keyset `changed-since.ts`). Окно — по моменту записи итога (`record` ставит
+  `updatedAt`), не по `checkedAt`: тот берётся до ожидания семафора разбора и отстаёт от коммита больше `settleMs`.
 - Итог пишет только своя ревизия: `claim` (`checkRevision`, `queued|checking` в фильтре), `record` (`checking` в
   фильтре), без транзакции; `requeue` — `$inc checkRevision` только из `failed` или зависшего статуса прежней ревизии
   (условие в фильтре) + outbox в транзакции. `trackMap` — позиции на линии `activity_tracks`, без координат;
@@ -456,6 +459,31 @@ paths:
   необязательные: у документов v1 нет — ≡ 1 (без миграции и бэкфилла, индексы прежние). «Показано» — `updateMany`
   update pipeline одной условной операцией: фильтр `$expr` (`seenAt` нет или `seenLevel < level`, `$ifNull` → 1),
   `$set` `seenAt: $ifNull(seenAt, now)`, `seenLevel: $max(seenLevel, level)` — уровень из документа, монотонно.
+- Уведомления (achievements-push): `achievement_grants.notifiedLevel` (ранг 1–3, монотонно `$max`) — наибольший
+  объявленный уровень; пишут вставка (`= level`, и в первой сверке) и `restoreOrRefresh` (`$max(notifiedLevel ?? level
+  ?? 1, ранг)`, pipeline со значениями `$literal`); нет поля — ≡ `level ?? 1` (ретро нет). Без миграции и индекса.
+  Шаги с событием — транзакция с outbox, первой операцией — сама запись выдачи (исключение из «без транзакции» выше);
+  `findGrant(kind, _id)` — чтение порта уведомлений.
+- Сезонные (achievements-seasonal, HG-S1): `achievement_season_grants { _id (uuidv7), userId, code, seasonId, factAt
+  (endsBefore − 1 мс), grantedAt, seenAt, revokedAt, updatedAt }` — единственный писатель тот же
+  `AchievementsRepository`; миграция `0043_achievements_seasonal` (только expand): уникальный
+  `achievement_season_grants_user_code_season_unique { userId, code, seasonId }` (префикс — список, «показано»,
+  стирание). Названия сезона и места нет. `achievement_grants` и его индекс не меняются, поля `seasonId` в нём нет.
+  Вставка (дубль — `isDuplicateKey`), отзыв (`revokedAt: null`), восстановление (`revokedAt: { $ne: null }`, `seenAt`
+  не трогается). «Показано» — две независимые операции: pipeline по `achievement_grants` (`codes`) и `updateMany
+  { userId, revokedAt: null, seenAt: null, $or: [{ code, seasonId }] }` (`seasonal`). Маркер `achievement_syncs` общий,
+  ставится после выдач обеих коллекций. Стирание (шаг `achievements`) — `deleteMany({ userId })` обеих коллекций, затем
+  маркер; счётчик `seasonGrants`.
+- Ручные решения (achievements-panel): поле `override { decision: 'granted' | 'revoked', at, byUserId } | null` на
+  документах **обеих** коллекций (новые — явный `null`, старые без поля — фильтр `{ override: null }` совпадает с обоими);
+  миграции нет, индексы прежние. Каждая запись сверки (`revoke`, `restoreOrRefresh`, `revokeSeasonal`,
+  `restoreSeasonal`) — с условием `override: null`; вставки сверки защищает уникальный индекс; `markSeen` — без
+  условия. Ручные операции — первая операция транзакции панели (замок выдачи): выдача поверх отозванного —
+  `findOneAndUpdate` pipeline (`$literal`; `seenAt`/`seenLevel` → `null`, `notifiedLevel = $max`, `_id` и `grantedAt`
+  прежние), без документа — `insertOne` (дубль видимой — `isDuplicateKey` снаружи `run` → 409), отзыв
+  (`revokedAt: null`) и снятие (`override: { $ne: null }`) — `findOneAndUpdate`, `returnDocument: 'before'` (детали
+  журнала). Чтения панели и публичного списка — `listForPanel`, `overridesOf` (префикс `userId`). Стирание уносит
+  решения вместе с документами; поздняя ручная выдача между проверкой живости и стиранием — повторный проход стирания.
 
 ## Билеты (event-tickets, ADR-0023)
 
@@ -548,7 +576,7 @@ paths:
 
 ## «Свои» (ADR-0027 Proposed, `docs/product/social.md`)
 
-- Миграция `0043_social` (expand-only; номер — по факту слияния): `rider_connections`
+- Миграция `0045_social` (expand-only; номер — по факту слияния): `rider_connections`
   (`rider_connections_owner_other_unique { ownerId, otherId }`, `rider_connections_other_idx { otherId, ownerId }`,
   `rider_connections_ride_idx { 'rides.rideId' }`), `ride_attendance` (`ride_attendance_user_idx { 'entries.userId' }`),
   `social_reactions` (`social_reactions_unique { actorId, kind, targetType, targetId, recipientId }` — RC-1,

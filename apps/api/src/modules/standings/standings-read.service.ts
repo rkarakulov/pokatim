@@ -140,7 +140,7 @@ export class StandingsReadService {
   async panelSummary(seasonId: string): Promise<PanelSeasonStandingsSummary> {
     await this.requireSeason(seasonId);
     const header = await this.repository.header(seasonId);
-    const source = (await this.source.load(seasonId)).get(seasonId);
+    const source = (await this.source.load([seasonId])).get(seasonId);
     const pending = source !== undefined && source.fingerprint !== header?.fingerprint;
     return {
       ...this.summaryOf(seasonId, header),

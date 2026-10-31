@@ -98,7 +98,8 @@ export const TextAreaField = forwardRef<HTMLTextAreaElement, TextAreaFieldProps>
 
 export type SelectFieldProps = FieldFrameProps &
   SelectHTMLAttributes<HTMLSelectElement> & {
-    options: readonly { value: string; label: string }[];
+    /** `disabled` — вариант виден, но недоступен (причина — в подписи варианта или подсказке поля). */
+    options: readonly { value: string; label: string; disabled?: boolean }[];
   };
 
 export const SelectField = forwardRef<HTMLSelectElement, SelectFieldProps>(function SelectField(
@@ -124,7 +125,7 @@ export const SelectField = forwardRef<HTMLSelectElement, SelectFieldProps>(funct
           {...select}
         >
           {options.map((option) => (
-            <option key={option.value} value={option.value}>
+            <option key={option.value} value={option.value} disabled={option.disabled}>
               {option.label}
             </option>
           ))}

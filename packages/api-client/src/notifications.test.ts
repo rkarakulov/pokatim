@@ -154,6 +154,30 @@ describe('api-client: уведомления', () => {
     ]);
   });
 
+  it('настройки «Достижения» — подресурс GET и PUT, только push', async () => {
+    const { calls, api } = client(200, { push: false });
+    await expect(api.getAchievementNotificationSettings('t')).resolves.toEqual({ push: false });
+    await expect(api.updateAchievementNotificationSettings('t', { push: false })).resolves.toEqual({
+      push: false,
+    });
+    expect(
+      calls.map(({ url, method, body, authorization }) => ({ url, method, body, authorization })),
+    ).toEqual([
+      {
+        url: 'https://api.test/v1/notifications/settings/achievements',
+        method: 'GET',
+        body: undefined,
+        authorization: 'Bearer t',
+      },
+      {
+        url: 'https://api.test/v1/notifications/settings/achievements',
+        method: 'PUT',
+        body: { push: false },
+        authorization: 'Bearer t',
+      },
+    ]);
+  });
+
   it('push-токены — PUT регистрации и POST снятия, 204', async () => {
     const { calls, api } = client(204, null);
     await api.registerPushToken('t', { token: TOKEN, platform: 'android' });

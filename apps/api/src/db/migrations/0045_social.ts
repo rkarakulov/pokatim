@@ -54,7 +54,7 @@ export const SOCIAL_INDEXES = {
  * `0042_profile_report_reasons`.
  */
 export const social: MongoMigration = {
-  id: '0043_social',
+  id: '0045_social',
   async up(db) {
     for (const [name, indexes] of Object.entries(SOCIAL_INDEXES)) {
       await ensureCollection(db, name);

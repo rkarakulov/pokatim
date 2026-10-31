@@ -22,6 +22,7 @@ import {
 import { ROUTE_PUBLICATION_DECIDED } from '../routes';
 import { TICKETS_REMINDER_DUE } from '../tickets';
 import { PROFILE_FIELD_RESET } from '../profile';
+import { ACHIEVEMENTS_GRANT_NOTICED } from '../achievements';
 
 /**
  * Маршруты событий модулей-источников в очередь приёма уведомлений (ADR-0017): объявляет подписчик (как
@@ -44,6 +45,8 @@ export const notificationsOutboxRoutes = {
   // PR D event-tickets: напоминание о событии (порт `TICKET_NOTICES`)
   [TICKETS_REMINDER_DUE]: QUEUE.notificationsIntake,
   [PROFILE_FIELD_RESET]: QUEUE.notificationsIntake,
+  // achievements-push: новое достижение или уровень (порт `ACHIEVEMENT_NOTICES`)
+  [ACHIEVEMENTS_GRANT_NOTICED]: QUEUE.notificationsIntake,
 } as const;
 
 export type NotificationSourceEvent = keyof typeof notificationsOutboxRoutes;
@@ -94,6 +97,8 @@ export const FanoutJobData = z.object({
   target: NotificationTarget.nullable(),
   targets: z.record(z.uuid(), NotificationTarget).optional(),
   collapse: z.object({ key: z.string(), seq: z.number().int().optional() }).optional(),
+  /** в центр без push (`reason: 'in_app'`): райдер сейчас в приложении (achievements-push, P1) */
+  inApp: z.boolean().optional(),
   userIds: z.array(z.uuid()).min(1).max(FANOUT_CHUNK_MAX),
 });
 export type FanoutJobData = z.infer<typeof FanoutJobData>;

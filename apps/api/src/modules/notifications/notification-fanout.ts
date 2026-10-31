@@ -13,6 +13,8 @@ export interface RenderedDraft {
   /** цель получателя поверх `target` */
   targets?: ReadonlyMap<string, NotificationTarget>;
   collapse?: { key: string; seq?: number };
+  /** в центр без push (`in_app`) */
+  inApp?: boolean;
 }
 
 export function renderDraft(draft: NoticeDraft): RenderedDraft {
@@ -24,6 +26,7 @@ export function renderDraft(draft: NoticeDraft): RenderedDraft {
     target: draft.target,
     ...(draft.targets === undefined ? {} : { targets: draft.targets }),
     ...(draft.collapse === undefined ? {} : { collapse: draft.collapse }),
+    ...(draft.inApp ? { inApp: true } : {}),
   };
 }
 
@@ -75,6 +78,7 @@ export function planFanout(
                 ),
               }),
           ...(rendered.collapse === undefined ? {} : { collapse: rendered.collapse }),
+          ...(rendered.inApp ? { inApp: true } : {}),
           userIds,
         },
       });

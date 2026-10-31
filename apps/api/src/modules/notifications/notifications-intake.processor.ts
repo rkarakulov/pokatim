@@ -153,6 +153,7 @@ export class NotificationsIntakeProcessor extends WorkerHost {
         target: data.target,
         ...(data.targets === undefined ? {} : { targets: new Map(Object.entries(data.targets)) }),
         ...(data.collapse === undefined ? {} : { collapse: data.collapse }),
+        ...(data.inApp ? { inApp: true } : {}),
       };
       const written = await this.writeRecipients(eventId, rendered, userIds, now);
       const scheduled = await this.jobs.scheduleEvent(eventId, userIds);
@@ -190,6 +191,7 @@ export class NotificationsIntakeProcessor extends WorkerHost {
           settings.get(userId) ?? DEFAULT_DELIVERY_SETTINGS,
           now,
           pushChannelEnabled(this.env),
+          { inApp: rendered.inApp === true },
         );
         return {
           _id: uuidv7(),

@@ -4,9 +4,9 @@ import { fieldError, tolerantEnum, Uuid } from '../common.ts';
 import { LocalDate } from '../time.ts';
 
 /**
- * Каталог достижений (achievements, A1): каждое — один раз на райдера; у счётных кодов — уровни
- * (`ACHIEVEMENT_LEVEL_TARGETS`, L1). Коды — только в конец (установленные сборки знают прежний состав; незнакомый код в
- * ответе — `'unknown'`, RC-8).
+ * Каталог достижений (achievements, A1): каждое — один раз на райдера, сезонные — один раз на сезон
+ * (`SEASONAL_ACHIEVEMENT_CODES`, S3); у счётных кодов — уровни (`ACHIEVEMENT_LEVEL_TARGETS`, L1). Коды — только в конец
+ * (установленные сборки знают прежний состав; незнакомый код в ответе — `'unknown'`, RC-8).
  */
 export const ACHIEVEMENT_CODES = [
   'race_first_finish',
@@ -18,16 +18,50 @@ export const ACHIEVEMENT_CODES = [
   'ride_first',
   'ride_organizer',
   'rides_10',
+  'season_regular',
+  'season_podium',
+  'season_champion',
 ] as const;
 /** Код достижения — строгий (запросы). */
 export const AchievementCode = z.enum(ACHIEVEMENT_CODES);
 export type AchievementCode = z.infer<typeof AchievementCode>;
 
-/** Вид объекта достижения: гонка, маршрут, кофе-райд (только в конец). */
-export const ACHIEVEMENT_OBJECT_KINDS = ['race', 'route', 'ride'] as const;
+/** Сезонные коды (S1): выдача — на сезон, объект — сезон; уровней нет. */
+export const SEASONAL_ACHIEVEMENT_CODES = [
+  'season_regular',
+  'season_podium',
+  'season_champion',
+] as const satisfies readonly AchievementCode[];
+export type SeasonalAchievementCode = (typeof SEASONAL_ACHIEVEMENT_CODES)[number];
+export const isSeasonalCode = (code: AchievementCode): code is SeasonalAchievementCode =>
+  (SEASONAL_ACHIEVEMENT_CODES as readonly string[]).includes(code);
+/** «Сезон в зачёте» (S1): гонок с местом в одной таблице сезона. Выпущенное значение не меняется. */
+export const SEASON_REGULAR_MIN_RACES = 3;
+
+/** Вид объекта достижения: гонка, маршрут, кофе-райд, сезон (только в конец). */
+export const ACHIEVEMENT_OBJECT_KINDS = ['race', 'route', 'ride', 'season'] as const;
 export type AchievementObjectKind = (typeof ACHIEVEMENT_OBJECT_KINDS)[number];
 
-/** Объект достижения: гонка, маршрут или райд, на котором выполнено условие; название — текущее. */
+/**
+ * Вид объекта каждого кода (achievements-panel, 5.C): ручную выдачу сервер проверяет портом владельца этого вида, панель
+ * подписывает поле id объекта. Новый код без вида не скомпилируется.
+ */
+export const ACHIEVEMENT_OBJECT_KIND_BY_CODE = {
+  race_first_finish: 'race',
+  race_podium: 'race',
+  race_win: 'race',
+  races_5: 'race',
+  route_first: 'route',
+  routes_5: 'route',
+  ride_first: 'ride',
+  ride_organizer: 'ride',
+  rides_10: 'ride',
+  season_regular: 'season',
+  season_podium: 'season',
+  season_champion: 'season',
+} as const satisfies Record<AchievementCode, AchievementObjectKind>;
+
+/** Объект достижения: гонка, маршрут, райд или сезон, на котором выполнено условие; название — текущее. */
 export const AchievementObject = z.object({
   kind: tolerantEnum(ACHIEVEMENT_OBJECT_KINDS),
   id: Uuid,
@@ -84,19 +118,47 @@ export const AchievementList = z.object({
 });
 export type AchievementList = z.infer<typeof AchievementList>;
 
-/** Публичное достижение (`GET /v1/riders/:publicId/achievements`): только гоночные, без `seen` и прогресса. */
+/**
+ * Публичное достижение (`GET /v1/riders/:publicId/achievements`): только гоночные и сезонные, без `seen` и прогресса.
+ */
 export const PublicRiderAchievement = z.object(AchievementFields);
 export type PublicRiderAchievement = z.infer<typeof PublicRiderAchievement>;
 
 export const PublicRiderAchievementList = z.object({ items: z.array(PublicRiderAchievement) });
 export type PublicRiderAchievementList = z.infer<typeof PublicRiderAchievementList>;
 
-/** `POST /v1/achievements/seen` — показанные коды: 1–9, без повторов (иначе 400 `VALIDATION_FAILED`). */
-export const MarkAchievementsSeenRequest = z.strictObject({
-  codes: z
-    .array(AchievementCode)
-    .min(1)
-    .max(ACHIEVEMENT_CODES.length)
-    .refine((codes) => new Set(codes).size === codes.length, { error: fieldError('INVALID') }),
+/** Адрес сезонной выдачи в `POST /v1/achievements/seen`. */
+export const SeasonalAchievementRef = z.strictObject({
+  code: z.enum(SEASONAL_ACHIEVEMENT_CODES),
+  seasonId: Uuid,
 });
+export type SeasonalAchievementRef = z.infer<typeof SeasonalAchievementRef>;
+/** Предел адресов `seasonal` в одном `POST seen`. */
+export const SEASONAL_SEEN_MAX = 30;
+
+/**
+ * `POST /v1/achievements/seen`: `codes` — несезонные (сезонный код в `codes` — без записи, как незнакомый); `seasonal` —
+ * сезонные по `(code, seasonId)`. Хотя бы один адрес, без повторов (иначе 400 `VALIDATION_FAILED`). Старые сборки шлют
+ * `{ codes }` — валидно; клиент шлёт `seasonal` только непустым (старый API его не знает).
+ */
+export const MarkAchievementsSeenRequest = z
+  .strictObject({
+    codes: z
+      .array(AchievementCode)
+      .max(ACHIEVEMENT_CODES.length)
+      .refine((codes) => new Set(codes).size === codes.length, { error: fieldError('INVALID') })
+      .default([]),
+    seasonal: z
+      .array(SeasonalAchievementRef)
+      .max(SEASONAL_SEEN_MAX)
+      .refine(
+        (refs) => new Set(refs.map((ref) => `${ref.code}:${ref.seasonId}`)).size === refs.length,
+        { error: fieldError('INVALID') },
+      )
+      .default([]),
+  })
+  .refine((body) => body.codes.length + body.seasonal.length > 0, {
+    error: fieldError('REQUIRED'),
+    path: ['codes'],
+  });
 export type MarkAchievementsSeenRequest = z.infer<typeof MarkAchievementsSeenRequest>;

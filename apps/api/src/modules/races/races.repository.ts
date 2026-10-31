@@ -175,6 +175,51 @@ export class RacesRepository {
       .toArray();
   }
 
+  /** Сезоны, завершённые к `now` (`endsBefore ≤ now`; их десятки — без индекса), по `_id`. */
+  seasonsEndedBy(now: Date): Promise<Pick<SeasonDoc, '_id' | 'name' | 'endsOn' | 'endsBefore'>[]> {
+    return this.c.seasons
+      .find(
+        { endsBefore: { $lte: now } },
+        { projection: { _id: 1, name: 1, endsOn: 1, endsBefore: 1 } },
+      )
+      .sort({ _id: 1 })
+      .toArray();
+  }
+
+  /**
+   * Сезоны из `seasonIds` с опубликованной гонкой с коридором без протокола (префикс индекса `races_season_idx`);
+   * отменённые и анонсы (`corridor: null`, документ без поля) — не считаются.
+   */
+  seasonsAwaitingProtocol(seasonIds: readonly string[]): Promise<string[]> {
+    return this.c.races.distinct('seasonId', {
+      seasonId: { $in: [...seasonIds] },
+      status: 'published',
+      protocolPublishedAt: null,
+      corridor: { $ne: null },
+    }) as Promise<string[]>;
+  }
+
+  /**
+   * Последняя отмена гонки с коридором по сезонам из `seasonIds` (префикс индекса `races_season_idx`; гонок сезона —
+   * десятки); анонсы (`corridor: null`) итог сезона не держали — не считаются.
+   */
+  async lastCancelledAt(seasonIds: readonly string[]): Promise<Map<string, Date>> {
+    const rows = await this.c.races
+      .aggregate<{ _id: string; at: Date }>([
+        {
+          $match: {
+            seasonId: { $in: [...seasonIds] },
+            status: 'cancelled',
+            cancelledAt: { $ne: null },
+            corridor: { $ne: null },
+          },
+        },
+        { $group: { _id: '$seasonId', at: { $max: '$cancelledAt' } } },
+      ])
+      .toArray();
+    return new Map(rows.map((row) => [row._id, row.at]));
+  }
+
   // --- гонки ---
 
   async findRace(id: string, session?: DbSession): Promise<RaceDoc | undefined> {
@@ -431,7 +476,7 @@ export class RacesRepository {
    * `races_protocol_idx` (RC-4); статус — защита (протокол есть только у опубликованной, D-19).
    */
   listProtocolRaces(
-    seasonId?: string,
+    seasonIds?: readonly string[],
   ): Promise<
     Pick<
       RaceDoc,
@@ -441,7 +486,7 @@ export class RacesRepository {
     const query: Filter<RaceDoc> = {
       protocolPublishedAt: { $type: 'date' },
       status: 'published',
-      seasonId: seasonId ?? { $type: 'string' },
+      seasonId: seasonIds ? { $in: [...seasonIds] } : { $type: 'string' },
     };
     return this.c.races
       .find(query, {

@@ -13,6 +13,8 @@ import {
   CHANGED_SORT,
   type ChangedCursor,
   changedAfter,
+  changedSort,
+  changedWithin,
   type ChangedRow,
 } from '../../changed-since';
 import type { DbSession } from '../../db';
@@ -568,6 +570,42 @@ export class RidesRepository {
         { projection: { title: 1, startsAt: 1, organizerUserId: 1, goingCount: 1 } },
       )
       .sort({ startsAt: 1, _id: 1 })
+      .limit(limit)
+      .toArray();
+  }
+
+  /**
+   * Райды из `ids`, «прошедшие» по условию `pastFactsOf` (опубликован, старт до `now`) без участия — объект ручной выдачи
+   * достижения (порт `RIDER_RIDES.ridesOf`, achievements-panel). Скрытый и отменённый — нет.
+   */
+  pastByIds(
+    ids: readonly string[],
+    now: Date,
+  ): Promise<Pick<RideDoc, '_id' | 'title' | 'startsAt'>[]> {
+    return this.rides
+      .find<Pick<RideDoc, '_id' | 'title' | 'startsAt'>>(
+        { _id: { $in: [...ids] }, status: 'published', startsAt: { $lt: now } },
+        { projection: { title: 1, startsAt: 1 } },
+      )
+      .toArray();
+  }
+
+  /**
+   * Опубликованные райды со стартом в окне `(after, until]` по `(startsAt, _id)` — то же условие «прошёл», что
+   * `pastFactsOf` (R8), для серверной сверки достижений (порт `RIDER_RIDES`, индекс `rides_feed_idx`); проекция —
+   * участники и старт.
+   */
+  startedWithin(
+    after: ChangedCursor,
+    until: Date,
+    limit: number,
+  ): Promise<(Pick<RideDoc, '_id' | 'startsAt'> & { participants: { userId: string }[] })[]> {
+    return this.rides
+      .find<Pick<RideDoc, '_id' | 'startsAt'> & { participants: { userId: string }[] }>(
+        { status: 'published', ...changedWithin(after, until, 'startsAt') },
+        { projection: { _id: 1, startsAt: 1, 'participants.userId': 1 } },
+      )
+      .sort(changedSort('startsAt'))
       .limit(limit)
       .toArray();
   }

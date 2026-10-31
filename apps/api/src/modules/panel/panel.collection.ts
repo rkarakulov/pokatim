@@ -1,4 +1,7 @@
 import type {
+  AchievementCode,
+  AchievementLevel,
+  AchievementObjectKind,
   InvitationEmailState,
   AppDecorId,
   AppThemeId,
@@ -192,6 +195,11 @@ export interface AuditDetailsDoc {
   ticketCode?: string;
   /** profile-moderation-followups: сброс фото включил запрет загрузки до этого момента (ISO, как в контракте) */
   avatarBlockedUntil?: string;
+  /** achievements-panel: код достижения, вид и id объекта (сезонной — сезон), уровень счётного */
+  achievementCode?: AchievementCode;
+  objectKind?: AchievementObjectKind;
+  objectId?: string;
+  achievementLevel?: AchievementLevel;
 }
 
 /**

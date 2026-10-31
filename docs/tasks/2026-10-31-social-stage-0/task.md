@@ -20,10 +20,10 @@
 ### 3.1 P0 — этот PR
 
 1. **Документы:** `docs/product/social.md`, ADR-0027; правки `profile.md` (R8 — явка, R9 — строки K6, подсказка K3),
-   `rides.md` (K4, K5), `notifications.md` (N3 — события группы «Свои», N4 — шестая группа, N12 — исключение), `home.md`
+   `rides.md` (K4, K5), `notifications.md` (N3 — события группы «Свои», N4 — седьмая группа, N12 — исключение), `home.md`
    (K7, K3), `docs/product/README.md`; правила `pokatim-backend.md` / `pokatim-db.md` — модуль `social`,
    исключение «текст — снимок» для группы «Свои», исключение append-only `product_events` для стирания.
-2. **Миграция `0043_social`** (expand): коллекции `rider_connections`, `ride_attendance`, `social_reactions`,
+2. **Миграция `0045_social`** (expand): коллекции `rider_connections`, `ride_attendance`, `social_reactions`,
    `invite_codes`, `product_events` и индексы (ADR-0027 п. 2).
 3. **Модуль `product-events`** (листовой): коллекция, `PRODUCT_EVENTS.record(event)` (тип события — закрытый
    справочник K12, `userId`, `props`, `at`), стирание по `userId`, шаг `product-events` в оркестраторе удаления.
@@ -199,8 +199,8 @@ ADR-0027 п. 2 — в этом же PR, отклонения — в 8.2.
   удалённый аккаунт дают одинаковый `404 NOT_FOUND`, чтобы не раскрывать существование аккаунта (K3).
 
 **Решения оркестратора (2026-10-31):** RC-1 (a) и RC-2 (a) приняты — блокеры сняты; RC-3…RC-16 — по рекомендациям
-architect, кроме RC-8: номер миграции — **`0043_social`** (на develop свободен; если `feature/achievements-seasonal`
-сольётся раньше — перенумеровать при слиянии). «Свои» — шестая группа уведомлений (RC-9): правки K10, N4, п. 3.1.1 —
+architect, кроме RC-8: номер миграции — **`0045_social`** (на develop свободен; если `feature/achievements-seasonal`
+сольётся раньше — перенумеровать при слиянии). «Свои» — седьмая группа уведомлений (RC-9; шестой стала «Достижения» из develop): правки K10, N4, п. 3.1.1 —
 в этом PR. Отклонения перенесены в 8.2.
 
 ## 8.2 Deviations from spec
@@ -212,7 +212,7 @@ architect, кроме RC-8: номер миграции — **`0043_social`** (�
   одна транзакция (в ADR было `{rideId, userId}` уникально).
 - **RC-3a** — «Меня не было» снимает любую явку и ставит `declinedAt`; явка по треку такую запись не перекрывает,
   ручное «Я был» сбрасывает (в K2 было — только ручную).
-- **RC-8** — миграция `0043_social` (architect предлагал `0044` из-за локальной ветки achievements-seasonal).
+- **RC-8** — миграция `0045_social` (architect предлагал `0044` из-за локальной ветки achievements-seasonal).
 - **RC-10** — `ERASURE_STEPS` в порядке исполнения: `…, 'tickets', 'social', 'product-events', 'notifications',
   'identity'` (в спеке — «в конец»).
 - **RC-11** — справочник продуктовых событий — `apps/api/src/modules/product-events/product-events.types.ts`, в
@@ -283,7 +283,7 @@ Architect, 2026-10-31. Описывает вариант RC-2a. При выбо�
 - `PRODUCT_EVENTS.record` и шаги `social`, `product-events` в `AccountErasureService.run`.
 
 **FILES TO CREATE**
-- `apps/api/src/db/migrations/0044_social.ts` (номер — RC-8; по решению оркестратора — `0043_social.ts`). Образец — `0038_tickets.ts`: экспорт `SOCIAL_INDEXES`
+- `apps/api/src/db/migrations/0044_social.ts` (номер — RC-8; по решению оркестратора — `0045_social.ts`). Образец — `0038_tickets.ts`: экспорт `SOCIAL_INDEXES`
   (`satisfies Record<string, readonly IndexDef[]>`) и `social: MongoMigration` (`ensureCollection` из
   `0002_identity`, затем `createIndex` по списку). Только expand, без транзакции и бэкфилла, идемпотентна.
 - `apps/api/src/modules/product-events/`:
@@ -527,7 +527,7 @@ outbox `tracks.activity-recorded` и `identity.account-confirmed`; `RegisterRequ
 Coder, 2026-10-31 (P0). Не закоммичено.
 
 **Сделано (AC1–AC7):**
-- Миграция `0043_social` (`SOCIAL_INDEXES`, пять коллекций, expand-only, идемпотентна); тест в `migrations.int.test.ts`
+- Миграция `0045_social` (`SOCIAL_INDEXES`, пять коллекций, expand-only, идемпотентна); тест в `migrations.int.test.ts`
   (точные индексы, уникальности пары связи и реакции с получателем, повторный `up`).
 - `product-events` (листовой): справочник K12 в `product-events.types.ts` (`strictObject`, без id в `props`), порт
   `PRODUCT_EVENTS.record(event, session?)`, `ProductEventErasure`.
@@ -541,7 +541,7 @@ Coder, 2026-10-31 (P0). Не закоммичено.
 - `account`: шаги `social` и `product-events` после `tickets`, до `notifications`; `ERASURE_STEPS` и подписи `ru.ts`.
 - Contracts: `src/social/social.schema.ts`, `SOCIAL_ACTION_BLOCKED` (+ текст в `error-messages.ts`).
 - dependency-cruiser: `product-events-leaf`, `social-consumers-only`.
-- Документы: `social.md` (K2 — RC-3, K5 — RC-4, K10 — шестая группа), ADR-0027 пп. 2, 7, 8, `profile.md` (R8, R9, K3),
+- Документы: `social.md` (K2 — RC-3, K5 — RC-4, K10 — седьмая группа), ADR-0027 пп. 2, 7, 8, `profile.md` (R8, R9, K3),
   `rides.md` (K4, K5), `notifications.md` (N3, N4 — шесть групп, N12 — исключение), `home.md` (K7, K3),
   `docs/product/README.md`, правила `pokatim-backend.md`, `pokatim-db.md`, `pokatim-contracts.md`.
 

@@ -3,7 +3,7 @@ import type { Collection, Db } from 'mongodb';
 import type { ProductEventInput } from './product-events.types';
 
 /**
- * Журнал продуктовых событий (K12, ADR-0027 п. 7). Создаёт миграция `0043_social`; единственный писатель —
+ * Журнал продуктовых событий (K12, ADR-0027 п. 7). Создаёт миграция `0045_social`; единственный писатель —
  * `ProductEventsRepository`. Append-only: единственное исключение — удаление событий райдера шагом стирания аккаунта
  * (K13).
  */

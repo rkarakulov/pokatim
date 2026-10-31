@@ -37,6 +37,25 @@ export function cacheVersion(files: readonly PrecacheFile[]): string {
   return sha256(lines.join('\n')).slice(0, 12);
 }
 
+/**
+ * Коды достижений для цели `achievement` (achievements-push) — копия `ACHIEVEMENT_CODES` контрактов (генератор
+ * запускается Node без сборки пакетов); равенство держит тест `notification-target.test.ts`.
+ */
+export const SW_ACHIEVEMENT_CODES = [
+  'race_first_finish',
+  'race_podium',
+  'race_win',
+  'races_5',
+  'route_first',
+  'routes_5',
+  'ride_first',
+  'ride_organizer',
+  'rides_10',
+  'season_regular',
+  'season_podium',
+  'season_champion',
+] as const;
+
 const CACHE_PREFIX = 'static-';
 
 /**
@@ -136,6 +155,7 @@ self.addEventListener('fetch', (event) => {
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // канонический код билета (Crockford, 10 символов) — как TicketCodeCanonical контрактов
 const TICKET_CODE = /^[0-9A-HJKMNP-TV-Z]{10}$/;
+const ACHIEVEMENT_CODES = new Set(${JSON.stringify(SW_ACHIEVEMENT_CODES)});
 const NOTIFICATIONS_PATH = '/notifications';
 const ICON = '/icons/icon-192.png';
 
@@ -155,6 +175,11 @@ function targetPath(target) {
       return typeof target.code === 'string' && TICKET_CODE.test(target.code) ? '/tickets/' + target.code : null;
     case 'profile-edit':
       return '/settings/profile';
+    case 'achievement': {
+      if (typeof target.code !== 'string' || !ACHIEVEMENT_CODES.has(target.code)) return null;
+      if (target.seasonId === undefined) return '/achievements/' + target.code;
+      return id('seasonId') && '/achievements/' + target.code + '?season=' + id('seasonId');
+    }
     default:
       return null;
   }

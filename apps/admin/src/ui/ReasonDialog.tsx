@@ -15,6 +15,8 @@ export interface ReasonDialogProps {
   confirmLabel: string;
   /** Разрушительное действие — красная кнопка подтверждения (не по умолчанию для Enter). */
   destructive?: boolean;
+  /** Поля окна ещё не готовы (например, id объекта не UUID): подтверждение неактивно и при достаточной причине. */
+  confirmDisabled?: boolean;
   /** Поля над причиной (например, новая роль). */
   extraFields?: ReactNode;
   /** Ошибка запроса — текст в окне; окно остаётся открытым. */
@@ -33,6 +35,7 @@ export function ReasonDialog({
   consequences,
   confirmLabel,
   destructive = false,
+  confirmDisabled = false,
   extraFields,
   errorText = () => t('error.unknown'),
   onConfirm,
@@ -41,7 +44,7 @@ export function ReasonDialog({
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
-  const ready = reason.trim().length >= ACTION_REASON_MIN_LENGTH;
+  const ready = reason.trim().length >= ACTION_REASON_MIN_LENGTH && !confirmDisabled;
 
   const close = () => {
     if (busy) return;

@@ -1,5 +1,6 @@
 import {
   addLocalDays,
+  DEFAULT_ACHIEVEMENT_NOTIFICATION_SETTINGS,
   DEFAULT_EVENT_NOTIFICATION_SETTINGS,
   DEFAULT_NOTIFICATION_SETTINGS,
   DEFAULT_ROUTE_NOTIFICATION_SETTINGS,
@@ -43,7 +44,7 @@ export const NOTIFICATIONS_POLICY = {
 
 // группы — из справочника контракта: строковый литерал группы споров совпал бы с именем коллекции споров (сторож
 // `disputes.repository.test.ts`)
-const [RACES, DISPUTES, RIDES, EVENTS, ROUTES] = NOTIFICATION_GROUPS;
+const [RACES, DISPUTES, RIDES, EVENTS, ROUTES, ACHIEVEMENTS] = NOTIFICATION_GROUPS;
 
 const KIND_GROUPS: Record<NotificationKind, NotificationGroup> = {
   result_counted: RACES,
@@ -67,6 +68,7 @@ const KIND_GROUPS: Record<NotificationKind, NotificationGroup> = {
   profile_name_reset: RIDES,
   profile_avatar_reset: RIDES,
   profile_club_reset: RIDES,
+  achievement_granted: ACHIEVEMENTS,
 };
 
 /** Группа настроек события (N4). */
@@ -83,12 +85,13 @@ export const EMAIL_KINDS: ReadonlySet<NotificationKind> = new Set([
 
 /**
  * Настройки доставки (внутренний тип): основные `NotificationSettings` + тумблеры группы «Мероприятия»
- * (`push.events`, `email.events` — подресурс настроек, RC-D1; нет поля — включено) и «Маршруты» (`push.routes`, только
- * push; нет поля — значение `push.rides`). Хранятся в одном документе.
+ * (`push.events`, `email.events` — подресурс настроек, RC-D1; нет поля — включено), «Маршруты» (`push.routes`, только
+ * push; нет поля — значение `push.rides`) и «Достижения» (`push.achievements`, только push; нет поля — включено, P4).
+ * Хранятся в одном документе.
  */
 export interface DeliverySettings {
   push: Record<NotificationGroup, boolean>;
-  email: Record<Exclude<NotificationGroup, 'races' | 'routes'>, boolean>;
+  email: Record<Exclude<NotificationGroup, 'races' | 'routes' | 'achievements'>, boolean>;
   quietHours: NotificationSettings['quietHours'];
 }
 
@@ -98,6 +101,7 @@ export const DEFAULT_DELIVERY_SETTINGS: DeliverySettings = {
     ...DEFAULT_NOTIFICATION_SETTINGS.push,
     events: DEFAULT_EVENT_NOTIFICATION_SETTINGS.push,
     routes: DEFAULT_ROUTE_NOTIFICATION_SETTINGS.push,
+    achievements: DEFAULT_ACHIEVEMENT_NOTIFICATION_SETTINGS.push,
   },
   email: {
     ...DEFAULT_NOTIFICATION_SETTINGS.email,
@@ -128,17 +132,26 @@ export function quietUntil(now: Date, quietHours: DeliverySettings['quietHours']
 
 /**
  * Доставка нового уведомления (intake): push `pending` с `notBefore` = конец тихих часов или сейчас — при включённой
- * группе и включённом канале push (`pushChannelEnabled`: Expo или Web Push), иначе `skipped` (`disabled` / `push_off`); письмо — только N2 (`EMAIL_KINDS`) по тумблеру
- * группы (`skipped`, если выключен), прочим — `null`. В центр уведомление пишется всегда (N4, RC-13).
+ * группе и включённом канале push (`pushChannelEnabled`: Expo или Web Push), иначе `skipped` (`disabled` / `push_off`);
+ * `inApp` — райдер сейчас в приложении (выдача найдена сверкой `GET /v1/achievements`, P1): `skipped` (`in_app`) при
+ * любых настройках. Письмо — только N2 (`EMAIL_KINDS`) по тумблеру группы (`skipped`, если выключен), прочим — `null`.
+ * В центр уведомление пишется всегда (N4, RC-13).
  */
 export function initialDelivery(
   kind: NotificationKind,
   settings: DeliverySettings,
   now: Date,
   pushEnabled: boolean,
+  { inApp = false }: { inApp?: boolean } = {},
 ): { push: PushDelivery; email: EmailDelivery | null } {
   const group = groupOf(kind);
-  const reason = !pushEnabled ? 'push_off' : settings.push[group] ? null : 'disabled';
+  const reason = inApp
+    ? 'in_app'
+    : !pushEnabled
+      ? 'push_off'
+      : settings.push[group]
+        ? null
+        : 'disabled';
   const push: PushDelivery = {
     state: reason === null ? 'pending' : 'skipped',
     notBefore: reason === null ? (quietUntil(now, settings.quietHours) ?? now) : now,
@@ -147,7 +160,8 @@ export function initialDelivery(
     sentAt: null,
     reason,
   };
-  if (!EMAIL_KINDS.has(kind) || group === RACES || group === ROUTES) return { push, email: null };
+  if (!EMAIL_KINDS.has(kind) || group === RACES || group === ROUTES || group === ACHIEVEMENTS)
+    return { push, email: null };
   return {
     push,
     email: {

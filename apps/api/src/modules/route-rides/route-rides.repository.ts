@@ -1,7 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { MONGO_DB } from '@rkarakulov/api-kit/mongo';
-import type { Db } from 'mongodb';
+import type { Db, Filter } from 'mongodb';
 
+import { type ChangedCursor, changedSort, changedWithin } from '../../changed-since';
 import type { DbSession } from '../../db';
 import {
   type RouteRideDoc,
@@ -154,6 +155,28 @@ export class RouteRidesRepository {
         { projection: { _id: 0, routeId: 1, activityId: 1, 'activity.startedAt': 1 } },
       )
       .sort({ 'activity.startedAt': 1, _id: 1 })
+      .limit(limit)
+      .toArray();
+  }
+
+  /**
+   * Заезды `passed` с записью в окне `(after, until]` по `(updatedAt, _id)` — серверная сверка достижений (порт
+   * `RIDER_ROUTE_RIDES`; частичный индекс `route_rides_passed_updated_idx`, `0044_route_rides_passed_idx`). Окно — по
+   * моменту записи итога (`record` ставит `updatedAt`), а не по `checkedAt`: тот берётся до ожидания семафора разбора и
+   * может отставать от коммита больше `settleMs`. Прочие обновления `passed` дают лишь повтор (сверка идемпотентна).
+   */
+  passedWithin(
+    after: ChangedCursor,
+    until: Date,
+    limit: number,
+  ): Promise<{ _id: string; userId: string; updatedAt: Date }[]> {
+    const window = changedWithin(after, until, 'updatedAt') as Filter<RouteRideDoc>;
+    return this.c.rides
+      .find<{ _id: string; userId: string; updatedAt: Date }>(
+        { status: 'passed', ...window },
+        { projection: { _id: 1, userId: 1, updatedAt: 1 } },
+      )
+      .sort(changedSort('updatedAt'))
       .limit(limit)
       .toArray();
   }

@@ -6,7 +6,7 @@ import type { Collection, Db } from 'mongodb';
 import type { DbSession } from '../../db';
 import { type ReactionDoc, socialCollections } from './social.collection';
 
-/** Уникальная реакция (`0043_social`, RC-1): дубль вставки — уже есть (повтор или параллельное нажатие). */
+/** Уникальная реакция (`0045_social`, RC-1): дубль вставки — уже есть (повтор или параллельное нажатие). */
 export const REACTIONS_UNIQUE_INDEX = 'social_reactions_unique';
 
 /** Ключ реакции — поля уникального индекса. */

@@ -2,7 +2,7 @@ import type { AttendanceVia, ReactionKind, ReactionTargetType } from '@pokatim/c
 import type { Collection, Db } from 'mongodb';
 
 /**
- * «Свои» (social, ADR-0027 п. 2). Создаёт миграция `0043_social`; единственные писатели — репозитории модуля
+ * «Свои» (social, ADR-0027 п. 2). Создаёт миграция `0045_social`; единственные писатели — репозитории модуля
  * (`connections`, `attendance`, `reactions`, `invite-codes`). Nullable-поля пишутся явным `null`.
  */
 export const SOCIAL_COLLECTIONS = {

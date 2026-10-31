@@ -1,5 +1,6 @@
 import { ApiHttpError } from '@pokatim/api-client';
 import type {
+  AchievementNotificationSettingsView,
   EventNotificationSettingsView,
   NotificationPage,
   NotificationSettings,
@@ -28,6 +29,7 @@ const listKey = ['notifications', 'list', 'pages'] as const;
 const settingsKey = ['notifications', 'settings'] as const;
 const eventSettingsKey = ['notifications', 'settings', 'events'] as const;
 const routeSettingsKey = ['notifications', 'settings', 'routes'] as const;
+const achievementSettingsKey = ['notifications', 'settings', 'achievements'] as const;
 
 /** Счётчик колокольчика: только у вошедшего, опрос 60 с и при возврате фокуса. */
 export function useUnreadCount() {
@@ -113,7 +115,7 @@ export function useUpdateNotificationSettings() {
   });
 }
 
-/** Старый API без подресурса группы («Мероприятия», «Маршруты») — `404`: группу не показываем. */
+/** Старый API без подресурса группы («Мероприятия», «Маршруты», «Достижения») — `404`: группу не показываем. */
 export const isSettingsResourceMissing = (error: unknown) =>
   error instanceof ApiHttpError && error.status === 404;
 
@@ -157,5 +159,30 @@ export function useUpdateRouteNotificationSettings() {
       withAccessToken((accessToken) => api.updateRouteNotificationSettings(accessToken, settings)),
     networkMode: 'always',
     onSuccess: (saved) => queryClient.setQueryData(routeSettingsKey, saved),
+  });
+}
+
+/** Тумблер «Достижения» — подресурс, только push; запрос — только на платформе с push (`enabled`). */
+export function useAchievementNotificationSettings({ enabled }: { enabled: boolean }) {
+  return useQuery({
+    queryKey: achievementSettingsKey,
+    queryFn: () =>
+      withAccessToken((accessToken) => api.getAchievementNotificationSettings(accessToken)),
+    staleTime: DEFAULT_STALE_MS,
+    enabled,
+    retry: (count, error) => !isSettingsResourceMissing(error) && count < 2,
+  });
+}
+
+/** Сохранение тумблера «Достижения»; ответ сервера — в кеш. */
+export function useUpdateAchievementNotificationSettings() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (settings: AchievementNotificationSettingsView) =>
+      withAccessToken((accessToken) =>
+        api.updateAchievementNotificationSettings(accessToken, settings),
+      ),
+    networkMode: 'always',
+    onSuccess: (saved) => queryClient.setQueryData(achievementSettingsKey, saved),
   });
 }

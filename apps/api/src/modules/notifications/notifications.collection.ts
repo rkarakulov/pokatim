@@ -66,11 +66,16 @@ export interface NotificationDoc {
 /**
  * Настройки пользователя: `_id = userId`; нет документа — `DEFAULT_DELIVERY_SETTINGS`. Тумблеры «Мероприятия»
  * (`push.events`, `email.events`, PR D) и «Маршруты» (`push.routes`) пишут подресурсы настроек; документы до них поля
- * не имеют: «Мероприятия» — включено, «Маршруты» — значение `push.rides` (раньше решения по маршруту были в «Райдах»).
+ * не имеют: «Мероприятия» — включено, «Маршруты» — значение `push.rides` (раньше решения по маршруту были в «Райдах»),
+ * «Достижения» (`push.achievements`, achievements-push) — включено (P4, без наследования).
  */
 export interface NotificationSettingsDoc {
   _id: string;
-  push: NotificationSettings['push'] & { events?: boolean; routes?: boolean };
+  push: NotificationSettings['push'] & {
+    events?: boolean;
+    routes?: boolean;
+    achievements?: boolean;
+  };
   email: NotificationSettings['email'] & { events?: boolean };
   quietHours: NotificationSettings['quietHours'];
   updatedAt: Date;

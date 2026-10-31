@@ -16,6 +16,8 @@ jest.mock('@/lib/api');
 const PUBLIC_ID = 'r'.repeat(43);
 const RACE_ID = '0190a6f4-0000-7000-8000-000000000201';
 const ROUTE_ID = '0190a6f4-0000-7000-8000-000000000301';
+const SEASON_A = '0190a6f4-0000-7000-8000-000000000401';
+const SEASON_B = '0190a6f4-0000-7000-8000-000000000402';
 
 const own = (overrides: Partial<Achievement> = {}): Achievement => ({
   code: 'race_win',
@@ -85,6 +87,28 @@ describe('блок «Достижения» своего профиля (AC12)',
 
     await fireEvent.press(tiles[1]!);
     await waitFor(() => expect(router.getPathname()).toBe('/achievements/race_win'));
+  });
+
+  it('сезонные: два «Призёра» разных сезонов — две плитки; нажатие → экран с `?season=`', async () => {
+    const season = (id: string, title: string, factDate: string) =>
+      own({ code: 'season_podium', object: { kind: 'season', id, title }, factDate });
+    listAchievements.mockResolvedValue({
+      progress: [],
+      items: [
+        season(SEASON_B, 'Сезон 2025', '2025-10-31'),
+        season(SEASON_A, 'Сезон 2024', '2024-10-31'),
+      ],
+    });
+    const router = await openProfile();
+    const block = within(await screen.findByTestId('own-achievements'));
+    const tiles = await block.findAllByRole('button');
+    expect(tiles.map((tile) => tile.props.accessibilityLabel)).toEqual([
+      'Достижение «Призёр сезона»: Сезон «Сезон 2025», 31 октября 2025',
+      'Достижение «Призёр сезона»: Сезон «Сезон 2024», 31 октября 2024',
+    ]);
+    await fireEvent.press(tiles[1]!);
+    await waitFor(() => expect(router.getPathname()).toBe('/achievements/season_podium'));
+    expect(router.getSearchParams()).toMatchObject({ season: SEASON_A });
   });
 
   it('«Следующие цели» под достижениями: полосы и подписи; без достижений — блок есть', async () => {
@@ -205,6 +229,28 @@ describe('гоночные достижения публичного профи�
     ).toBeOnTheScreen();
     expect(screen.queryByText('Первый маршрут')).toBeNull();
     expect(screen.queryByText(/Петля/)).toBeNull();
+  });
+
+  it('сезонные — в публичном блоке (S6), плитка без перехода', async () => {
+    getRiderAchievements.mockResolvedValue({
+      items: [
+        pub({
+          code: 'season_champion',
+          object: { kind: 'season', id: SEASON_A, title: 'Сезон 2025' },
+          factDate: '2025-10-31',
+        }),
+        pub(),
+      ],
+    });
+    await openRider();
+    const block = within(await screen.findByTestId('rider-achievements'));
+    expect(
+      block.getByLabelText('Достижение «Чемпион сезона»: Сезон «Сезон 2025», 31 октября 2025'),
+    ).toBeOnTheScreen();
+    expect(
+      block.getByLabelText('Достижение «Подиум»: Гонка «Гонка у озера», 2 мая 2026'),
+    ).toBeOnTheScreen();
+    expect(block.queryAllByRole('button')).toEqual([]);
   });
 
   it('только не-гоночные — блока нет', async () => {

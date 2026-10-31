@@ -118,6 +118,7 @@ describe('POST /v1/admin/session/sign-in (AC2)', () => {
           'routes.moderate',
           'platform.stats',
           'tickets.checkin',
+          'achievements.manage',
         ],
       },
     });

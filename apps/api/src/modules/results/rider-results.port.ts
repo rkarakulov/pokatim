@@ -1,5 +1,7 @@
 import type { ProtocolRowStatus, ResultGroupKey, ResultUnrankedReason } from '@pokatim/contracts';
 
+import type { ChangedCursor, RiderChanges } from '../../changed-since';
+
 /**
  * Порт `results` для модуля `riders` (rider-profile, через `modules/results/index.ts`): строки опубликованных
  * протоколов райдера (только текущие ревизии) и названия гонок. `riders` коллекций `results` не читает.
@@ -58,4 +60,11 @@ export interface RiderResults {
   publishedFinishes(userId: string): Promise<RiderFinishRow[]>;
   /** Названия и окна гонок (опубликованные и отменённые; черновик и неизвестная — нет в карте). */
   racesOf(raceIds: readonly string[]): Promise<Map<string, RiderRaceInfo>>;
+  /**
+   * Райдеры ревизий протоколов (публикация, пересчёт), записанных в окне `(after, until]` (серверная сверка
+   * достижений, achievements-push): журнал пересчётов с числовой ревизией по `_id` (uuidv7 = время записи; пустой `id`
+   * курсора — момент `at` включительно) → `userId` строк ревизий страницы одним запросом. Предел — `limit` записей
+   * журнала; курсор — последняя прочитанная запись.
+   */
+  revisedRidersAfter(after: ChangedCursor, until: Date, limit: number): Promise<RiderChanges>;
 }

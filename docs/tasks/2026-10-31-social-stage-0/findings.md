@@ -61,7 +61,7 @@ verdict: APPROVE
 ### [LOW] Documentation Sync: pr.md ещё не создан
 - **file:** docs/tasks/2026-10-31-social-stage-0/pr.md
 - **location:** отсутствует
-- **problem:** п. 10 task.md требует `pr.md` (миграция `0043_social` expand, новые шаги стирания, совместимость
+- **problem:** п. 10 task.md требует `pr.md` (миграция `0045_social` expand, новые шаги стирания, совместимость
   строгого `ERASURE_STEPS` — панель деплоится вместе с API, перенумерация при слиянии `feature/achievements-seasonal`).
 - **why_it_matters:** без этого деплой-заметки о строгом enum и номере миграции теряются.
 - **recommended_fix:** создать на шаге FINISH (так и запланировано в §12 «Открыто»).

@@ -24,8 +24,8 @@
    `index.ts` и порты `*_FOR_SOCIAL` (по образцу `RESULTS_FOR_TICKETS`). На `social` ссылаются `notifications`
    (порт аудитории и имён для группы «Свои»), `account` (порт стирания), `AppModule`, `WorkerModule`. Производители
    о `social` не знают.
-2. **Коллекции** (миграция `0043_social`, только expand; номер — по факту слияния, при более раннем слиянии другой
-   ветки с `0043` — перенумеровать):
+2. **Коллекции** (миграция `0045_social`, только expand; после `0043_achievements_seasonal` и
+   `0044_route_rides_passed_idx` из develop):
    - `rider_connections` — направленная связь `ownerId → otherId`, уникальный `{ownerId, otherId}`; источники
      (`ride`, `invite`, `manual`), `rideCount`, `lastRideAt`, `manualAt`, `removedAt` (тихое удаление: связь
      скрыта, автоматические источники её не возвращают, K1);

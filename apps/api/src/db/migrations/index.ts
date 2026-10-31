@@ -42,7 +42,9 @@ import { eventMaterials } from './0039_event_materials';
 import { panelTotp } from './0040_panel_totp';
 import { panelInvitations } from './0041_panel_invitations';
 import { profileReportReasons } from './0042_profile_report_reasons';
-import { social } from './0043_social';
+import { achievementsSeasonal } from './0043_achievements_seasonal';
+import { routeRidesPassedIdx } from './0044_route_rides_passed_idx';
+import { social } from './0045_social';
 
 /**
  * Миграции MongoDB по порядку (`db:migrate`, `.claude/rules/db.md`): новая — в конец списка, применённые не
@@ -91,5 +93,7 @@ export const migrations: readonly MongoMigration[] = [
   panelTotp,
   panelInvitations,
   profileReportReasons,
+  achievementsSeasonal,
+  routeRidesPassedIdx,
   social,
 ];

@@ -190,6 +190,9 @@ paths:
 ## Очереди (worker)
 
 - Брокер — BullMQ на Redis; RabbitMQ не используем (переход — только через ADR; outbox оставляет к нему путь).
+- Регламенты «по курсору» без событий (DV-1): `standings-recalc`, `og-sync`, `tickets-maintenance`,
+  `achievements-sync` (achievements-push N2: `achievements.sweep` → `achievements.rider`); новый источник курсора —
+  метод порта владельца с keyset `changed-since.ts`, не чтение чужой коллекции.
 - Тяжёлая работа — только в worker: разбор трека, геопересчёт (коридор), рендер Skia/ffmpeg, OG-картинки,
   бейджи, уведомления, пересчёт сезона. HTTP-обработчик ставит задачу.
 - Лимиты времени и памяти — для разбора файлов и рендеринга (Skia, ffmpeg).
@@ -329,23 +332,42 @@ paths:
 
 ## Достижения (`achievements`, ADR-0020 Proposed)
 
-- Модуль-композиция (образец `riders` + `standings`): `achievements → identity, profile, results, rides, route-rides`
-  только через `index.ts`; на `achievements` ссылаются только `AppModule` (`AchievementsModule`),
-  `AccountWorkerModule` (`AchievementsCoreModule`, порт стирания) и `sharing` (`AchievementsReadModule`, порт
-  `ACHIEVEMENTS_FOR_SHARING`). Источники о нём не знают — циклов нет.
+- Модуль-композиция (образец `riders` + `standings`): `achievements → identity, profile, results, rides, route-rides,
+  standings, panel` только через `index.ts` (`panel` — achievements-panel, `panel` об `achievements` не знает) (`standings` — порт `RIDER_SEASON_STANDINGS`, `StandingsCoreModule` импортирует
+  только `AchievementsSyncModule` и `AchievementsWorkerModule`; `AchievementsReadModule` и `sharing` его не получают); на `achievements` ссылаются только `AppModule` (`AchievementsModule`), `WorkerModule` (`AchievementsWorkerModule`, N2),
+  `AccountWorkerModule` (`AchievementsCoreModule`, порт стирания), `sharing` (`AchievementsReadModule`, порт
+  `ACHIEVEMENTS_FOR_SHARING`) и `NotificationsWorkerModule` (`AchievementsSyncModule`, порт `ACHIEVEMENT_NOTICES`,
+  achievements-push). Источники и `notifications` о нём не знают в обратную сторону — циклов нет.
   `AchievementsCoreModule` — `AchievementsRepository` + `AchievementErasure` (модулей не импортирует);
   `AchievementsReadModule` — `AchievementFactsReader` (факты портов + правила, только чтение) и порт карточки
   (`ResultsCoreModule`, `RidesCoreModule`, `RouteRidesCoreModule`, `AchievementsCoreModule`);
-  `AchievementsModule` — + `IdentityModule`, `ProfileCoreModule`, `ResultsCoreModule`, `AchievementsReadModule`.
-  Worker-модуля, очередей, outbox и регламента нет.
+  `AchievementsSyncModule` (achievements-push) — `AchievementsReconciler` и порт `ACHIEVEMENT_NOTICES`
+  (`AchievementsCoreModule`, `AchievementsReadModule`, `StandingsCoreModule`; транзакции и outbox — глобальные модули
+  базы); `AchievementsModule` — + `IdentityModule`, `ProfileCoreModule`, `ResultsCoreModule`, `AchievementsReadModule`,
+  `AchievementsSyncModule`, а для панели (achievements-panel) — `PanelModule`, `IdentityAccountsModule`,
+  `StandingsCoreModule`. `AchievementsWorkerModule` (`WorkerModule`, achievements-push N2) — серверная сверка:
+  очередь `achievements-sync`, `AchievementsSchedules` (`achievements.sweep` `* * * * *` Минск +
+  `achievements.sweep.boot`), `AchievementsSweep` (курсоры Redis `achievements:cursor:<source>` и замок-аренда прогона —
+  `AchievementsSyncState`: `extend` своим токеном перед каждым шагом, `setCursors` — проверка токена и запись одним
+  Lua, потеря аренды — `achievements.sweep_lease_lost` без записи курсоров; источники — по одному методу портов
+  владельцев: `RIDER_RESULTS.revisedRidersAfter` (получатели страницы — один запрос `$or` по `(raceId, revision)`),
+  `RIDER_RIDES.startedRidersAfter` (`until = now − rideSettleMs`), `RIDER_ROUTE_RIDES.passedRidersAfter` (по
+  `updatedAt` — моменту записи итога), `RIDER_SEASON_STANDINGS.settledRidersAfter` (событие — `max(computedAt,
+  endsBefore, SEASON_RACES.lastCancelledAt)`); окно и страница — `changed-since.ts` (`changedWithin`, `RiderChanges`),
+  пределы — `ACHIEVEMENTS_SERVER_SYNC`; только `IdentityAccounts.liveUserIds` ∩ `syncedAmong`; курсоры — после
+  постановки; сбой источника — лог `achievements.sweep_source_failed`, курсор стоит, прогон падает) →
+  `achievements.rider` (`AchievementsSyncProcessor`, `concurrency: 4`, 3 попытки, последняя — лог
+  `achievements.server_sync_failed`) → `reconcile(uid, 'server')`. Imports: `AchievementsSyncModule`,
+  `AchievementsCoreModule`, `IdentityAccountsModule`, `ResultsCoreModule`, `RidesCoreModule`, `RouteRidesCoreModule`,
+  `StandingsCoreModule`. Условия «прошёл»/«засчитан» — только в репозиториях владельцев (рядом с `pastFactsOf`/`passedOf`).
 - Факты — только порты владельцев: `RIDER_RESULTS` (`publishedRows`, `racesOf` — как у `riders`), `RIDER_ROUTE_RIDES`
   (`route-rides`: `passedOf` — `passed` + `ActivitySource.liveActivities` + `RouteRideRoutes.rideableTitles`, та же
   видимость, что у «Заездов по маршруту»; снятый маршрут — факта нет, RC-4), `RIDER_RIDES` (`rides`: `pastOf` —
   условия R8 в `RidesRepository.pastFactsOf`, порядок ↑), `RIDER_PROFILES` (публичность). Пределы портов — 2000 строк
   и лог `achievements.{rides,route_rides}_truncated`. Предикат «в зачёте» — общий `isRankedRow` (`results/index.ts`,
   RC-9: им же считает `riders.policy.summarize`). Копий условий и второго расчёта мест в `achievements` нет.
-- Правила и план — чистые функции `achievements.policy.ts`: `ACHIEVEMENT_RULES` (`satisfies Record<AchievementCode,
-  …>` — новый код без правила не скомпилируется), `evaluateAchievements` (одна сортировка фактов: по времени ↑, при
+- Правила и план — чистые функции `achievements.policy.ts`: `ACHIEVEMENT_RULES` (`satisfies Record<FactAchievementCode,
+  …>` — новый несезонный код без правила не скомпилируется; сезонные — `SEASONAL_RULES`), `evaluateAchievements` (одна сортировка фактов: по времени ↑, при
   равенстве — id ↑ → `earned` + `progress`), `earnedAchievements` (= `.earned`), `raceAchievements` (публичный список —
   те же правила, с уровнем `races_5`), `reconcilePlan`, `sortForList` (факт ↓, равенство — каталог ↓),
   `ACHIEVEMENTS_POLICY` (лимиты). Уровни: пороги — только `ACHIEVEMENT_LEVEL_TARGETS` из контрактов (своих констант
@@ -353,15 +375,54 @@ paths:
   ранг, объект и дата — факт порога; `Earned.level` (ранг, разовые — `null`), `levelName` (ранг → строка),
   `storedRank`, `isSeen(grant, level)` (`seenAt != null && seenLevel >= level`, `null` ≡ 1); `refresh` — и при
   другом ранге.
-- Сверка — в `GET /v1/achievements` (`AchievementsService.sync`): лимит `achievements-read:<uid>` 60/мин → факты
+- Сверка — `AchievementsReconciler.reconcile(userId, origin)` (`'read'` — `GET /v1/achievements`, `'server'` — worker
+  PR N2); `AchievementsService.sync` — лимит `achievements-read:<uid>` 60/мин и сборка ответа поверх итога сверки. Факты
   параллельно → `reconcilePlan` (insert — первая сверка `seenAt = now`; restore — `seenAt` не трогать; refresh;
-  revoke) → по одной условной операции на код без транзакции (вставка — `isDuplicateKey` уникального индекса) →
+  revoke) → по одной условной операции на код; шаги, которые могут дать уведомление (achievements-push: вставка не в
+  первой сверке, `refresh`/`restore` несезонной, сезонная вставка не в первой сверке), — `MongoTransactions.run` с
+  outbox `achievements.grant-noticed` (`achievements.events.ts`: `{ grant, grantId, level, origin }`): вставка —
+  `insert*InTx` + `append`, дубль уникального индекса — `isDuplicateKey` **снаружи** `run` (внутри колбэка не ловить);
+  `refresh`/`restore` — `restoreOrRefresh` (`findOneAndUpdate` pipeline, `returnDocument: 'before'`, `notifiedLevel =
+  $max(...)`) первой операцией, событие — если `noticeDue(before, level)`. Первая сверка, отзывы, сезонный `restore`,
+  маркер — без транзакции (вставка первой сверки — `isDuplicateKey` в репозитории) →
   **только после выдач** — маркер первой сверки (RC-1) → ответ: перечитанные видимые ∩ заработанные (название и дата —
   из фактов запроса; `level` — из фактов запроса, `seen` — `isSeen` по уровню ответа, не сохранённому, RC-L10;
-  `progress` — из той же `Evaluation`). Лог `achievements.sync uid first granted revoked restored refreshed` — только
-  если план не пуст. `POST /v1/achievements/seen` — лимит `achievements-seen:<uid>` 120/ч, `updateMany` pipeline своих
+  `progress` — из той же `Evaluation`). Лог `achievements.sync uid first granted revoked restored refreshed … origin
+  noticed` — только если план не пуст. Порт `ACHIEVEMENT_NOTICES` (`achievement-notices.ts`): выдача по `_id`
+  (`findGrant`; нет — `gone`; отозвана, ранг ниже события, код не заработан по фактам — `state`), название — `evaluate`
+  + `titled`; сезонная — `RIDER_SEASON_STANDINGS.outcomesOf` + `seasonalAchievements`: ключ не заработан по
+  `final`-исходу или сезон `pending` — `state` (без ложного «Новое достижение»), название — из исхода. `POST /v1/achievements/seen` — лимит `achievements-seen:<uid>` 120/ч, `updateMany` pipeline своих
   видимых с непоказанным уровнем (`seenLevel = max(seenLevel, level)` из документа), сверку не запускает. Публично — `AchievementsPublicController` (`riders/:publicId/achievements`, `PublicReadGuard`)
-  → `publicList`: `findPublic` (нет — 404) → `raceAchievements` → без записи.
+  → `publicList`: `findPublic` (нет — 404) → `raceAchievements` + сезонные по `final` → без записи.
+- Ручные решения (achievements-panel, ADR-0020 «Дополнение: ручные решения»): `AchievementsAdminController`
+  (`admin/rider-achievements`, `PanelGuard` + `achievements.manage`: `GET :userId`, `POST :userId/{grant,revoke,clear}`)
+  → `AchievementsPanelService`: лимит `achievements-panel:<actor>` 60/ч (`consumeUserLimit`) → `IdentityAccounts
+  .liveUserIds` (404) → (выдача) объект вне транзакции → `MongoTransactions.run` { запись выдачи **первой** (замок) →
+  (выдача) outbox `achievements.grant-noticed` `origin: 'server'` → `PanelAudit.append` } → дубль индекса снаружи `run`
+  (409 `ACHIEVEMENT_INVALID_STATE`); снятие → после коммита `reconcile(userId, 'server')` при маркере первой сверки
+  (сбой — `reconciled: false`, лог `achievements.override_reconcile_failed`). Лог `achievements.manual action by
+  outcome`. Объекты несезонных — `AchievementObjects` (`AchievementsReadModule`: `resolve` — годность и дата, `titles` —
+  названия пачкой; порты `RIDER_RESULTS.racesOf`, `RIDER_ROUTE_RIDES.routeTitles`, `RIDER_RIDES.ridesOf`), сезон —
+  `RIDER_SEASON_STANDINGS.outcomesOf` (`pending` тоже, с `endsBefore`); вид — `ACHIEVEMENT_OBJECT_KIND_BY_CODE`.
+  Политика: планы пропускают код/ключ с `override`, `adminStatus`, `progressBeyondManual` (RC-9). Ответы: `sync` —
+  фактовые видимые ∩ факты + ручные из документа (нет названия — лог `achievements.manual_object_missing`), сезонная
+  ручная — при любом исходе; `publicList` — `overridesOf` (ручной отзыв убирает, ручная `race_*`/`season_*`
+  добавляет); `cardFacts` — ручная из документа; `ACHIEVEMENT_NOTICES` — ручная без перепроверки фактами.
+- Сезонные (achievements-seasonal, ADR-0020 «Дополнение: сезонные»): факты — порт `RIDER_SEASON_STANDINGS.outcomesOf
+  (userId, alsoSeasonIds, now)` (`standings/rider-season-standings.ts`, `StandingsCoreModule`): `SEASON_RACES
+  .finishedSeasons(now)` → одна snapshot-сессия `rowsOfUserIn` + `headersOf` (нужные сезоны — строк ∪ сохранённых
+  выдач) → `SEASON_RACES.awaitingProtocol` и `StandingsSource.load(seasonIds)`; `final` ⇔ нет гонки с коридором без
+  протокола (RC-S2) и отпечаток снимка = источнику, иначе `pending`. `SeasonRaces.protocolRaces(seasonIds?)` и
+  `StandingsSource.load(seasonIds?)` принимают набор сезонов (регламент — без аргумента, сводка панели — `[id]`).
+  Политика: `FACT_ACHIEVEMENT_CODES`/`FactAchievementCode` (несезонные — `ACHIEVEMENT_RULES`, `evaluateAchievements`,
+  `reconcilePlan` обходят только их, RC-S7), `SEASONAL_RULES` (`placedRaces ≥ 1` у «Чемпиона» и «Призёра», RC-S1;
+  `≥ SEASON_REGULAR_MIN_RACES` ячеек `placed` в одной таблице, RC-S3), `seasonalAchievements` (`earned` по ключу
+  `code:seasonId`, `factAt = endsBefore − 1 мс`; `settled` — `final`-сезоны), `seasonalPlan` (insert/restore/revoke
+  только по `settled`; `refresh` нет). `sync`: оба плана → маркер после обоих → ответ: сезонные — видимые ∩
+  заработанные (`final`), в `pending` — видимая остаётся с названием из исхода. Лог — счётчики `seasonal_*`. Карточка:
+  сезонный код → `cardFacts` `null` (409), `ACHIEVEMENT_BADGE_ICONS` — `Record<FactAchievementCode, …>`. Сбой порта сезонов — `seasonOutcomes` → `[]`
+  (лог `achievements.seasons_unavailable`): сезонные не трогаются и не отдаются, остальной список — как обычно;
+  серверная сверка (`origin: 'server'`) зовёт порт напрямую — сбой уходит в ретрай задачи.
 
 ## Карточки для сторис (`sharing`, story-cards, ADR-0018)
 
@@ -464,7 +525,8 @@ RC-A1, ADR-0019).
 - Модуль `standings` (`results ──► standings`): `StandingsCoreModule` (репозиторий снимка, `StandingsSource`,
   `StandingsRecalc`; imports `RacesCoreModule`, `ResultsCoreModule`), `StandingsModule` (API: + `IdentityModule`,
   `PanelModule`, `ProfileCoreModule`), `StandingsWorkerModule` (`WorkerModule`). Порты — только через `index.ts`:
-  `SEASON_RACES` (`races`: гонки с протоколом, `seasonExists`, `seesAllRaces`), `RESULTS_FOR_STANDINGS` (`results`:
+  `SEASON_RACES` (`races`: гонки с протоколом, `seasonExists`, `seesAllRaces`, `finishedSeasons`, `awaitingProtocol`),
+  `RESULTS_FOR_STANDINGS` (`results`:
   `currentRevisions` одним `aggregate`, `protocolRows` ревизии), `RIDER_NAMES` (`profile`). `races`/`results` о
   `standings` не знают.
 - Правила зачёта — чистые функции `standings.policy.ts` (`pointsForPlace`, `racesCounted`, `selectCounted`,
@@ -563,7 +625,10 @@ RC-A1, ADR-0019).
   `profile` — источник без порта: ребро `notifications → profile` только файловое (`PROFILE_FIELD_RESET` и схема
   `ProfileFieldReset` из `profile/index.ts`, без Nest-импорта `ProfileCoreModule`), payload самодостаточен, живость
   получателя — `liveUserIds`; схлопывание `profile:<uid>:<field>` по `seq`, событие без `seq` — `invalid_payload`.
-- Маршруты объявляет подписчик: `notificationsOutboxRoutes` (14 типов → `notifications-intake`; `tickets.reminder-due` — получателю своя цель `ticket` через `NoticeDraft.targets`). Очереди:
+- Маршруты объявляет подписчик: `notificationsOutboxRoutes` (15 типов → `notifications-intake`; `achievements.grant-noticed`
+  — порт `ACHIEVEMENT_NOTICES`, черновик с `inApp` при `origin: 'read'` → push `skipped`/`in_app`
+  (`initialDelivery(…, { inApp })`, флаг идёт и в пачку `FanoutJobData.inApp`), схлопывание `achievement:<grantId>` по
+  рангу; `tickets.reminder-due` — получателю своя цель `ticket` через `NoticeDraft.targets`). Очереди:
   `notifications-intake` (событие → получатели → настройки → upsert; > 72 ч — skip; уникальность `(sourceEventId,
   userId)`, схлопывание `collapseKey`; аудитория > `NOTIFICATIONS_POLICY.fanoutChunk` (200) — задачи-пачки
   `notifications.fanout` той же очереди: `planFanout` (`notification-fanout.ts`) → план в данных задачи intake
@@ -573,15 +638,17 @@ RC-A1, ADR-0019).
   `scheduleEvent(eventId, userIds)`, последняя попытка — лог `notifications.fanout_failed`), `notifications-delivery` (`notifications.push` по пользователю — захват,
   тумблер, тихие часы, лимит 20/ч, сводка; `notifications.email` — только N2), `notifications-maintenance`
   (`receipts` */15 — `DeviceNotRegistered` снимает токен; `redeliver` */10).
-- Текст — снимок сервера (`notification-texts.ts`, не `@pokatim/i18n`); цель — белый список типов. Исключение —
-  группа «Свои» (ADR-0027 п. 6, P1): `actors` + `params`, имена — при чтении списка и отправке push через
-  `RIDER_NAMES.publicRiders` (нет публичного — «Райдер»). Expo — порт
+- Текст — снимок сервера (`notification-texts.ts`, не `@pokatim/i18n`; исключение RC-P5 — имена достижений, уровней и
+  объектов из каталога `@pokatim/i18n` `achievements.*`, заголовок `achievement_granted` — функция `achievementTitle`);
+  цель — белый список типов. Второе исключение — группа «Свои» (ADR-0027 п. 6, P1): `actors` + `params`, имена — при
+  чтении списка и отправке push через `RIDER_NAMES.publicRiders` (нет публичного — «Райдер»). Expo — порт
   `PUSH_SENDER` (`expo-push.sender.ts`, адрес из env, в production — только `exp.host`); `PUSH_ENABLED=false` — push
   `skipped`.
 - HTTP `/v1/notifications` под `AuthGuard`, только свои (`userId` сессии в фильтре, чужое — 404); лимиты
   `notifications-read` 120/мин, `notifications-settings` 30/ч, `notifications-push-token` 30/ч → `429 RATE_LIMITED`.
   Группа «Маршруты» (`route_published`/`route_rejected`) — подресурс `GET|PUT settings/routes` (`push.routes`, только
-  push; нет поля — значение `push.rides`).
+  push; нет поля — значение `push.rides`). Группа «Достижения» (`achievement_granted`, achievements-push) — подресурс
+  `GET|PUT settings/achievements` (`push.achievements`, только push; нет поля — включено).
   Группа «Мероприятия» — подресурс `GET|PUT settings/events` (`push.events`, `email.events`; нет поля — включено):
   `NotificationSettings` ответа строгий, новое поле сломало бы старые сборки (RC-D1); `PUT settings` — `$set`
   известных полей, не `replaceOne` (старые сборки не стирают тумблеры подресурса). Внутренний тип — `DeliverySettings`.

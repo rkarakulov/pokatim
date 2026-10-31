@@ -102,4 +102,34 @@ describe('ReasonDialog (AC11)', () => {
     expect(await screen.findByText('Нельзя оставить панель без администратора.')).toBeTruthy();
     expect((reason() as HTMLTextAreaElement).value).toBe('последний админ');
   });
+
+  it('confirmDisabled — подтверждение неактивно и при достаточной причине (форма окна не готова)', () => {
+    const onConfirm = vi.fn().mockResolvedValue(undefined);
+    const { rerender } = render(
+      <ReasonDialog
+        open
+        title="Выдать"
+        consequences="Последствия"
+        confirmLabel="Подтвердить"
+        confirmDisabled
+        onConfirm={onConfirm}
+        onClose={() => undefined}
+      />,
+    );
+    fireEvent.change(reason(), { target: { value: 'технический сбой' } });
+    expect(confirm()).toHaveProperty('disabled', true);
+    fireEvent.click(confirm());
+    expect(onConfirm).not.toHaveBeenCalled();
+    rerender(
+      <ReasonDialog
+        open
+        title="Выдать"
+        consequences="Последствия"
+        confirmLabel="Подтвердить"
+        onConfirm={onConfirm}
+        onClose={() => undefined}
+      />,
+    );
+    expect(confirm()).toHaveProperty('disabled', false);
+  });
 });

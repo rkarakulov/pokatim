@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 
+import type { ChangedCursor, RiderChanges } from '../../changed-since';
 import { ROUTE_RIDE_ROUTES, type RouteRideRoutes } from '../routes';
 import { ACTIVITY_SOURCE, type ActivitySource } from '../tracks';
 import {
@@ -61,5 +62,23 @@ export class RiderRouteRidesService implements RiderRouteRides {
         ? []
         : [{ routeId: ride.routeId, routeTitle, startedAt: ride.activity.startedAt }];
     });
+  }
+
+  async passedRidersAfter(after: ChangedCursor, until: Date, limit: number): Promise<RiderChanges> {
+    const docs = await this.repository.passedWithin(after, until, limit);
+    const last = docs.at(-1);
+    return {
+      userIds: [...new Set(docs.map((doc) => doc.userId))],
+      next: last ? { at: last.updatedAt, id: last._id } : null,
+    };
+  }
+
+  async routeTitles(userId: string, routeIds: readonly string[]): Promise<Map<string, string>> {
+    const titles = new Map<string, string>();
+    for (const ids of chunks([...new Set(routeIds)], ROUTES_CHUNK)) {
+      for (const [id, title] of await this.routes.rideableTitles(ids, userId))
+        titles.set(id, title);
+    }
+    return titles;
   }
 }

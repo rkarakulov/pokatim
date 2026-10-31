@@ -105,6 +105,54 @@ export class StandingsRepository {
     return this.c.rows.find({ seasonId, userId }, { session }).toArray();
   }
 
+  /** Строки пользователя в снимках сезонов `seasonIds` (по одному seek индекса `season_standing_rows_user_idx`). */
+  rowsOfUserIn(
+    seasonIds: readonly string[],
+    userId: string,
+    session: DbSession,
+  ): Promise<SeasonStandingRowDoc[]> {
+    return this.c.rows.find({ seasonId: { $in: [...seasonIds] }, userId }, { session }).toArray();
+  }
+
+  /** Моменты пересчёта снимков сезонов `ids` (заголовки; сезонов — десятки). */
+  async computedAtOf(ids: readonly string[]): Promise<Map<string, Date>> {
+    if (ids.length === 0) return new Map();
+    const docs = await this.c.seasons
+      .find({ _id: { $in: [...ids] } }, { projection: { _id: 1, computedAt: 1 } })
+      .toArray();
+    return new Map(docs.map((doc) => [doc._id, doc.computedAt]));
+  }
+
+  /**
+   * `userId` строк снимка сезона после `afterUserId` по возрастанию (индекс `season_standing_rows_user_idx`), не больше
+   * `limit` строк (у райдера бывает несколько строк — повторы в ответе).
+   */
+  async rowUserIdsAfter(
+    seasonId: string,
+    afterUserId: string | null,
+    limit: number,
+  ): Promise<string[]> {
+    const filter: Filter<SeasonStandingRowDoc> = { seasonId };
+    if (afterUserId !== null) filter.userId = { $gt: afterUserId };
+    const docs = await this.c.rows
+      .find(filter, { projection: { _id: 0, userId: 1 } })
+      .sort({ seasonId: 1, userId: 1 })
+      .limit(limit)
+      .toArray();
+    return docs.map((doc) => doc.userId);
+  }
+
+  /** Отпечатки заголовков снимков сезонов `ids` (без таблиц и гонок). */
+  async headersOf(
+    ids: readonly string[],
+    session: DbSession,
+  ): Promise<Map<string, Pick<SeasonStandingsDoc, '_id' | 'fingerprint'>>> {
+    const docs = await this.c.seasons
+      .find({ _id: { $in: [...ids] } }, { session, projection: { _id: 1, fingerprint: 1 } })
+      .toArray();
+    return new Map(docs.map((doc) => [doc._id, { _id: doc._id, fingerprint: doc.fingerprint }]));
+  }
+
   /** Чтения снимка в одной snapshot-сессии: заголовок и страница согласованы. */
   async withSnapshot<T>(fn: (session: DbSession) => Promise<T>): Promise<T> {
     const session = this.client.startSession({ snapshot: true });

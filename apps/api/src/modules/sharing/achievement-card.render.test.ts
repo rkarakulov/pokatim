@@ -1,4 +1,4 @@
-import { ACHIEVEMENT_CODES } from '@pokatim/contracts';
+import { ACHIEVEMENT_CODES, isSeasonalCode } from '@pokatim/contracts';
 import { appThemes } from '@pokatim/design-tokens';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -210,9 +210,10 @@ describe('разметка', () => {
 });
 
 describe('иконки значка', () => {
-  it('у каждого кода каталога есть глиф в шрифте Material Symbols', async () => {
+  it('у каждого несезонного кода каталога есть глиф в шрифте Material Symbols', async () => {
     const symbols = await symbolsFont();
     for (const code of ACHIEVEMENT_CODES) {
+      if (isSeasonalCode(code)) continue;
       const glyph = String.fromCodePoint(ACHIEVEMENT_BADGE_ICONS[code].glyph);
       const svg = await renderCardSvg(
         node('div', { display: 'flex', fontFamily: 'symbols', fontSize: 100 }, glyph),

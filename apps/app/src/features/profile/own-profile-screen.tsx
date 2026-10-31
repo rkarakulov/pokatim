@@ -10,6 +10,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { DetailHeader } from '@/components/detail-header';
 import { DocumentTitle } from '@/components/document-title';
 import { AchievementProgressBlock } from '@/features/achievements/achievement-progress-block';
+import { achievementItemPath } from '@/features/achievements/achievement-catalog';
 import { AchievementsBlock } from '@/features/achievements/achievements-block';
 import { useAchievements } from '@/features/achievements/queries';
 import { useHeaderSeasonState } from '@/features/races/queries';
@@ -128,7 +129,7 @@ export function OwnProfileScreen() {
           <AchievementsBlock
             testID="own-achievements"
             query={achievements}
-            onPress={(item) => router.push(`/achievements/${item.code}`)}
+            onPress={(item) => router.push(achievementItemPath(item))}
           />
           {/* «Следующие цели» (L5): тот же запрос; прогресса нет — блока нет, показывается и без достижений */}
           <AchievementProgressBlock query={achievements} />

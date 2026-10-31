@@ -96,6 +96,13 @@ export const QUEUE = {
    */
   panelEmail: 'panel-email',
   /**
+   * Серверная сверка достижений (achievements-push N2, ADR-0020): регламент `achievements.sweep` каждую минуту и при
+   * старте worker, без событий outbox — райдеры изменившихся фактов по курсорам портов владельцев (Redis
+   * `achievements:cursor:<source>`) → задачи `achievements.rider` (jobId `ach-rider-<uid>-<прогонMs>`, 3 попытки) →
+   * `AchievementsReconciler.reconcile(uid, 'server')`; прогоны — по одному (замок-аренда Redis, курсоры пишет владелец).
+   */
+  achievementsSync: 'achievements-sync',
+  /**
    * Приём событий «Свои» (ADR-0027, P5–P7): `tracks.activity-recorded` → автоявка, `identity.account-confirmed` → связь
    * `invite`; jobId = id события outbox, повтор идемпотентен (явка и связи — условные записи).
    */

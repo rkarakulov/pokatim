@@ -783,7 +783,7 @@ describe('шаги social и product-events («Свои», ADR-0027 п. 8, K13)'
 });
 
 describe('шаг achievements (achievements, AC7)', () => {
-  it('выдачи и маркер сверки удалённого стёрты, чужие целы; повтор — нули', async () => {
+  it('выдачи (обе коллекции) и маркер сверки удалённого стёрты, чужие целы; повтор — нули', async () => {
     const w = await world();
     // маркер первой сверки (и выдачи по фактам мира) — через API, недостижимые в мире коды — прямой вставкой
     for (const who of [w.a, w.b]) {
@@ -808,16 +808,40 @@ describe('шаг achievements (achievements, AC7)', () => {
       grant(w.a.userId, 'routes_5'),
       grant(w.b.userId, 'rides_10'),
     ]);
+    const seasonGrant = (userId: string) => ({
+      _id: uuidv7(),
+      userId,
+      code: 'season_podium' as const,
+      seasonId: uuidv7(),
+      factAt: now,
+      grantedAt: now,
+      seenAt: null,
+      revokedAt: null,
+      updatedAt: now,
+    });
+    await achievementsDb(h).seasonGrants.insertMany([
+      seasonGrant(w.a.userId),
+      seasonGrant(w.a.userId),
+      seasonGrant(w.b.userId),
+    ]);
     const bGrants = await achievementsDb(h).grants.find({ userId: w.b.userId }).toArray();
+    const bSeasonGrants = await achievementsDb(h)
+      .seasonGrants.find({ userId: w.b.userId })
+      .toArray();
     await deleteAccount(w.a.accessToken);
     expect(await firstPass(w.a.userId)).toBe('erased');
 
     expect(await achievementsDb(h).grants.countDocuments({ userId: w.a.userId })).toBe(0);
     expect(await achievementsDb(h).syncs.countDocuments({ _id: w.a.userId })).toBe(0);
+    expect(await achievementsDb(h).seasonGrants.countDocuments({ userId: w.a.userId })).toBe(0);
     expect(await achievementsDb(h).grants.find({ userId: w.b.userId }).toArray()).toEqual(bGrants);
+    expect(await achievementsDb(h).seasonGrants.find({ userId: w.b.userId }).toArray()).toEqual(
+      bSeasonGrants,
+    );
     expect(await achievementsDb(h).syncs.countDocuments({ _id: w.b.userId })).toBe(1);
     expect(await h.worker.get(AchievementErasure).erase(w.a.userId)).toEqual({
       grants: 0,
+      seasonGrants: 0,
       syncs: 0,
     });
   });

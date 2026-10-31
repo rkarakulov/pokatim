@@ -353,18 +353,36 @@ paths:
 ## Достижения (achievements, ADR-0020 Proposed)
 
 - `GET /v1/achievements`, `POST /v1/achievements/seen` — `AuthGuard` на классе, `no-store`, пользователь — только
-  `@CurrentUser()`, `userId` в каждом фильтре репозитория; тело `seen` — `strictObject`, строгий `z.enum`, 1–9 без
-  повторов (400 `VALIDATION_FAILED`); чужие, отозванные и незнакомые коды — без записи и без ошибки. Лимиты
-  `achievements-read:<uid>` 60/мин, `achievements-seen:<uid>` 120/ч (429). GET пишет ≤ 9 документов на пользователя.
+  `@CurrentUser()`, `userId` в каждом фильтре репозитория; тело `seen` — `strictObject` `{ codes?, seasonal? }`, хотя
+  бы один адрес: `codes` — строгий `z.enum`, ≤ числа кодов, без повторов; `seasonal` — ≤ 30 `{ code (строгий enum
+  сезонных), seasonId (Uuid) }` без повторов (400 `VALIDATION_FAILED`); в фильтр — только примитивы после zod; чужие,
+  отозванные и незнакомые адреса (сезонный код в `codes`) — без записи и без ошибки. Лимиты
+  `achievements-read:<uid>` 60/мин, `achievements-seen:<uid>` 120/ч (429). GET пишет ≤ 9 документов
+  `achievement_grants` + ≤ 3 `achievement_season_grants` на завершённый сезон райдера, и по событию outbox
+  `achievements.grant-noticed` на каждую новую выдачу / новый уровень (в одной транзакции с выдачей; payload —
+  `{ grant, grantId, level, origin }`: id и коды, без `userId`, текстов и ПДн; получателя `notifications` берёт из
+  выдачи через порт `ACHIEVEMENT_NOTICES`, не из payload); `userId` порту `RIDER_SEASON_STANDINGS` — только от
+  сервиса (из access).
 - Публично `GET /v1/riders/:publicId/achievements` — `PublicReadGuard`, `public, max-age=60`, `RiderPublicId` pipe;
-  только при имени и согласии (`RIDER_PROFILES.findPublic`), иначе один 404; без записи. Только `race_*` — маршруты и
-  райды личные (A7).
+  только при имени и согласии (`RIDER_PROFILES.findPublic`), иначе один 404; без записи. Только `race_*` и сезонные
+  (`final`-сезоны, без чтения выдач; итоги протоколов, S6) — маршруты и райды личные (A7). Id сезона публичен
+  (`object.id`); мест, очков и таблицы в ответе достижений нет.
 - Наружу — явный список полей (ключи держит `achievements.int.test.ts`): `code`, `object { kind, id, title }`,
   `factDate` (день по Минску, без времени суток — RC-7), `level`, свой — ещё `seen`; свой список — `items` и
   `progress` (`{ code, level, current, target }`, только свой — в публичном ответе и на карточке нет); без `userId`,
   id выдачи, `grantedAt`, `revokedAt`, `seenLevel`. Клиент на уровень не влияет: `POST seen` — только коды, уровень —
   из документа в атомарной операции. Названия маршрутов — только видимых райдеру (RC-4). Логи — `uid`, флаг `first` и счётчики; без кодов
-  объектов, названий, уровней и `publicId`.
+  объектов, названий, уровней, сезонов, мест и `publicId` (сезонные — только счётчики `seasonal_*`).
+- Панель (achievements-panel): `admin/rider-achievements/*` — `PanelGuard` + `@RequirePermission('achievements.manage')`
+  на классе (только admin; сторож `admin-routes.test.ts`, `permissions.test.ts`), актор — `@CurrentPanelUser()`,
+  `:userId` — `Uuid`; тела — `strictObject` (`code` — строгий enum, `objectId`/`seasonId` — `Uuid`, `level` — только у
+  счётного, `ActionReason`). Вид объекта выводит сервер из кода, годность и дату — порт владельца; клиент не влияет на
+  `factAt`, `seenAt`, `notifiedLevel`. Лимит мутаций `achievements-panel:<actorUid>` 60/ч, удалённый райдер — 404.
+  Ответ панели — явный список полей (без e-mail и имени райдера, `seenAt`, `seenLevel`, `notifiedLevel`, `_id`
+  выдачи); имя сотрудника — `PanelDirectory`. Журнал `achievement.*` в транзакции действия (subject `rider`, details —
+  код, вид и id объекта, уровень; без имён и названий). Логи — `achievements.manual action by outcome` (без `userId`
+  райдера, id объекта и причины). Ответы приложения не раскрывают ручной характер выдачи (M7); событие outbox —
+  прежний payload с `origin: 'server'`.
 
 ## Модерация профиля (profile-moderation)
 
@@ -414,7 +432,7 @@ paths:
   организатора, участников); линия — только маршрута в каталоге (`RideRoutes.catalogLine`), `private` — никогда.
   Лимиты — общие с карточками сторис; логи — id райда, шаблон, итог (без `userId`, названия, места, токена).
 - Карточка достижения (`GET /v1/achievements/:code/story-card`): `AuthGuard`, в пути только код (чужое недостижимо),
-  не получено/отозвано — 409; на картинке — каталог, название гонки или райда, маршрут — только из каталога (свой
+  не получено/отозвано и сезонный код (карточки нет, S7) — 409; на картинке — каталог, название гонки или райда, маршрут — только из каталога (свой
   приватный — без строки объекта), дата факта, имя через `RIDER_NAMES`; без id объектов. Логи — код, шаблон, итог;
   причина провала — только тип ошибки.
 - Карточка маршрута (`GET /v1/routes/:routeId/story-card`): `AuthGuard`, только маршрут в каталоге (`IN_CATALOG`),

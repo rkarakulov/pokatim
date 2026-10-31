@@ -1,21 +1,34 @@
-import { ACHIEVEMENT_CODES, type AchievementCode } from '@pokatim/contracts';
+import { ACHIEVEMENT_OBJECT_KIND_BY_CODE, minskToday } from '@pokatim/contracts';
 import { describe, expect, it } from 'vitest';
 
 import type { RiderProtocolRow } from '../results';
 import type { RiderRideFact } from '../rides';
 import type { RiderRouteRideFact } from '../route-rides';
+import type { RiderSeasonOutcome, RiderSeasonRow } from '../standings';
 import {
+  ACHIEVEMENT_RULES,
   type AchievementFacts,
+  adminStatus,
   earnedAchievements,
   type Earned,
   evaluateAchievements,
+  FACT_ACHIEVEMENT_CODES,
+  type FactAchievementCode,
   isSeen,
   type LevelRank,
   levelName,
+  noticeDue,
+  progressBeyondManual,
   raceAchievements,
   reconcilePlan,
+  SEASONAL_RULES,
+  seasonalAchievements,
+  type SeasonalEarned,
+  seasonalKey,
+  seasonalPlan,
   sortForList,
   type StoredGrant,
+  type StoredSeasonGrant,
 } from './achievements.policy';
 
 const day = (n: number) => new Date(Date.UTC(2026, 5, n, 8));
@@ -186,7 +199,7 @@ describe('earnedAchievements — кофе-райды (AC1)', () => {
 });
 
 describe('уровни счётных (L1, L2, AC1)', () => {
-  const level = (partial: Partial<AchievementFacts>, code: AchievementCode) =>
+  const level = (partial: Partial<AchievementFacts>, code: FactAchievementCode) =>
     earned(partial).get(code)?.level ?? null;
 
   it('гонки: 4 → нет, 5 → бронза, 14 → бронза, 15 → серебро, 29 → серебро, 30 → золото', () => {
@@ -320,8 +333,46 @@ describe('isSeen (L3)', () => {
   });
 });
 
+describe('noticeDue (P1, P3, L3)', () => {
+  const at = day(1);
+
+  it('новый уровень выше объявленного и не показан — уведомление', () => {
+    // вставлено после первой сверки на бронзе (объявлено 1), бронза ещё не показана → серебро
+    expect(noticeDue({ seenAt: null, level: 1, notifiedLevel: 1 }, 2)).toBe(true);
+    // бронза показана → серебро
+    expect(noticeDue({ seenAt: at, seenLevel: 1, level: 1, notifiedLevel: 1 }, 2)).toBe(true);
+    expect(noticeDue({ seenAt: at, seenLevel: 2, level: 2, notifiedLevel: 2 }, 3)).toBe(true);
+  });
+
+  it('понижение, тот же уровень (смена объекта или даты) — тихо', () => {
+    expect(noticeDue({ seenAt: at, seenLevel: 2, level: 2, notifiedLevel: 2 }, 1)).toBe(false);
+    expect(noticeDue({ seenAt: null, level: 2, notifiedLevel: 2 }, 2)).toBe(false);
+  });
+
+  it('возврат на показанный уровень — тихо (L3)', () => {
+    // серебро показано, понижено до бронзы (объявлено 2 нет — первая сверка на серебре), снова серебро
+    expect(noticeDue({ seenAt: at, seenLevel: 2, level: 1, notifiedLevel: 1 }, 2)).toBe(false);
+  });
+
+  it('возврат на уже объявленный уровень — тихо (бронза → серебро → бронза → серебро)', () => {
+    expect(noticeDue({ seenAt: null, level: 1, notifiedLevel: 2 }, 2)).toBe(false);
+  });
+
+  it('документ до выката без notifiedLevel ≡ сохранённый уровень (ретро нет)', () => {
+    expect(noticeDue({ seenAt: null, level: 2 }, 2)).toBe(false);
+    expect(noticeDue({ seenAt: null }, 1)).toBe(false);
+    expect(noticeDue({ seenAt: at, seenLevel: 1, level: 1 }, 2)).toBe(true);
+    expect(noticeDue({ seenAt: null, level: 2, notifiedLevel: null }, 3)).toBe(true);
+  });
+
+  it('разовые (уровень null) — восстановление тихое', () => {
+    expect(noticeDue({ seenAt: null, level: null, notifiedLevel: null }, null)).toBe(false);
+    expect(noticeDue({ seenAt: at, level: null }, null)).toBe(false);
+  });
+});
+
 const NOW = new Date('2026-10-29T10:00:00Z');
-const stored = (code: AchievementCode, partial: Partial<StoredGrant> = {}): StoredGrant => ({
+const stored = (code: FactAchievementCode, partial: Partial<StoredGrant> = {}): StoredGrant => ({
   code,
   object: { kind: 'race', id: id(1) },
   factAt: day(10),
@@ -331,7 +382,7 @@ const stored = (code: AchievementCode, partial: Partial<StoredGrant> = {}): Stor
 });
 
 describe('reconcilePlan (A2–A4)', () => {
-  const won = new Map<AchievementCode, Earned>([['race_win', raceEarned(1, 10)]]);
+  const won = new Map<FactAchievementCode, Earned>([['race_win', raceEarned(1, 10)]]);
 
   it('первая сверка — вставка просмотренной (тихо, A3); последующая — непросмотренной', () => {
     expect(reconcilePlan([], won, true, NOW)).toEqual([
@@ -352,18 +403,18 @@ describe('reconcilePlan (A2–A4)', () => {
   });
 
   it('факт вернулся — восстановление с новым объектом (`seenAt` не в плане)', () => {
-    const back = new Map<AchievementCode, Earned>([['race_win', raceEarned(2, 15)]]);
+    const back = new Map<FactAchievementCode, Earned>([['race_win', raceEarned(2, 15)]]);
     expect(reconcilePlan([stored('race_win', { revokedAt: day(12) })], back, false, NOW)).toEqual([
       { type: 'restore', code: 'race_win', earned: raceEarned(2, 15) },
     ]);
   });
 
   it('видимая запись, объект или дата сменились — обновление (Подиум переходит на другую гонку после DQ)', () => {
-    const moved = new Map<AchievementCode, Earned>([['race_podium', raceEarned(2, 15)]]);
+    const moved = new Map<FactAchievementCode, Earned>([['race_podium', raceEarned(2, 15)]]);
     expect(reconcilePlan([stored('race_podium')], moved, false, NOW)).toEqual([
       { type: 'refresh', code: 'race_podium', earned: raceEarned(2, 15) },
     ]);
-    const sameObjectNewDate = new Map<AchievementCode, Earned>([
+    const sameObjectNewDate = new Map<FactAchievementCode, Earned>([
       ['race_podium', raceEarned(1, 16)],
     ]);
     expect(reconcilePlan([stored('race_podium')], sameObjectNewDate, false, NOW)).toEqual([
@@ -372,7 +423,7 @@ describe('reconcilePlan (A2–A4)', () => {
   });
 
   it('уровень вырос или упал — обновление; документ v1 на бронзе — пустой план', () => {
-    const silver = new Map<AchievementCode, Earned>([['races_5', raceEarned(15, 15, 2)]]);
+    const silver = new Map<FactAchievementCode, Earned>([['races_5', raceEarned(15, 15, 2)]]);
     expect(
       reconcilePlan(
         [stored('races_5', { object: raceEarned(5, 5).object, factAt: day(5) })],
@@ -381,7 +432,7 @@ describe('reconcilePlan (A2–A4)', () => {
         NOW,
       ),
     ).toEqual([{ type: 'refresh', code: 'races_5', earned: raceEarned(15, 15, 2) }]);
-    const bronze = new Map<AchievementCode, Earned>([['races_5', raceEarned(5, 5, 1)]]);
+    const bronze = new Map<FactAchievementCode, Earned>([['races_5', raceEarned(5, 5, 1)]]);
     const atSilver = stored('races_5', {
       object: raceEarned(15, 15).object,
       factAt: day(15),
@@ -400,7 +451,7 @@ describe('reconcilePlan (A2–A4)', () => {
   });
 
   it('первая сверка — вставка просмотренной на любом уровне (серебро, A3)', () => {
-    const silver = new Map<AchievementCode, Earned>([['races_5', raceEarned(15, 15, 2)]]);
+    const silver = new Map<FactAchievementCode, Earned>([['races_5', raceEarned(15, 15, 2)]]);
     expect(reconcilePlan([], silver, true, NOW)).toEqual([
       { type: 'insert', code: 'races_5', earned: raceEarned(15, 15, 2), seenAt: NOW },
     ]);
@@ -435,6 +486,310 @@ describe('sortForList (A8)', () => {
       routes: [1, 2, 3, 4, 5].map((n) => routeRide(n, n)),
       rides: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => ride(n, n, { organizer: true })),
     });
-    expect([...all.keys()].sort()).toEqual([...ACHIEVEMENT_CODES].sort());
+    expect([...all.keys()].sort()).toEqual([...FACT_ACHIEVEMENT_CODES].sort());
+  });
+
+  it('сезонные — в общем списке: в одном сезоне первым «Чемпион» (RC-S4)', () => {
+    const items = [
+      { code: 'season_regular' as const, factAt: day(10) },
+      { code: 'season_champion' as const, factAt: day(10) },
+      { code: 'race_win' as const, factAt: day(9) },
+      { code: 'season_podium' as const, factAt: day(10) },
+    ];
+    expect(sortForList(items).map((item) => item.code)).toEqual([
+      'season_champion',
+      'season_podium',
+      'season_regular',
+      'race_win',
+    ]);
+  });
+});
+
+describe('FACT_ACHIEVEMENT_CODES (RC-S7)', () => {
+  it('несезонные коды каталога; план несезонных сезонных кодов не содержит', () => {
+    expect(FACT_ACHIEVEMENT_CODES).not.toContain('season_podium');
+    expect(FACT_ACHIEVEMENT_CODES).toHaveLength(9);
+    const plan = reconcilePlan([], new Map(), true, NOW);
+    expect(plan).toEqual([]);
+  });
+});
+
+const SEASON_A = id(101);
+const SEASON_B = id(102);
+const seasonRow = (place: number, placedRaces: number, tied = false): RiderSeasonRow => ({
+  bikeClass: 'road',
+  groupKey: 'm_u40',
+  place,
+  tied,
+  placedRaces,
+});
+const ENDS_BEFORE = new Date('2025-10-31T21:00:00Z');
+const finalOutcome = (seasonId: string, rows: RiderSeasonRow[]): RiderSeasonOutcome => ({
+  seasonId,
+  status: 'final',
+  title: `Сезон ${seasonId.slice(-3)}`,
+  endsOn: '2025-10-31',
+  endsBefore: ENDS_BEFORE,
+  rows,
+});
+
+describe('SEASONAL_RULES (S1, RC-S1, RC-S3, AC1)', () => {
+  const earnedCodes = (rows: RiderSeasonRow[]) =>
+    Object.entries(SEASONAL_RULES)
+      .filter(([, rule]) => rule(rows))
+      .map(([code]) => code);
+
+  it('место 1 — чемпион и призёр; `=1` (ничья) — тоже; 3 — призёр; 4 — ничего', () => {
+    expect(earnedCodes([seasonRow(1, 1)])).toEqual(['season_podium', 'season_champion']);
+    expect(earnedCodes([seasonRow(1, 1, true)])).toEqual(['season_podium', 'season_champion']);
+    expect(earnedCodes([seasonRow(3, 2)])).toEqual(['season_podium']);
+    expect(earnedCodes([seasonRow(4, 2)])).toEqual([]);
+  });
+
+  it('2 гонки с местом — нет «Сезона в зачёте»; 3 — есть (в одной таблице)', () => {
+    expect(earnedCodes([seasonRow(5, 2), seasonRow(6, 2)])).toEqual([]);
+    expect(earnedCodes([seasonRow(5, 3)])).toEqual(['season_regular']);
+  });
+
+  it('строка только из DQ на месте 2 — не призёр (RC-S1: нужен финиш с местом)', () => {
+    expect(earnedCodes([seasonRow(2, 0)])).toEqual([]);
+    expect(earnedCodes([seasonRow(1, 0)])).toEqual([]);
+  });
+
+  it('любая таблица сезона: призёр в одной, в зачёте в другой', () => {
+    expect(earnedCodes([seasonRow(2, 1), seasonRow(10, 4)])).toEqual([
+      'season_regular',
+      'season_podium',
+    ]);
+  });
+});
+
+describe('seasonalAchievements (S2, S3, RC-S6)', () => {
+  it('`final` — заработанные по ключу `(code, seasonId)`; дата факта — последний день сезона по Минску', () => {
+    const { earned, settled } = seasonalAchievements([
+      finalOutcome(SEASON_A, [seasonRow(1, 3)]),
+      finalOutcome(SEASON_B, [seasonRow(2, 1)]),
+    ]);
+    expect([...earned.keys()]).toEqual([
+      seasonalKey({ code: 'season_regular', seasonId: SEASON_A }),
+      seasonalKey({ code: 'season_podium', seasonId: SEASON_A }),
+      seasonalKey({ code: 'season_champion', seasonId: SEASON_A }),
+      seasonalKey({ code: 'season_podium', seasonId: SEASON_B }),
+    ]);
+    const champion = earned.get(seasonalKey({ code: 'season_champion', seasonId: SEASON_A }))!;
+    expect(champion).toEqual({
+      code: 'season_champion',
+      seasonId: SEASON_A,
+      factAt: new Date(ENDS_BEFORE.getTime() - 1),
+      title: `Сезон ${SEASON_A.slice(-3)}`,
+    });
+    expect(minskToday(champion.factAt)).toBe('2025-10-31');
+    expect([...settled]).toEqual([SEASON_A, SEASON_B]);
+  });
+
+  it('`pending` — нет заработанных, сезон не `settled`', () => {
+    const { earned, settled } = seasonalAchievements([
+      { seasonId: SEASON_A, status: 'pending', title: 'Сезон', endsBefore: ENDS_BEFORE },
+    ]);
+    expect(earned.size).toBe(0);
+    expect(settled.size).toBe(0);
+  });
+});
+
+describe('seasonalPlan (S2–S5, AC1)', () => {
+  const earnedOf = (code: SeasonalEarned['code'], seasonId: string): SeasonalEarned => ({
+    code,
+    seasonId,
+    factAt: new Date(ENDS_BEFORE.getTime() - 1),
+    title: 'Сезон',
+  });
+  const mapOf = (...items: SeasonalEarned[]) =>
+    new Map(items.map((item) => [seasonalKey(item), item]));
+  const storedSeason = (
+    code: SeasonalEarned['code'],
+    seasonId: string,
+    partial: Partial<StoredSeasonGrant> = {},
+  ): StoredSeasonGrant => ({
+    code,
+    seasonId,
+    factAt: new Date(ENDS_BEFORE.getTime() - 1),
+    seenAt: day(1),
+    revokedAt: null,
+    ...partial,
+  });
+  const both = new Set([SEASON_A, SEASON_B]);
+
+  it('два ключа одного кода разных сезонов — две вставки; первая сверка — просмотренными (A3/S5)', () => {
+    const earned = mapOf(earnedOf('season_podium', SEASON_A), earnedOf('season_podium', SEASON_B));
+    expect(seasonalPlan([], earned, both, false, NOW)).toEqual([
+      { type: 'insert', earned: earnedOf('season_podium', SEASON_A), seenAt: null },
+      { type: 'insert', earned: earnedOf('season_podium', SEASON_B), seenAt: null },
+    ]);
+    expect(
+      seasonalPlan([], earned, both, true, NOW).map(
+        (step) => step.type === 'insert' && step.seenAt,
+      ),
+    ).toEqual([NOW, NOW]);
+  });
+
+  it('сезон не `settled` (`pending`) — ни вставки, ни отзыва', () => {
+    const earned = mapOf(earnedOf('season_podium', SEASON_A));
+    expect(
+      seasonalPlan([storedSeason('season_champion', SEASON_A)], earned, new Set(), false, NOW),
+    ).toEqual([]);
+  });
+
+  it('`final` без строк — отзыв видимой; отозванная — ничего; вернулась — восстановление', () => {
+    const settled = new Set([SEASON_A]);
+    expect(
+      seasonalPlan([storedSeason('season_podium', SEASON_A)], new Map(), settled, false, NOW),
+    ).toEqual([{ type: 'revoke', key: { code: 'season_podium', seasonId: SEASON_A } }]);
+    const revoked = storedSeason('season_podium', SEASON_A, { revokedAt: day(2) });
+    expect(seasonalPlan([revoked], new Map(), settled, false, NOW)).toEqual([]);
+    expect(
+      seasonalPlan([revoked], mapOf(earnedOf('season_podium', SEASON_A)), settled, false, NOW),
+    ).toEqual([{ type: 'restore', key: { code: 'season_podium', seasonId: SEASON_A } }]);
+  });
+
+  it('устойчивое состояние — пустой план; порядок — каталог, затем сезон', () => {
+    const earned = mapOf(
+      earnedOf('season_champion', SEASON_A),
+      earnedOf('season_podium', SEASON_B),
+      earnedOf('season_podium', SEASON_A),
+    );
+    expect(
+      seasonalPlan(
+        [
+          storedSeason('season_podium', SEASON_A),
+          storedSeason('season_champion', SEASON_A),
+          storedSeason('season_podium', SEASON_B),
+        ],
+        earned,
+        both,
+        false,
+        NOW,
+      ),
+    ).toEqual([]);
+    expect(
+      seasonalPlan([], earned, both, false, NOW).map(
+        (step) => step.type === 'insert' && seasonalKey(step.earned),
+      ),
+    ).toEqual([
+      seasonalKey({ code: 'season_podium', seasonId: SEASON_A }),
+      seasonalKey({ code: 'season_podium', seasonId: SEASON_B }),
+      seasonalKey({ code: 'season_champion', seasonId: SEASON_A }),
+    ]);
+  });
+});
+
+describe('ручные решения (achievements-panel, 5.B)', () => {
+  const MANUAL_GRANT = { decision: 'granted' as const, at: day(20), byUserId: id(900) };
+  const MANUAL_REVOKE = { decision: 'revoked' as const, at: day(20), byUserId: id(900) };
+
+  it('reconcilePlan пропускает код с ручным решением целиком: ни отзыва, ни refresh, ни restore', () => {
+    const won = new Map<FactAchievementCode, Earned>([['race_win', raceEarned(2, 12)]]);
+    // выдан вручную без факта — не отзывается
+    expect(
+      reconcilePlan([stored('race_win', { override: MANUAL_GRANT })], new Map(), false, NOW),
+    ).toEqual([]);
+    // выдан вручную, факт с другим объектом — объект не меняется
+    expect(
+      reconcilePlan([stored('race_win', { override: MANUAL_GRANT })], won, false, NOW),
+    ).toEqual([]);
+    // отозван вручную, факт есть — не восстанавливается
+    expect(
+      reconcilePlan(
+        [stored('race_win', { revokedAt: day(20), override: MANUAL_REVOKE })],
+        won,
+        false,
+        NOW,
+      ),
+    ).toEqual([]);
+    // снятое решение (`null`) — прежняя сверка
+    expect(reconcilePlan([stored('race_win', { override: null })], new Map(), false, NOW)).toEqual([
+      { type: 'revoke', code: 'race_win' },
+    ]);
+  });
+
+  it('seasonalPlan пропускает ключ с ручным решением', () => {
+    const seasonal = (partial: Partial<StoredSeasonGrant>): StoredSeasonGrant => ({
+      code: 'season_podium',
+      seasonId: SEASON_A,
+      factAt: new Date(ENDS_BEFORE.getTime() - 1),
+      seenAt: day(1),
+      revokedAt: null,
+      ...partial,
+    });
+    const earnedA = new Map([
+      [
+        seasonalKey({ code: 'season_podium', seasonId: SEASON_A }),
+        {
+          code: 'season_podium' as const,
+          seasonId: SEASON_A,
+          factAt: new Date(ENDS_BEFORE.getTime() - 1),
+          title: 'Сезон',
+        },
+      ],
+    ]);
+    const settled = new Set([SEASON_A]);
+    expect(
+      seasonalPlan([seasonal({ override: MANUAL_GRANT })], new Map(), settled, false, NOW),
+    ).toEqual([]);
+    expect(
+      seasonalPlan(
+        [seasonal({ revokedAt: day(20), override: MANUAL_REVOKE })],
+        earnedA,
+        settled,
+        false,
+        NOW,
+      ),
+    ).toEqual([]);
+    expect(seasonalPlan([seasonal({ override: null })], new Map(), settled, false, NOW)).toEqual([
+      { type: 'revoke', key: { code: 'season_podium', seasonId: SEASON_A } },
+    ]);
+  });
+
+  it('adminStatus — по документу и решению', () => {
+    expect(adminStatus({ revokedAt: null })).toBe('granted');
+    expect(adminStatus({ revokedAt: null, override: null })).toBe('granted');
+    expect(adminStatus({ revokedAt: null, override: MANUAL_GRANT })).toBe('granted_manually');
+    expect(adminStatus({ revokedAt: day(3) })).toBe('revoked');
+    expect(adminStatus({ revokedAt: day(3), override: MANUAL_REVOKE })).toBe('revoked_manually');
+  });
+
+  it('progressBeyondManual: строка счётного с видимой ручной выдачей ранга ≥ уровня строки выкидывается (RC-9)', () => {
+    const progress = [
+      { code: 'races_5' as const, level: 2 as LevelRank, current: 7, target: 15 },
+      { code: 'rides_10' as const, level: 1 as LevelRank, current: 3, target: 10 },
+      { code: 'routes_5' as const, level: 3 as LevelRank, current: 20, target: 30 },
+    ];
+    const grants = [
+      stored('races_5', { level: 3, override: MANUAL_GRANT }),
+      stored('rides_10', { level: 1, override: null }),
+      stored('routes_5', { level: 2, override: MANUAL_GRANT }),
+    ];
+    expect(progressBeyondManual(progress, grants).map((step) => step.code)).toEqual([
+      'rides_10',
+      'routes_5',
+    ]);
+    // отозванная ручная (ручной отзыв) — прогресс по фактам
+    expect(
+      progressBeyondManual(progress, [
+        stored('races_5', { level: 3, revokedAt: day(2), override: MANUAL_REVOKE }),
+      ]),
+    ).toEqual(progress);
+  });
+
+  it('вид объекта каждого правила = таблица видов контракта', () => {
+    const full = facts({
+      races: [row(1, 1, 1), ...races(30)],
+      routes: routes(30),
+      rides: [ride(900, 1, { organizer: true }), ...rides(50)],
+    });
+    const result = evaluateAchievements(full).earned;
+    for (const code of FACT_ACHIEVEMENT_CODES) {
+      expect(result.get(code)?.object.kind, code).toBe(ACHIEVEMENT_OBJECT_KIND_BY_CODE[code]);
+    }
+    expect(Object.keys(ACHIEVEMENT_RULES)).toEqual([...FACT_ACHIEVEMENT_CODES]);
   });
 });

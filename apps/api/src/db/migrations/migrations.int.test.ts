@@ -54,7 +54,9 @@ import {
   PROFILE_REPORT_REASONS_INDEXES,
   profileReportReasons,
 } from './0042_profile_report_reasons';
-import { social } from './0043_social';
+import { ACHIEVEMENT_SEASON_INDEXES, achievementsSeasonal } from './0043_achievements_seasonal';
+import { ROUTE_RIDES_PASSED_INDEX, routeRidesPassedIdx } from './0044_route_rides_passed_idx';
+import { social } from './0045_social';
 import { SOCIAL_COLLECTIONS } from '../../modules/social/social.collection';
 import { PRODUCT_EVENTS_COLLECTIONS } from '../../modules/product-events/product-events.collection';
 import { TICKETS_COLLECTIONS } from '../../modules/tickets/tickets.collection';
@@ -171,7 +173,9 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0040_panel_totp',
       '0041_panel_invitations',
       '0042_profile_report_reasons',
-      '0043_social',
+      '0043_achievements_seasonal',
+      '0044_route_rides_passed_idx',
+      '0045_social',
     ]);
   });
 
@@ -1177,12 +1181,13 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
         expireAfterSeconds: undefined,
       },
     };
+    // 0044_route_rides_passed_idx добавляет второй индекс — его проверяет свой тест
     expect(await exists()).toBe(true);
-    expect(await indexesOf(ROUTE_RIDES_COLLECTIONS.rides)).toEqual(expected);
+    expect(await indexesOf(ROUTE_RIDES_COLLECTIONS.rides)).toMatchObject(expected);
     await routeRides.up(h.db);
     await routeRides.up(h.db);
     expect(await exists()).toBe(true);
-    expect(await indexesOf(ROUTE_RIDES_COLLECTIONS.rides)).toEqual(expected);
+    expect(await indexesOf(ROUTE_RIDES_COLLECTIONS.rides)).toMatchObject(expected);
   });
 
   it('0031_rides_geo: бэкфилл точки «Рядом» (центр города) и routeId; индексы 2dsphere (rides.geo, routes.start); повторный up — без изменений', async () => {
@@ -1820,10 +1825,91 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       await reports.deleteMany({ _id: /^rep-0041-/ });
     }
   });
-  it('0043_social: коллекции и индексы «Свои» и журнала метрик; последняя; уникальности; повторный up — без изменений', async () => {
+
+  it('0043_achievements_seasonal: коллекция сезонных выдач, уникальный (userId, code, seasonId); achievement_grants без изменений; после 0042; повторный up — без изменений', async () => {
     const ids = migrations.map((migration) => migration.id);
-    expect(ids.at(-1)).toBe('0043_social');
-    expect(ids.indexOf('0043_social')).toBe(ids.indexOf('0042_profile_report_reasons') + 1);
+    expect(ids.indexOf('0043_achievements_seasonal')).toBe(
+      ids.indexOf('0042_profile_report_reasons') + 1,
+    );
+    const name = ACHIEVEMENTS_COLLECTIONS.seasonGrants;
+    expect(await h.db.listCollections({ name }, { nameOnly: true }).toArray()).toHaveLength(1);
+    const seasonIndexes = {
+      [ACHIEVEMENT_SEASON_INDEXES.userCodeSeasonUnique.options.name]: {
+        key: { userId: 1, code: 1, seasonId: 1 },
+        unique: true,
+        partialFilterExpression: undefined,
+        expireAfterSeconds: undefined,
+      },
+    };
+    expect(await indexesOf(name)).toEqual(seasonIndexes);
+    const grantIndexes = {
+      [ACHIEVEMENTS_INDEXES.grantsUserCodeUnique.options.name]: {
+        key: { userId: 1, code: 1 },
+        unique: true,
+        partialFilterExpression: undefined,
+        expireAfterSeconds: undefined,
+      },
+    };
+    expect(await indexesOf(ACHIEVEMENTS_COLLECTIONS.grants)).toEqual(grantIndexes);
+
+    // одна выдача на (пользователь, код, сезон); тот же код другого сезона — вставляется
+    const grants = h.db.collection<Record<string, unknown> & { _id: string }>(name);
+    try {
+      await grants.insertOne({
+        _id: 's-1',
+        userId: 'u-0043',
+        code: 'season_podium',
+        seasonId: 'a',
+      });
+      await expect(
+        grants.insertOne({ _id: 's-2', userId: 'u-0043', code: 'season_podium', seasonId: 'a' }),
+      ).rejects.toThrow(/duplicate key/);
+      await grants.insertOne({
+        _id: 's-3',
+        userId: 'u-0043',
+        code: 'season_podium',
+        seasonId: 'b',
+      });
+    } finally {
+      await grants.deleteMany({ userId: 'u-0043' });
+    }
+
+    await achievementsSeasonal.up(h.db);
+    await achievementsSeasonal.up(h.db);
+    expect(await indexesOf(name)).toEqual(seasonIndexes);
+    expect(await indexesOf(ACHIEVEMENTS_COLLECTIONS.grants)).toEqual(grantIndexes);
+  });
+
+  it('0044_route_rides_passed_idx: частичный (updatedAt, _id) по passed рядом с прежним уникальным; повторный up — без изменений', async () => {
+    const ids = migrations.map((migration) => migration.id);
+    expect(ids.indexOf('0044_route_rides_passed_idx')).toBe(
+      ids.indexOf('0043_achievements_seasonal') + 1,
+    );
+    const expected = {
+      route_rides_user_route_activity_unique: {
+        key: { userId: 1, routeId: 1, activityId: 1 },
+        unique: true,
+        partialFilterExpression: undefined,
+        expireAfterSeconds: undefined,
+      },
+      [ROUTE_RIDES_PASSED_INDEX.options.name]: {
+        key: { updatedAt: 1, _id: 1 },
+        unique: false,
+        partialFilterExpression: { status: 'passed' },
+        expireAfterSeconds: undefined,
+      },
+    };
+    expect(ROUTE_RIDES_PASSED_INDEX.options.name).toBe('route_rides_passed_updated_idx');
+    expect(await indexesOf(ROUTE_RIDES_COLLECTIONS.rides)).toEqual(expected);
+    await routeRidesPassedIdx.up(h.db);
+    await routeRidesPassedIdx.up(h.db);
+    expect(await indexesOf(ROUTE_RIDES_COLLECTIONS.rides)).toEqual(expected);
+  });
+
+  it('0045_social: коллекции и индексы «Свои» и журнала метрик; последняя; уникальности; повторный up — без изменений', async () => {
+    const ids = migrations.map((migration) => migration.id);
+    expect(ids.at(-1)).toBe('0045_social');
+    expect(ids.indexOf('0045_social')).toBe(ids.indexOf('0044_route_rides_passed_idx') + 1);
     const index = (key: Record<string, number>, unique = false) => ({
       key,
       unique,

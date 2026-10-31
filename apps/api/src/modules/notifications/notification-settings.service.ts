@@ -1,8 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type {
+  AchievementNotificationSettingsView,
   EventNotificationSettingsView,
   NotificationSettings,
   RouteNotificationSettingsView,
+  UpdateAchievementNotificationSettings,
   UpdateEventNotificationSettings,
   UpdateRouteNotificationSettings,
 } from '@pokatim/contracts';
@@ -14,7 +16,7 @@ import { consumeUserLimit } from '../../user-limit';
 
 /**
  * Настройки уведомлений (N4, N6): нет документа — умолчания; `PUT` — полная замена формы после zod (`start ≠ end`
- * проверяет контракт). Группы «Мероприятия» и «Маршруты» — отдельные подресурсы (RC-D1): ответ `/settings` — ровно
+ * проверяет контракт). Группы «Мероприятия», «Маршруты» и «Достижения» — отдельные подресурсы (RC-D1): ответ `/settings` — ровно
  * прежние ключи, его `PUT` их тумблеры не стирает. «Маршруты» без сохранённого тумблера — значение «Райдов». Лимит —
  * общий. Не ретроактивны (RC-13): уже созданные уведомления центра не трогаются.
  */
@@ -66,6 +68,20 @@ export class NotificationSettingsService {
   ): Promise<RouteNotificationSettingsView> {
     const now = await this.consume(userId);
     await this.repository.saveRouteSettings(userId, body, now);
+    return { push: body.push };
+  }
+
+  async getAchievements(userId: string): Promise<AchievementNotificationSettingsView> {
+    const { push } = await this.current(userId);
+    return { push: push.achievements };
+  }
+
+  async putAchievements(
+    userId: string,
+    body: UpdateAchievementNotificationSettings,
+  ): Promise<AchievementNotificationSettingsView> {
+    const now = await this.consume(userId);
+    await this.repository.saveAchievementSettings(userId, body, now);
     return { push: body.push };
   }
 

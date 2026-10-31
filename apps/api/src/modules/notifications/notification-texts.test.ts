@@ -124,6 +124,18 @@ const TABLE: [string, NoticeText, string, string][] = [
     'Скоро старт',
     `«${RACE}» — 14 июня, 10:00, Парк Победы.\nВозьмите паспорт.\nСтарт у фонтана.`,
   ],
+  [
+    'Новое достижение (разовое)',
+    {
+      kind: 'achievement_granted',
+      code: 'race_podium',
+      level: null,
+      objectKind: 'race',
+      objectTitle: RACE,
+    },
+    'Новое достижение: Подиум',
+    `Гонка «${RACE}»`,
+  ],
 ];
 
 describe('renderNotification: таблица «Тексты v1»', () => {
@@ -132,7 +144,7 @@ describe('renderNotification: таблица «Тексты v1»', () => {
   });
 
   it('каждый kind контракта покрыт строкой таблицы', () => {
-    expect(new Set(TABLE.map(([, input]) => input.kind)).size).toBe(17);
+    expect(new Set(TABLE.map(([, input]) => input.kind)).size).toBe(18);
   });
 
   it('даты — по Минску, не по поясу процесса: 23:30 UTC — уже следующий день', () => {
@@ -220,5 +232,43 @@ describe('сброс поля профиля модератором (profile-mod
         blockedUntil: new Date('2026-11-29T11:05:00.000Z'),
       }).body,
     ).toBe('Модератор удалил фото после жалоб. Загрузка фото недоступна до 29 ноября, 14:05.');
+  });
+});
+
+describe('новое достижение (achievements-push, P5, RC-P2, RC-P5): имена из каталога @pokatim/i18n', () => {
+  const text = (
+    code: Extract<NoticeText, { kind: 'achievement_granted' }>['code'],
+    level: 1 | 2 | 3 | null,
+    objectKind: 'race' | 'route' | 'ride' | 'season',
+    objectTitle: string,
+  ) => renderNotification({ kind: 'achievement_granted', code, level, objectKind, objectTitle });
+
+  it('счётное на бронзе — «Новое достижение»; серебро и золото — «Новый уровень: … · …»', () => {
+    expect(text('races_5', 1, 'race', RACE)).toEqual({
+      title: 'Новое достижение: Гонщик',
+      body: `Гонка «${RACE}»`,
+    });
+    expect(text('races_5', 2, 'race', RACE).title).toBe('Новый уровень: Гонщик · Серебро');
+    expect(text('rides_10', 3, 'ride', RIDE)).toEqual({
+      title: 'Новый уровень: Завсегдатай · Золото',
+      body: `Кофе-райд «${RIDE}»`,
+    });
+  });
+
+  it('объект каждого вида; сезонное — имя в заголовке, сезон в теле (RC-P2)', () => {
+    expect(text('route_first', null, 'route', ROUTE)).toEqual({
+      title: 'Новое достижение: Первый маршрут',
+      body: `Маршрут «${ROUTE}»`,
+    });
+    expect(text('season_champion', null, 'season', 'Сезон 2026')).toEqual({
+      title: 'Новое достижение: Чемпион сезона',
+      body: 'Сезон «Сезон 2026»',
+    });
+  });
+
+  it('название — одна строка (пробелы и переводы строк схлопываются)', () => {
+    expect(text('ride_first', null, 'ride', '  Утренний\n  райд ').body).toBe(
+      'Кофе-райд «Утренний райд»',
+    );
   });
 });

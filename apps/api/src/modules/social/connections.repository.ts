@@ -6,7 +6,7 @@ import type { DbSession } from '../../db';
 import type { ConnectionPair } from './social.policy';
 import { type ConnectionDoc, socialCollections } from './social.collection';
 
-/** Уникальная пара связи (`0043_social`): параллельные upsert одной пары — `isDuplicateKey`, один повтор. */
+/** Уникальная пара связи (`0045_social`): параллельные upsert одной пары — `isDuplicateKey`, один повтор. */
 export const CONNECTIONS_UNIQUE_INDEX = 'rider_connections_owner_other_unique';
 
 /** Поля нового документа связи без райдов (`$setOnInsert`); источники и `removedAt` задаёт операция явно. */

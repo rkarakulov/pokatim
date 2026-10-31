@@ -1,13 +1,26 @@
+import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 
 import { PublicReadGuard } from '../../public-read.guard';
-import { IdentityModule } from '../identity';
+import { QUEUE } from '../../queues';
+import { IdentityAccountsModule, IdentityModule } from '../identity';
+import { PanelModule } from '../panel';
 import { ProfileCoreModule } from '../profile';
 import { ResultsCoreModule } from '../results';
 import { RidesCoreModule } from '../rides';
 import { RouteRidesCoreModule } from '../route-rides';
+import { StandingsCoreModule } from '../standings';
 import { AchievementErasure } from './achievement-erasure';
 import { AchievementFactsReader } from './achievement-facts.reader';
+import { AchievementObjects } from './achievement-objects';
+import { AchievementNoticesService } from './achievement-notices';
+import { ACHIEVEMENT_NOTICES } from './achievement-notices.port';
+import { AchievementsAdminController } from './achievements-admin.controller';
+import { AchievementsPanelService } from './achievements-panel.service';
+import { AchievementsReconciler } from './achievements-reconciler';
+import { AchievementsSweep } from './achievements-sweep';
+import { AchievementsSchedules, AchievementsSyncProcessor } from './achievements-sync.processor';
+import { AchievementsSyncState } from './achievements-sync.state';
 import { AchievementsSharing } from './achievements-for-sharing';
 import { ACHIEVEMENTS_FOR_SHARING } from './achievements-for-sharing.port';
 import { AchievementsPublicController } from './achievements-public.controller';
@@ -26,34 +39,86 @@ import { AchievementsService } from './achievements.service';
 export class AchievementsCoreModule {}
 
 /**
- * Чтение фактов без HTTP: `AchievementFactsReader` (сверка `AchievementsModule`) и порт карточки
- * `ACHIEVEMENTS_FOR_SHARING` (`sharing`, HTTP и worker). Только core-модули источников.
+ * Чтение фактов без HTTP: `AchievementFactsReader` (сверка `AchievementsModule`), `AchievementObjects` (объекты и названия
+ * ручных выдач, achievements-panel) и порт карточки `ACHIEVEMENTS_FOR_SHARING` (`sharing`, HTTP и worker). Только
+ * core-модули источников.
  */
 @Module({
   imports: [ResultsCoreModule, RidesCoreModule, RouteRidesCoreModule, AchievementsCoreModule],
   providers: [
     AchievementFactsReader,
+    AchievementObjects,
     { provide: ACHIEVEMENTS_FOR_SHARING, useClass: AchievementsSharing },
   ],
-  exports: [AchievementFactsReader, ACHIEVEMENTS_FOR_SHARING],
+  exports: [AchievementFactsReader, AchievementObjects, ACHIEVEMENTS_FOR_SHARING],
 })
 export class AchievementsReadModule {}
 
 /**
+ * Сверка и уведомления без HTTP (achievements-push): `AchievementsReconciler` (одна сверка для `GET /v1/achievements` и
+ * серверной сверки) и порт `ACHIEVEMENT_NOTICES` (`notifications`, worker). `StandingsCoreModule` — порт
+ * `RIDER_SEASON_STANDINGS`; `MongoTransactions`/`MongoOutboxWriter` — глобальные модули базы.
+ */
+@Module({
+  imports: [AchievementsCoreModule, AchievementsReadModule, StandingsCoreModule],
+  providers: [
+    AchievementsReconciler,
+    { provide: ACHIEVEMENT_NOTICES, useClass: AchievementNoticesService },
+  ],
+  exports: [AchievementsReconciler, ACHIEVEMENT_NOTICES],
+})
+export class AchievementsSyncModule {}
+
+/**
  * Достижения райдера (ADR-0020) — модуль-композиция (образец `riders` + `standings`): факты — только порты через
  * `index.ts` (`results` `RIDER_RESULTS`, `route-rides` `RIDER_ROUTE_RIDES`, `rides` `RIDER_RIDES`, `profile`
- * `RIDER_PROFILES`; факты — `AchievementsReadModule`); своя коллекция выдач. Worker-модуля, очередей и outbox нет (A2). `achievements` импортируют
- * только `AppModule` (`AchievementsModule`) и `AccountWorkerModule` (`AchievementsCoreModule`, стирание).
+ * `RIDER_PROFILES`, `standings` `RIDER_SEASON_STANDINGS` — сезонные; факты — `AchievementsReadModule`); свои коллекции
+ * выдач. Сверка — `AchievementsSyncModule` (событие outbox `achievements.grant-noticed`, achievements-push).
+ * `achievements` импортируют `AppModule` (`AchievementsModule`), `AccountWorkerModule` (`AchievementsCoreModule`,
+ * стирание), `sharing` (`AchievementsReadModule`) и `NotificationsWorkerModule` (`AchievementsSyncModule`). Панель
+ * (achievements-panel): `AchievementsAdminController` → `AchievementsPanelService` — `PanelModule` (гард, журнал, имена
+ * сотрудников), `IdentityAccountsModule` (живость райдера), `StandingsCoreModule` (сезон ручной выдачи); `panel` об
+ * `achievements` не знает.
  */
 @Module({
   imports: [
     IdentityModule,
+    IdentityAccountsModule,
+    PanelModule,
     ProfileCoreModule,
     ResultsCoreModule,
+    StandingsCoreModule,
     AchievementsCoreModule,
     AchievementsReadModule,
+    AchievementsSyncModule,
   ],
-  controllers: [AchievementsController, AchievementsPublicController],
-  providers: [AchievementsService, PublicReadGuard],
+  controllers: [AchievementsController, AchievementsPublicController, AchievementsAdminController],
+  providers: [AchievementsService, AchievementsPanelService, PublicReadGuard],
 })
 export class AchievementsModule {}
+
+/**
+ * Серверная сверка в worker (achievements-push N2): очередь `achievements-sync`, регламент `achievements.sweep`
+ * (`AchievementsSweep`, курсоры и замок — `AchievementsSyncState`, Redis) и задачи `achievements.rider` →
+ * `AchievementsReconciler` (`AchievementsSyncModule`). Источники — по одному методу портов владельцев (`RIDER_RESULTS`,
+ * `RIDER_RIDES`, `RIDER_ROUTE_RIDES`, `RIDER_SEASON_STANDINGS`), живость — `IdentityAccounts`. Маршрутов outbox нет.
+ */
+@Module({
+  imports: [
+    AchievementsSyncModule,
+    AchievementsCoreModule,
+    IdentityAccountsModule,
+    ResultsCoreModule,
+    RidesCoreModule,
+    RouteRidesCoreModule,
+    StandingsCoreModule,
+    BullModule.registerQueue({ name: QUEUE.achievementsSync }),
+  ],
+  providers: [
+    AchievementsSyncState,
+    AchievementsSweep,
+    AchievementsSyncProcessor,
+    AchievementsSchedules,
+  ],
+})
+export class AchievementsWorkerModule {}

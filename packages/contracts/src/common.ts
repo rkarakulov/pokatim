@@ -112,6 +112,8 @@ export const { ErrorCode, ApiError } = defineErrorCodes([
   'PANEL_INVITATION_INVALID',
   'PANEL_INVITATION_EMAIL_MISMATCH',
   'PANEL_INVITATIONS_UNAVAILABLE',
+  // achievements-panel: видимая выдача уже есть / видимой нет (409, details.reason)
+  'ACHIEVEMENT_INVALID_STATE',
   // «Свои» (ADR-0027): действие со связью, явкой или реакцией недоступно (409, `details.reason` —
   // `SocialActionBlockedDetails`)
   'SOCIAL_ACTION_BLOCKED',

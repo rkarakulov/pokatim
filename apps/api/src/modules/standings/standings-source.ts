@@ -15,7 +15,8 @@ export interface SeasonSource {
 
 /**
  * Источник рейтинга сезона (race-results-08, RC-13): гонки с опубликованным протоколом (порт `races`) и текущие
- * ревизии (порт `results`, один `aggregate`). Им же пользуется сводка панели (RC-14) — «ждёт пересчёта».
+ * ревизии (порт `results`, один `aggregate`). Им же пользуются сводка панели (RC-14) — «ждёт пересчёта» — и порт
+ * `RIDER_SEASON_STANDINGS` (актуальность итогового снимка).
  */
 @Injectable()
 export class StandingsSource {
@@ -26,9 +27,12 @@ export class StandingsSource {
     @Inject(RESULTS_FOR_STANDINGS) private readonly results: ResultsForStandings,
   ) {}
 
-  /** По сезонам; без `seasonId` — все сезоны с протоколами. Гонка без ревизии (быть не должно) — пропуск с логом. */
-  async load(seasonId?: string): Promise<Map<string, SeasonSource>> {
-    const races = await this.races.protocolRaces(seasonId);
+  /**
+   * По сезонам `seasonIds`; без них — все сезоны с протоколами. Сезон без протоколов в карту не попадает. Гонка без
+   * ревизии (быть не должно) — пропуск с логом.
+   */
+  async load(seasonIds?: readonly string[]): Promise<Map<string, SeasonSource>> {
+    const races = await this.races.protocolRaces(seasonIds);
     const revisions = await this.results.currentRevisions(races.map((race) => race.id));
     const bySeason = new Map<string, SourceRace[]>();
     for (const race of races) {

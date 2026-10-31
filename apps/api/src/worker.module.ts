@@ -14,6 +14,7 @@ import {
 
 import { env } from './config/env';
 import { accountOutboxRoutes, AccountWorkerModule } from './modules/account';
+import { AchievementsWorkerModule } from './modules/achievements';
 import { identityOutboxRoutes, IdentityWorkerModule } from './modules/identity';
 import { devicesOutboxRoutes, DevicesWorkerModule } from './modules/devices';
 import { DisputesCoreModule, DisputesWorkerModule } from './modules/disputes';
@@ -78,6 +79,8 @@ import { tracksOutboxRoutes, TracksWorkerModule } from './modules/tracks';
     TicketsWorkerModule,
     // письма панели: приглашение в команду и письма о роли (panel-invitations, ADR-0026)
     PanelWorkerModule,
+    // серверная сверка достижений: регламент по курсорам портов владельцев, push без открытия приложения (achievements-push)
+    AchievementsWorkerModule,
     // «Свои» (ADR-0027): якорь процессоров social-intake и social-maintenance (P5, P7)
     SocialWorkerModule,
   ],

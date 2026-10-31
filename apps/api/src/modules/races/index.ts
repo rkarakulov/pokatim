@@ -4,7 +4,12 @@ export { RACE_REGISTRY, type RaceForResults, type RaceRegistry } from './race-re
 /** Гейт D-19 (race-results-06): реализацию даёт `disputes`. */
 export { RACE_CANCEL_GATE, type RaceCancelGate } from './race-cancel-gate.port';
 /** Порт для модуля `standings` (race-results-08): гонки сезона с протоколом, сезон, видимость гонок сотруднику. */
-export { SEASON_RACES, type SeasonRaceForStandings, type SeasonRaces } from './season-races.port';
+export {
+  type FinishedSeason,
+  SEASON_RACES,
+  type SeasonRaceForStandings,
+  type SeasonRaces,
+} from './season-races.port';
 /** Порт OG-картинок гонки и сезона для `sharing` (og-images): факты, пререндер, «живые» сезоны. */
 export {
   type RaceOgFacts,

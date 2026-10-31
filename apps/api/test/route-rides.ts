@@ -6,6 +6,7 @@ import { Binary } from 'mongodb';
 import { RouteRideCheckProcessor } from '../src/modules/route-rides/route-ride-check.processor';
 import { routeRidesCollections } from '../src/modules/route-rides/route-rides.collection';
 import { routeRidesOutboxRoutes } from '../src/modules/route-rides/route-rides.events';
+import { RouteRidesRepository } from '../src/modules/route-rides/route-rides.repository';
 import type { RoutePublicationDoc } from '../src/modules/routes/routes.collection';
 import type { Harness } from './harness';
 import { outboxEvents } from './identity';
@@ -14,6 +15,10 @@ import { routesDb } from './routes';
 
 /** Коллекции модуля `route-rides` тестовой БД. */
 export const routeRidesDb = (h: Harness) => routeRidesCollections(h.db);
+
+/** Репозиторий `route-rides` worker стенда (запись итога проверки в тестах источников). */
+export const routeRidesRepository = (h: Harness) =>
+  h.worker.get(RouteRidesRepository, { strict: false });
 
 /** Путь заездов маршрута: `/v1/routes/:routeId/rides{path}`. */
 export const ridesUrl = (routeId: string, path = '') => `/v1/routes/${routeId}/rides${path}`;

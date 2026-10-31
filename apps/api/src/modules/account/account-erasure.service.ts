@@ -99,7 +99,7 @@ export class AccountErasureService {
     // после фактов (протоколы остаются псевдонимными, заезды и райды стёрты): выдачи достижений и маркер сверки
     await this.step(userId, 'achievements', run, async () => {
       const result = await this.achievements.erase(userId);
-      return `deleted=${result.grants} syncs=${result.syncs}`;
+      return `deleted=${result.grants} season=${result.seasonGrants} syncs=${result.syncs}`;
     });
     // регистрации календаря и билеты гонок → `cancelled` (документы псевдонимные, RC-T1 event-tickets)
     await this.step(userId, 'tickets', run, async () => {

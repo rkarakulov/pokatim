@@ -1,16 +1,24 @@
-import type { AchievementCode, AchievementObjectKind } from '@pokatim/contracts';
+import type { AchievementObjectKind, SeasonalAchievementCode } from '@pokatim/contracts';
 import type { Collection, Db } from 'mongodb';
 
-import type { LevelRank } from './achievements.policy';
+import type { AchievementOverride, FactAchievementCode, LevelRank } from './achievements.policy';
+
+/**
+ * Ручное решение команды на документе выдачи (achievements-panel, 5.A): новые документы пишут явный `null`, у старых
+ * поля нет — фильтр `{ override: null }` совпадает с обоими. Миграции нет (индексы прежние).
+ */
+export type AchievementOverrideDoc = AchievementOverride;
 
 /**
  * Коллекции модуля `achievements` — выдачи достижений, производная проекция фактов (`results`, `route-rides`,
  * `rides`), ADR-0020. Создаёт миграция `0035_achievements`; единственный писатель — `AchievementsRepository`. Не
- * append-only: отзыв — поле `revokedAt`, стирание аккаунта — `deleteMany`. Названия объектов не хранятся (берутся из
+ * append-only: отзыв — поле `revokedAt`, стирание аккаунта — `deleteMany`. Сезонные выдачи — `achievement_season_grants`
+ * (`0043_achievements_seasonal`, HG-S1), источник — порт `standings` `RIDER_SEASON_STANDINGS`. Названия объектов не хранятся (берутся из
  * фактов при ответе: переименование видно сразу, чужие данные не копируются).
  */
 export const ACHIEVEMENTS_COLLECTIONS = {
   grants: 'achievement_grants',
+  seasonGrants: 'achievement_season_grants',
   syncs: 'achievement_syncs',
 } as const;
 
@@ -18,9 +26,9 @@ export const ACHIEVEMENTS_COLLECTIONS = {
 export interface AchievementGrantDoc {
   _id: string;
   userId: string;
-  code: AchievementCode;
+  code: FactAchievementCode;
   /** объект факта — пересчитывается каждой сверкой (A4) */
-  object: { kind: AchievementObjectKind; id: string };
+  object: { kind: Exclude<AchievementObjectKind, 'season'>; id: string };
   /** время факта (старт сегмента, активности, райда) */
   factAt: Date;
   grantedAt: Date;
@@ -32,6 +40,37 @@ export interface AchievementGrantDoc {
   level?: LevelRank | null;
   /** наибольший показанный ранг (монотонен, `$max`); нет у документов v1 — ≡ 1 (L3) */
   seenLevel?: LevelRank | null;
+  /**
+   * наибольший ранг, о котором создано событие `achievements.grant-noticed` (achievements-push, монотонен, `$max`);
+   * ставится каждой вставкой (`= level`) и каждым `refresh`/`restore`; нет у документов до выката — ≡ `level ?? 1`
+   * (ретро-уведомлений нет)
+   */
+  notifiedLevel?: LevelRank | null;
+  /** ручное решение (achievements-panel): сверка документ не пишет, пока не снимут; нет поля — ≡ `null` */
+  override?: AchievementOverrideDoc | null;
+  updatedAt: Date;
+}
+
+/**
+ * Сезонная выдача (S3): один документ на `(userId, code, seasonId)` (уникальный индекс
+ * `achievement_season_grants_user_code_season_unique`). Названия сезона и места нет — название берётся из порта при
+ * каждом ответе. Не append-only.
+ */
+export interface AchievementSeasonGrantDoc {
+  /** uuidv7 */
+  _id: string;
+  userId: string;
+  code: SeasonalAchievementCode;
+  seasonId: string;
+  /** последний миг сезона (`endsBefore − 1 мс`, RC-S6) */
+  factAt: Date;
+  grantedAt: Date;
+  /** показано вспышкой; первая сверка — сразу (A3/S5); восстановление не сбрасывает (S4) */
+  seenAt: Date | null;
+  /** итог сезона изменился — скрыто (S4) */
+  revokedAt: Date | null;
+  /** ручное решение (achievements-panel); нет поля — ≡ `null` */
+  override?: AchievementOverrideDoc | null;
   updatedAt: Date;
 }
 
@@ -43,12 +82,14 @@ export interface AchievementSyncDoc {
 
 export interface AchievementsCollections {
   grants: Collection<AchievementGrantDoc>;
+  seasonGrants: Collection<AchievementSeasonGrantDoc>;
   syncs: Collection<AchievementSyncDoc>;
 }
 
 export function achievementsCollections(db: Db): AchievementsCollections {
   return {
     grants: db.collection<AchievementGrantDoc>(ACHIEVEMENTS_COLLECTIONS.grants),
+    seasonGrants: db.collection<AchievementSeasonGrantDoc>(ACHIEVEMENTS_COLLECTIONS.seasonGrants),
     syncs: db.collection<AchievementSyncDoc>(ACHIEVEMENTS_COLLECTIONS.syncs),
   };
 }

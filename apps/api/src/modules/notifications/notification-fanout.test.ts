@@ -121,6 +121,22 @@ describe('planFanout: пачки получателей', () => {
     );
   });
 
+  it('inApp черновика — в каждой пачке и в плане задачи intake; без флага — ключа нет', () => {
+    const chunks = plan([draft(users(450), { inApp: true })]);
+    expect(chunks?.map((chunk) => chunk.data.inApp)).toEqual([true, true, true]);
+    for (const chunk of chunks ?? []) {
+      expect(FanoutJobData.parse(chunk.data).inApp).toBe(true);
+    }
+    expect(
+      IntakeJobData.parse({ outboxEventId: EVENT, fanout: chunks }).fanout?.map(
+        (chunk) => chunk.data.inApp,
+      ),
+    ).toEqual([true, true, true]);
+    for (const chunk of plan([draft(users(201))]) ?? []) {
+      expect('inApp' in chunk.data).toBe(false);
+    }
+  });
+
   it('имя задачи пачки не совпадает ни с одним типом событий outbox', () => {
     expect(NOTIFICATIONS_FANOUT_JOB).toBe('notifications.fanout');
     expect(Object.keys(notificationsOutboxRoutes)).not.toContain(NOTIFICATIONS_FANOUT_JOB);

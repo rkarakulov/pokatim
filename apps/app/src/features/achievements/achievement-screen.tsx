@@ -10,7 +10,14 @@ import { DocumentTitle } from '@/components/document-title';
 import { storyPath } from '@/features/races/story/paths';
 import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
 
-import { achievementTitle, knownItems, shareRaceId } from './achievement-catalog';
+import {
+  achievementKey,
+  achievementTitle,
+  catalogEntry,
+  knownItems,
+  seasonOf,
+  shareRaceId,
+} from './achievement-catalog';
 import { AchievementCard, AchievementCardSkeleton } from './achievement-card';
 import { useAchievements } from './queries';
 import { achievementStoryPath } from './story/achievement-story';
@@ -18,16 +25,21 @@ import { achievementStoryPath } from './story/achievement-story';
 const DOCUMENT_TITLE = `${t('achievements.title')} — ${t('app.name')}`;
 
 /**
- * Экран своего достижения (`/achievements/<code>`, A5–A6): тот же макет, что вспышка, без «Дальше»; вход — плитка
- * блока «Достижения» в `/profile`. «Поделиться» — карточка достижения (любой код), у гоночных ещё «Сторис результата». Данные — тот же кэш `['achievements']`. Кода нет в списке (отозвано, незнакомый
- * адрес) — пустое состояние с переходом в профиль. Экран `seen` не шлёт: вспышку показывает только хост.
+ * Экран своего достижения (`/achievements/<code>`, сезонное — `?season=<id>`; A5–A6, S7): тот же макет, что вспышка,
+ * без «Дальше»; вход — плитка блока «Достижения» в `/profile`. «Поделиться» — карточка достижения (кроме сезонных), у
+ * гоночных ещё «Сторис результата», у сезонных — «К сезону». Данные — тот же кэш `['achievements']`, поиск — по
+ * `achievementKey`. Нет в списке (отозвано, незнакомый адрес) — пустое состояние с переходом в профиль. Экран `seen` не
+ * шлёт: вспышку показывает только хост.
  */
-export function AchievementScreen({ code }: { code: string }) {
+export function AchievementScreen({ code, season }: { code: string; season?: string | null }) {
   const theme = useTheme();
   const router = useRouter();
   const query = useAchievements();
   const { refreshing, onRefresh } = usePullToRefresh([query.refetch]);
-  const item = query.data ? knownItems(query.data.items).find((a) => a.code === code) : undefined;
+  const wanted = season ? `${code}:${season}` : code;
+  const item = query.data
+    ? knownItems(query.data.items).find((a) => achievementKey(a) === wanted)
+    : undefined;
 
   return (
     <SafeAreaView
@@ -66,12 +78,21 @@ export function AchievementScreen({ code }: { code: string }) {
               );
             }
             const raceId = shareRaceId(item);
+            const seasonId = seasonOf(item);
             return (
               <AchievementCard item={item}>
-                <Button
-                  label={t('achievements.share')}
-                  onPress={() => router.push(achievementStoryPath(item.code))}
-                />
+                {catalogEntry(item.code).storyCard ? (
+                  <Button
+                    label={t('achievements.share')}
+                    onPress={() => router.push(achievementStoryPath(item.code))}
+                  />
+                ) : null}
+                {seasonId !== null ? (
+                  <Button
+                    label={t('achievements.toSeason')}
+                    onPress={() => router.push(`/seasons/${seasonId}`)}
+                  />
+                ) : null}
                 {raceId !== null ? (
                   <Button
                     variant="secondary"
