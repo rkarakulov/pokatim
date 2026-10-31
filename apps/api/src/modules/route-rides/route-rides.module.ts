@@ -6,6 +6,7 @@ import { IdentityModule } from '../identity';
 import { RoutesCoreModule } from '../routes';
 import { TracksCoreModule } from '../tracks';
 import { RouteRideCheckProcessor } from './route-ride-check.processor';
+import { RouteRideEvaluator } from './route-ride-evaluator';
 import { RiderRouteRidesService } from './rider-route-rides';
 import { RIDER_ROUTE_RIDES } from './rider-route-rides.port';
 import { RouteRideErasure } from './route-ride-erasure';
@@ -49,6 +50,6 @@ export class RouteRidesModule {}
 /** Задачи `route-rides` в worker: сверка заезда с маршрутом (поток разбора). */
 @Module({
   imports: [RouteRidesCoreModule, BullModule.registerQueue({ name: QUEUE.routeRideCheck })],
-  providers: [RouteRideCheckProcessor],
+  providers: [RouteRideEvaluator, RouteRideCheckProcessor],
 })
 export class RouteRidesWorkerModule {}
