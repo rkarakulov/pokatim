@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   CancelRideRequest,
+  JoinRideRequest,
   CreateRideForm,
   CreateRideRequest,
   RIDE_CANCEL_REASONS,
@@ -475,5 +476,14 @@ describe('фото райда (ride-photo)', () => {
     expect(ImageInvalidDetails.parse({ reason: 'too_small' })).toEqual({ reason: 'too_small' });
     expect(ImageInvalidDetails.parse({ reason: 'unreadable' })).toEqual({ reason: 'unreadable' });
     expect(ImageInvalidDetails.parse({ reason: 'cursed' })).toEqual({ reason: 'unknown' });
+  });
+});
+
+describe('JoinRideRequest (K12)', () => {
+  it('`{}` и `{ source }` проходят; незнакомый источник и лишний ключ — нет', () => {
+    expect(JoinRideRequest.parse({})).toEqual({});
+    expect(JoinRideRequest.parse({ source: 'ride_card' })).toEqual({ source: 'ride_card' });
+    expect(JoinRideRequest.safeParse({ source: 'feed' }).success).toBe(false);
+    expect(JoinRideRequest.safeParse({ source: 'ride_card', extra: 1 }).success).toBe(false);
   });
 });

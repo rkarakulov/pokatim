@@ -311,6 +311,10 @@ paths:
 - Модерация — `/v1/admin/rides*` только `PanelGuard` + `@RequirePermission('rides.moderate')` на классе (admin,
   moderator); причина действия — `ActionReason` в журнал `PanelAudit.append` в транзакции действия. Наружу — без
   `reporterUserId`, e-mail и id организатора (подпись — `organizerName`); комментарий жалобы видит только команда.
+- Участники и явка («Свои» P2): `rides/:id/participants`, `rides/:id/attendance`, `…/attendance/decline` — `AuthGuard`,
+  `no-store`, явка только своя (`userId` из access); наружу — только публичные карточки (`RIDER_NAMES.publicRiders`:
+  имя, `publicId`, аватар) и числа, без `userId` (int-тест строкой); скрытый не организатору — 404; лимит
+  `social-attendance:<uid>` 60/ч на оба POST. Тело `join` — строгое (`{ source? }`, незнакомое — 400).
 - Скрытый райд (`hidden`) — 404 всем, кроме организатора (`visibleTo` политики — первой проверкой после чтения, до
   идемпотентных веток «Я иду»/«Не иду»).
 - Маршрут райда (05c): прикрепить — маршрут каталога или свой готовый (`ownRider` в фильтре); остальное — один `400

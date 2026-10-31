@@ -43,7 +43,10 @@
 3. **Данные зрителя — отдельные эндпоинты `social` под `AuthGuard`, `no-store`:** `GET rides/:id/participants`
    (участники с публичным профилем и явка), `GET riders/:publicId/social` («вместе ехали», «Идёт», состояние
    «В свои»), `GET social/connections`, `GET social/home`. Контроллеры с префиксом чужого ресурса — прецедент
-   `riders/:publicId/me` в `profile`. Публичные кэшируемые ответы не меняются.
+   `riders/:publicId/me` в `profile`. Публичные кэшируемые ответы не меняются. P2: `RideParticipantsController` —
+   `GET rides/:id/participants`, `POST rides/:id/attendance` («Я был на райде»), `POST rides/:id/attendance/decline`
+   («Меня не было»; без тела, ответ — тот же `RideParticipants`); скрытый райд не организатору и неизвестный — `404`
+   до вызова сервиса явки.
 4. **Автоявка — второе событие `tracks`.** После обработки заезда `tracks` в той же транзакции пишет
    `tracks.activity-recorded {activityId, userId}` → очередь `social-intake`. `social` читает старт заезда портом
    `ACTIVITY_STARTS` и точный старт райда портом `RIDES_FOR_SOCIAL` (только при маршруте каталога). `activity-ready`
@@ -59,7 +62,8 @@
    `actors` (`$addToSet`) вместо замены документа. Остальные группы не меняются. События `social.*` → очередь
    `notifications-intake`; «Свои идут» строится из `rides.participant-joined` портом аудитории `social`.
 7. **Журнал продуктовых событий — листовой модуль `product-events`** без зависимостей, порт `PRODUCT_EVENTS.record`.
-   Пишут `social`, `rides` (источник «Иду» — необязательный параметр `join`), `identity` (активный день, дедуп в
+   Пишут `social`, `rides` (источник «Иду» — необязательное тело `join` `{ source }`: событие `ride-joined` — только
+   новой записи, после коммита транзакции `join`, сбой — лог без отказа), `identity` (активный день, дедуп в
    Redis на сутки по Минску). Журнал append-only; единственное исключение — удаление записей райдера шагом стирания
    аккаунта (K13). Наружу не уходит, выгрузка — скрипт. Справочник событий и их `props` — zod внутри API
    (`product-events.types.ts`), не в contracts (RC-11); в `props` — только поля-справочники, без id пользователей:

@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { IdentityModule } from '../identity';
 import { MediaModule } from '../media';
 import { PanelModule } from '../panel';
+import { ProductEventsCoreModule } from '../product-events';
 import { RoutesCoreModule } from '../routes';
 import { PublicReadGuard } from '../../public-read.guard';
 import { ProfileRidesController } from './profile-rides.controller';
@@ -76,10 +77,11 @@ export class RidesCoreModule {}
  * `AuthGuard` identity (контроллер — первым); публичная карточка — `PublicReadGuard`. Модерация (05b) — панель
  * `/v1/admin/rides` под `PanelGuard` (`panel` — только через `modules/panel/index.ts`, ADR-0013 п. 1). Фото организатора
  * (ride-photo, ADR-0028) — `rides/:id/photo` (`AuthGuard`) и `ride-photos/:id` (`PublicReadGuard`); гейт обработки и
- * слоты приёма — общие с аватаром (`MediaModule`).
+ * слоты приёма — общие с аватаром (`MediaModule`). Журнал метрик (`ProductEventsCoreModule`, K12) — источник «Я иду»
+ * в `RidesService`.
  */
 @Module({
-  imports: [IdentityModule, MediaModule, PanelModule, RidesCoreModule],
+  imports: [IdentityModule, MediaModule, PanelModule, RidesCoreModule, ProductEventsCoreModule],
   controllers: [
     RidesController,
     RidePhotosController,
