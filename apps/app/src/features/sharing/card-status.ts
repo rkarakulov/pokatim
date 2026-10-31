@@ -4,7 +4,7 @@ import {
   type StoryCardTemplate,
 } from '@pokatim/contracts';
 import { t } from '@pokatim/i18n';
-import { type QueryClient, useQuery } from '@tanstack/react-query';
+import { type Query, type QueryClient, useQuery } from '@tanstack/react-query';
 import { useCallback, useRef } from 'react';
 
 import { withAccessToken } from '@/features/auth/authorized';
@@ -48,12 +48,17 @@ export interface CardSource {
 /** Метка запросов статуса карточек: по ней их находит инвалидация после смены темы. */
 const CARD_STATUS_META = { cardStatus: true } as const;
 
+const isCardStatus = (query: Query) => query.meta?.cardStatus === true;
+
 /**
  * Тема сохранена на сервере (`useSetTheme`): статусы карточек — перезапросить. Ключ уже с новой темой (оптимистично), но
- * ответ, полученный до сохранения, — карточка прежней темы; инвалидация отменяет и запрос в полёте.
+ * ответ, полученный или начатый до сохранения, — карточка прежней темы. Первый запрос без данных инвалидация не
+ * отменяет (TanStack переиспользует его) — сначала явная отмена, затем инвалидация.
  */
-export const invalidateCardStatuses = (queryClient: QueryClient) =>
-  queryClient.invalidateQueries({ predicate: (query) => query.meta?.cardStatus === true });
+export async function invalidateCardStatuses(queryClient: QueryClient): Promise<void> {
+  await queryClient.cancelQueries({ predicate: isCardStatus });
+  await queryClient.invalidateQueries({ predicate: isCardStatus });
+}
 
 /** Повтор — как у проекта (`shouldRetry`: без 4xx, в т.ч. 409 и 429); не готова / провал — без повторов. */
 const retryable = (count: number, error: unknown) =>

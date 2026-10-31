@@ -13,3 +13,7 @@ verdict: APPROVE
 
 Codex (pass 1, `findings-codex.md`): APPROVE, [MEDIUM] карточка прежней темы до сохранения — **исправлено**:
 `invalidateCardStatuses` в `useSetTheme.onSuccess`, тесты.
+
+Codex (pass 2, коммит `1900423b`): APPROVE, [MEDIUM] первый запрос карточки в полёте инвалидация не отменяет (TanStack
+переиспользует запрос без данных) — **исправлено**: `invalidateCardStatuses` — `cancelQueries`, затем
+`invalidateQueries`; тест с отложенным первым ответом (красный без отмены).

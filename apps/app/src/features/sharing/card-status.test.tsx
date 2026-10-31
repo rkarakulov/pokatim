@@ -76,6 +76,26 @@ describe('useCardStatus', () => {
     await unmount();
   });
 
+  it('первый запрос в полёте при сохранении темы — отменён и повторён; поздний старый ответ не побеждает', async () => {
+    client.clear();
+    fetchCard.mockReset();
+    themeId = 'journal';
+    let resolveOld!: (value: unknown) => void;
+    fetchCard
+      .mockReturnValueOnce(new Promise((resolve) => (resolveOld = resolve)))
+      .mockResolvedValueOnce({ status: 'ready', token: 'journal-card' });
+    const { result, unmount } = await renderHook(() => useCardStatus(source, 'line', true), {
+      wrapper: Wrapper,
+    });
+    await waitFor(() => expect(fetchCard).toHaveBeenCalledTimes(1));
+
+    await act(() => invalidateCardStatuses(client));
+    await act(async () => resolveOld({ status: 'ready', token: 'old-theme-card' }));
+    await waitFor(() => expect(result.current.state.data?.token).toBe('journal-card'));
+    expect(fetchCard).toHaveBeenCalledTimes(2);
+    await unmount();
+  });
+
   it('смена темы во время ожидания — свой отсчёт 30 с, без мгновенного «не готова»', async () => {
     client.clear();
     fetchCard.mockReset();
