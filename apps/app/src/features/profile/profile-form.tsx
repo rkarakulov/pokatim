@@ -18,21 +18,23 @@ const ProfileForm = z.object({
   publicName: RiderPublicName,
   club: RiderClub,
   showNameInResults: z.boolean(),
+  showRouteRides: z.boolean(),
 });
 type ProfileFormValues = z.input<typeof ProfileForm>;
 type ProfileFormOutput = z.output<typeof ProfileForm>;
 
-const FIELDS = ['publicName', 'club', 'showNameInResults'] as const;
+const FIELDS = ['publicName', 'club', 'showNameInResults', 'showRouteRides'] as const;
 
 const valuesOf = (profile: ProfileView): ProfileFormValues => ({
   publicName: profile.publicName ?? '',
   club: profile.club ?? '',
   showNameInResults: profile.showNameInResults,
+  showRouteRides: profile.showRouteRides,
 });
 
 /**
- * Форма «Редактировать профиль» (profile-rider-name, rider-profile): «Как вас показывать в результатах», клуб и
- * согласие на показ. Проверка — схема contracts; ошибки сервера — под полем по коду; сеть, 429 и прочее — баннер над кнопкой; успех — «Сохранено».
+ * Форма «Редактировать профиль» (profile-rider-name, rider-profile): «Как вас показывать в результатах», клуб,
+ * согласие на показ имени и показ своих заездов в таблицах маршрутов (route-rides-04; текст — версия согласия). Проверка — схема contracts; ошибки сервера — под полем по коду; сеть, 429 и прочее — баннер над кнопкой; успех — «Сохранено».
  */
 export function ProfileFormView({ profile }: { profile: ProfileView }) {
   const theme = useTheme();
@@ -111,6 +113,27 @@ export function ProfileFormView({ profile }: { profile: ProfileView }) {
         {errors.showNameInResults ? (
           <Text style={[textStyle('meta'), { color: theme.status.error }]}>
             {fieldText(errors.showNameInResults.message)}
+          </Text>
+        ) : null}
+      </View>
+      <View style={styles.stack}>
+        <Controller
+          control={form.control}
+          name="showRouteRides"
+          render={({ field }) => (
+            <Toggle
+              label={t('profile.routeRides.label')}
+              value={field.value}
+              onChange={field.onChange}
+            />
+          )}
+        />
+        <Text style={[textStyle('meta'), { color: theme.text.secondary }]}>
+          {t('profile.routeRides.hint')}
+        </Text>
+        {errors.showRouteRides ? (
+          <Text style={[textStyle('meta'), { color: theme.status.error }]}>
+            {fieldText(errors.showRouteRides.message)}
           </Text>
         ) : null}
       </View>
