@@ -1876,7 +1876,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     expect(await indexesOf(ACHIEVEMENTS_COLLECTIONS.grants)).toEqual(grantIndexes);
   });
 
-  it('0044_route_rides_passed_idx: частичный (checkedAt, _id) по passed рядом с прежним уникальным; последняя; повторный up — без изменений', async () => {
+  it('0044_route_rides_passed_idx: частичный (updatedAt, _id) по passed рядом с прежним уникальным; последняя; повторный up — без изменений', async () => {
     const ids = migrations.map((migration) => migration.id);
     expect(ids.at(-1)).toBe('0044_route_rides_passed_idx');
     expect(ids.indexOf('0044_route_rides_passed_idx')).toBe(
@@ -1890,12 +1890,13 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
         expireAfterSeconds: undefined,
       },
       [ROUTE_RIDES_PASSED_INDEX.options.name]: {
-        key: { checkedAt: 1, _id: 1 },
+        key: { updatedAt: 1, _id: 1 },
         unique: false,
         partialFilterExpression: { status: 'passed' },
         expireAfterSeconds: undefined,
       },
     };
+    expect(ROUTE_RIDES_PASSED_INDEX.options.name).toBe('route_rides_passed_updated_idx');
     expect(await indexesOf(ROUTE_RIDES_COLLECTIONS.rides)).toEqual(expected);
     await routeRidesPassedIdx.up(h.db);
     await routeRidesPassedIdx.up(h.db);

@@ -22,9 +22,9 @@ export interface RiderRouteRides {
   /** Пройденные видимые заезды райдера (повторы одного маршрута — отдельными фактами). Порядок не задан. */
   passedOf(userId: string): Promise<RiderRouteRideFact[]>;
   /**
-   * Райдеры заездов, засчитанных (`passed`) в окне `(after, until]` по `(checkedAt, _id)` (серверная сверка
-   * достижений, achievements-push; видимость проверит сверка через `passedOf`). Предел — `limit` заездов; курсор —
-   * последний прочитанный заезд.
+   * Райдеры заездов `passed`, записанных в окне `(after, until]` по `(updatedAt, _id)` — момент записи итога (серверная
+   * сверка достижений, achievements-push; видимость проверит сверка через `passedOf`). Предел — `limit` заездов;
+   * курсор — последний прочитанный заезд.
    */
   passedRidersAfter(after: ChangedCursor, until: Date, limit: number): Promise<RiderChanges>;
 }

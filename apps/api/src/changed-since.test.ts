@@ -24,11 +24,7 @@ describe('changedAfter (og-images: keyset по (updatedAt, _id))', () => {
     expect(CHANGED_SORT).toEqual({ updatedAt: 1, _id: 1 });
   });
 
-  it('поле времени задаётся (achievements-push: checkedAt, startsAt)', () => {
-    const at = new Date('2026-10-29T10:00:00Z');
-    expect(changedAfter({ at, id: 'b' }, 'checkedAt')).toEqual({
-      $or: [{ checkedAt: { $gt: at } }, { checkedAt: at, _id: { $gt: 'b' } }],
-    });
+  it('сортировка по другому полю времени (achievements-push: startsAt)', () => {
     expect(changedSort('startsAt')).toEqual({ startsAt: 1, _id: 1 });
   });
 });

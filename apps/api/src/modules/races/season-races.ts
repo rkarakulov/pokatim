@@ -44,6 +44,10 @@ export class SeasonRacesService implements SeasonRaces {
     );
   }
 
+  async lastCancelledAt(seasonIds: readonly string[]): Promise<Map<string, Date>> {
+    return seasonIds.length > 0 ? this.repository.lastCancelledAt(seasonIds) : new Map();
+  }
+
   async seasonExists(seasonId: string): Promise<boolean> {
     return (await this.repository.findSeason(seasonId)) !== undefined;
   }

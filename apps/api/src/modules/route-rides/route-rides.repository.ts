@@ -160,21 +160,23 @@ export class RouteRidesRepository {
   }
 
   /**
-   * Заезды, засчитанные в окне `(after, until]` по `(checkedAt, _id)` — серверная сверка достижений (порт
-   * `RIDER_ROUTE_RIDES`; частичный индекс `route_rides_passed_checked_idx`, `0044_route_rides_passed_idx`).
+   * Заезды `passed` с записью в окне `(after, until]` по `(updatedAt, _id)` — серверная сверка достижений (порт
+   * `RIDER_ROUTE_RIDES`; частичный индекс `route_rides_passed_updated_idx`, `0044_route_rides_passed_idx`). Окно — по
+   * моменту записи итога (`record` ставит `updatedAt`), а не по `checkedAt`: тот берётся до ожидания семафора разбора и
+   * может отставать от коммита больше `settleMs`. Прочие обновления `passed` дают лишь повтор (сверка идемпотентна).
    */
   passedWithin(
     after: ChangedCursor,
     until: Date,
     limit: number,
-  ): Promise<{ _id: string; userId: string; checkedAt: Date }[]> {
-    const window = changedWithin(after, until, 'checkedAt') as Filter<RouteRideDoc>;
+  ): Promise<{ _id: string; userId: string; updatedAt: Date }[]> {
+    const window = changedWithin(after, until, 'updatedAt') as Filter<RouteRideDoc>;
     return this.c.rides
-      .find<{ _id: string; userId: string; checkedAt: Date }>(
+      .find<{ _id: string; userId: string; updatedAt: Date }>(
         { status: 'passed', ...window },
-        { projection: { _id: 1, userId: 1, checkedAt: 1 } },
+        { projection: { _id: 1, userId: 1, updatedAt: 1 } },
       )
-      .sort(changedSort('checkedAt'))
+      .sort(changedSort('updatedAt'))
       .limit(limit)
       .toArray();
   }

@@ -56,7 +56,9 @@ const chunks = <T>(items: readonly T[], size: number): T[][] => {
  * (`syncedAmong`, P2/AC5) → задачи `achievements.rider` → курсоры сдвигаются **после** постановки. Полного скана нет;
  * полная страница — продолжение следующим прогоном. Нет курсора (первый запуск, потеря Redis) — окно с
  * `until − lostCursorMs` (RC-P9: старые факты не будят push). Сбой источника — лог, его курсор стоит, остальные идут,
- * в конце — исключение (failed-набор). Один прогон за раз — замок Redis.
+ * в конце — исключение (failed-набор). Один прогон за раз — замок-аренда Redis: продление своим токеном перед каждым
+ * шагом, курсоры пишет только владелец (атомарно с проверкой токена); аренда потеряна — прогон прекращается с
+ * `achievements.sweep_lease_lost` без записи курсоров (окно повторит следующий прогон — дубли, не пропуски).
  */
 @Injectable()
 export class AchievementsSweep {
@@ -82,18 +84,32 @@ export class AchievementsSweep {
     const token = await this.state.lock();
     if (!token) return { busy: true, read, enqueued: 0, failedSources: [] };
     try {
-      return await this.sweep(read);
+      return await this.sweep(token, read);
     } finally {
       await this.state.unlock(token);
     }
   }
 
-  private async sweep(read: Record<AchievementsSyncSource, number>): Promise<AchievementsSweepRun> {
+  /** Аренда замка: продление своим токеном перед каждым шагом; потеряна — прогон прекращается без записи. */
+  private async renew(token: string): Promise<void> {
+    if (!(await this.state.extend(token))) this.leaseLost();
+  }
+
+  private leaseLost(): never {
+    this.logger.warn('achievements.sweep_lease_lost');
+    throw new Error('achievements.sweep lease lost');
+  }
+
+  private async sweep(
+    token: string,
+    read: Record<AchievementsSyncSource, number>,
+  ): Promise<AchievementsSweepRun> {
     const now = this.clock.now();
     const failedSources: AchievementsSyncSource[] = [];
     const moved = new Map<AchievementsSyncSource, ChangedCursor>();
     const changed = new Set<string>();
     for (const source of ACHIEVEMENTS_SYNC_SOURCES) {
+      await this.renew(token);
       const until = new Date(
         now.getTime() -
           (source === 'rides'
@@ -117,6 +133,7 @@ export class AchievementsSweep {
     }
 
     const riders = await this.eligible([...changed]);
+    await this.renew(token);
     if (riders.length > 0) {
       await this.queue.addBulk(
         riders.map((userId) => ({
@@ -126,8 +143,8 @@ export class AchievementsSweep {
         })),
       );
     }
-    // курсоры — только после постановки: сбой постановки повторит окно следующим прогоном
-    for (const [source, cursor] of moved) await this.state.setCursor(source, cursor);
+    // курсоры — только после постановки (сбой постановки повторит окно следующим прогоном) и только владельцем замка
+    if (moved.size > 0 && !(await this.state.setCursors(token, moved))) this.leaseLost();
 
     const run: AchievementsSweepRun = { busy: false, read, enqueued: riders.length, failedSources };
     if (riders.length > 0) {

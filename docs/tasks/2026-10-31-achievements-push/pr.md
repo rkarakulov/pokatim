@@ -1,30 +1,45 @@
-## Достижения: уведомление о новом достижении (push, часть N1)
+## Достижения: серверная сверка в worker (push без открытия приложения, часть N2)
 
-Task: `docs/tasks/2026-10-31-achievements-push/task.md` (решения P1–P6, RC-P1…RC-P10). Этот PR — **N1**;
-серверная сверка в worker (push без открытия приложения, AC3/AC5) — следующий PR N2.
+Task: `docs/tasks/2026-10-31-achievements-push/task.md` (решения P1–P6, RC-P1…RC-P10, раздел 5.D). N1 (событие
+`achievements.grant-noticed`, группа «Достижения», канал `origin`) — уже в `develop`. Этот PR — **N2**: worker сам
+находит новые выдачи и шлёт push (AC3, AC5).
+
+### Деплой
+1. **Миграция `0044_route_rides_passed_idx`** — `pnpm db:migrate` **до** выката API/worker. Только expand:
+   частичный индекс `route_rides_passed_updated_idx { updatedAt, _id }` по `status: 'passed'`, идемпотентный
+   `createIndex`, без бэкфилла и транзакции.
+2. Выкат API и worker. Новая очередь BullMQ **`achievements-sync`** создаётся сама; расписание
+   `achievements.sweep` (`* * * * *`, `Europe/Minsk`) — `upsertJobScheduler` при старте worker, плюс разовый
+   `achievements.sweep.boot`. Новых переменных окружения нет.
+3. Первый прогон без курсоров читает окно `until − 10 мин`: старые факты push не будят (RC-P9).
 
 ### Что
-- **Событие** `achievements.grant-noticed` (`{ grant, grantId, level, origin }`, без `userId` и ПДн) пишется в одной
-  транзакции с выдачей, которая вспыхнула бы: новое достижение, новый уровень, новое сезонное. Тихие (первая сверка,
-  восстановление, понижение, возврат на показанный уровень) — без события. `notifiedLevel` растёт только вверх
-  (`$max`); документы без поля — без ретро-уведомлений.
-- **Сверка** вынесена в `AchievementsReconciler.reconcile(userId, origin)` (HTTP-обёртка — лимит и ответ); `origin:
-  'server'` готов для N2. Транзакции — только на шагах с событием; дубль индекса — снаружи `run`.
-- **notifications:** маршрут события в intake, порт `ACHIEVEMENT_NOTICES` (получатель, название; отозвана, стёрта или
-  уже не заработана по актуальному итогу сезона — `state`/`gone`), схлопывание `achievement:<grantId>` по уровню.
-  `origin: 'read'` (найдено в GET — райдер в приложении) — запись в центре, push `skipped`/`in_app`.
-- **Группа «Достижения»** — подресурс `GET|PUT /v1/notifications/settings/achievements` (только push, по умолчанию
-  включено); строгий `NotificationSettings` не менялся. Тексты — имена из каталога `@pokatim/i18n`; сезонное —
-  «Новое достижение: Чемпион сезона» / «Сезон «…»».
-- **Приложение:** цель `achievement` → `/achievements/<code>` (`?season=` у сезонных), то же в service worker;
-  секция «Достижения» в настройках уведомлений. Старые сборки: строка в центре видна, перехода нет.
-- Документы: ADR-0017, ADR-0020 «Дополнение: push», `notifications.md`, `profile.md`, `.claude/rules`.
+- **Регламент `achievements.sweep`** (`AchievementsWorkerModule` в `WorkerModule`): курсоры Redis
+  `achievements:cursor:<source>`, окно `(курсор, now − 2 мин]`, ≤ 500 строк на источник. Источники — по одному методу
+  портов владельцев (`changed-since.ts`):
+  - ревизии протоколов `RIDER_RESULTS.revisedRidersAfter` — журнал по uuidv7 `_id`, получатели страницы одним
+    запросом;
+  - прошедшие райды `RIDER_RIDES.startedRidersAfter` — `until = now − 3 ч`, push после поездки;
+  - засчитанные заезды `RIDER_ROUTE_RIDES.passedRidersAfter` — по моменту записи итога (`updatedAt`);
+  - итоги сезонов `RIDER_SEASON_STANDINGS.settledRidersAfter` — пересчёт снимка, конец сезона или отмена гонки, которая
+    ждала протокола (`SEASON_RACES.lastCancelledAt`).
+- **Кого сверять:** живые аккаунты ∩ с маркером первой сверки — первая сверка остаётся тихой при открытии приложения.
+  Задачи `achievements.rider` → `reconcile(uid, 'server')`: центр и push. 3 попытки, на последней — лог
+  `achievements.server_sync_failed`.
+- **Один прогон за раз:** замок-аренда Redis. Продление своим токеном перед каждым шагом; курсоры пишет только
+  владелец (проверка токена и запись одним Lua). Аренда потеряна — `achievements.sweep_lease_lost`, курсоры не
+  пишутся. Курсоры двигаются после постановки задач. Сбой источника — его курсор стоит, остальные идут, прогон падает.
+- **Push — «не больше одного»:** при сбое push может не прийти, запись в центре появится при следующем GET.
+- Документы: ADR-0020 «Дополнение: серверная сверка», `profile.md`, `.claude/rules/pokatim-backend.md`,
+  `.claude/rules/pokatim-db.md`.
 
 ### Проверки
-- `pnpm check` зелёный (API 2476/2476, app 2552/2552; после фиксов ревью — снова 15/15).
-- Гонки: 4 × GET + серверная сверка с воротами — одно событие и одно уведомление; отрицательные доказательства
-  (вставка вне транзакции, дубль внутри колбэка, решение по снимку плана) краснеют по результату.
-- Ревью: Claude — APPROVE (1 MEDIUM, 3 LOW); Codex pass 1 — APPROVE (1 MEDIUM, 1 LOW) → исправлено; Codex pass 2 —
-  APPROVE.
+- `TURBO_CONCURRENCY=1 pnpm check` — зелёный (изолированные Mongo RS и Redis).
+- Int: AC5 — ставятся только райдеры с маркером, живым аккаунтом и фактом в окне. AC3 — протокол → прогон из очереди
+  → задача райдера → событие `origin: 'server'` → уведомление → push в фейковом Expo. Сезон `pending → final`
+  отменой гонки → сезонная выдача и push без GET. Источники: окно, страница, продолжение; поздняя запись итога заезда;
+  бюджет запросов ревизий (4 ревизии → 2 чтения). Аренда: истекла посреди прогона — курсоры второго прогона целы.
+- Ревью N2: Claude — APPROVE (1 MEDIUM, 4 LOW); Codex — APPROVE (3 MEDIUM, 1 LOW). Все находки исправлены
+  (task.md, «Фиксы ревью N2»).
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)

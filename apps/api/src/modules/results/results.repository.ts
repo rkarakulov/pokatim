@@ -776,6 +776,23 @@ export class ResultsRepository {
     return docs.map((doc) => doc.userId);
   }
 
+  /**
+   * Райдеры строк протоколов ревизий `pairs` одним запросом (серверная сверка достижений: страница журнала): `$or` по
+   * `(raceId, revision)` — префикс `race_protocol_rows_unique`; без повторов.
+   */
+  async protocolRowUserIdsOf(
+    pairs: readonly { raceId: string; revision: number }[],
+  ): Promise<string[]> {
+    if (pairs.length === 0) return [];
+    const docs = await this.c.protocolRows
+      .find(
+        { $or: pairs.map(({ raceId, revision }) => ({ raceId, revision })) },
+        { projection: { _id: 0, userId: 1 } },
+      )
+      .toArray();
+    return [...new Set(docs.map((doc) => doc.userId))];
+  }
+
   /** Владелец заявки. */
   async entryUserId(entryId: string): Promise<string | null> {
     const doc = await this.c.entries.findOne(

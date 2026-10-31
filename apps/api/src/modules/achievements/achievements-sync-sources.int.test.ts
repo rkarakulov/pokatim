@@ -1,13 +1,15 @@
 import { uuidv7 } from '@rkarakulov/api-kit/mongo';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { Collection } from 'mongodb';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { daysAgo, pastRide, seedRouteRide } from '../../../test/achievements';
 import { createHarness, type Harness, MINUTE } from '../../../test/harness';
 import { uuidv7At } from '../../../test/notifications';
 import { resultsDb } from '../../../test/results';
-import { routeRidesDb } from '../../../test/route-rides';
+import { routeRidesDb, routeRidesRepository } from '../../../test/route-rides';
 import { rider, ridesDb, type Rider } from '../../../test/rides';
-import { seedSeason, standingsDb } from '../../../test/standings';
+import { racesDb } from '../../../test/races';
+import { seedProtocolRace, seedSeason, standingsDb } from '../../../test/standings';
 import type { ChangedCursor } from '../../changed-since';
 import { RIDER_RESULTS, type RiderResults } from '../results';
 import { RIDER_RIDES, type RiderRides } from '../rides';
@@ -89,18 +91,37 @@ describe('RIDER_RESULTS.revisedRidersAfter — журнал ревизий по 
 
     const all = await results.revisedRidersAfter(start(10), until, 10);
     expect(sorted(all.userIds)).toEqual(sorted([u1.userId, u2.userId, u3.userId]));
-    expect(all).toMatchObject({ next: { id: b, at: ago(3) }, full: false });
+    expect(all).toMatchObject({ next: { id: b, at: ago(3) } });
 
     const first = await results.revisedRidersAfter(start(10), until, 1);
     expect(sorted(first.userIds)).toEqual(sorted([u1.userId, u2.userId]));
-    expect(first).toMatchObject({ next: { id: a }, full: true });
+    expect(first).toMatchObject({ next: { id: a } });
     const second = await results.revisedRidersAfter(first.next!, until, 1);
-    expect(second).toMatchObject({ userIds: [u3.userId], next: { id: b }, full: true });
+    expect(second).toMatchObject({ userIds: [u3.userId], next: { id: b } });
     expect(await results.revisedRidersAfter(second.next!, until, 1)).toEqual({
       userIds: [],
       next: null,
-      full: false,
     });
+  });
+
+  it('бюджет запросов: страница из нескольких ревизий — журнал и строки протоколов, по одному запросу', async () => {
+    const results = port<RiderResults>(RIDER_RESULTS);
+    for (const [minutes, who] of [
+      [9, u1],
+      [8, u2],
+      [7, u3],
+      [6, u1],
+    ] as const) {
+      await revisionAt(ago(minutes), [who.userId]);
+    }
+    const reads = (['find', 'findOne', 'aggregate', 'distinct', 'countDocuments'] as const).map(
+      (method) => vi.spyOn(Collection.prototype, method),
+    );
+    const page = await results.revisedRidersAfter(start(10), h.clock.now(), 10);
+    const queries = reads.reduce((sum, spy) => sum + spy.mock.calls.length, 0);
+    vi.restoreAllMocks();
+    expect(sorted(page.userIds)).toEqual(sorted([u1.userId, u2.userId, u3.userId]));
+    expect(queries).toBe(2);
   });
 });
 
@@ -121,11 +142,11 @@ describe('RIDER_RIDES.startedRidersAfter — старт опубликованн
 
     const all = await rides.startedRidersAfter(start(60), until, 10);
     expect(sorted(all.userIds)).toEqual(sorted([u1.userId, u2.userId, u3.userId]));
-    expect(all).toMatchObject({ next: { id: second, at: ago(10) }, full: false });
+    expect(all).toMatchObject({ next: { id: second, at: ago(10) } });
 
     const page = await rides.startedRidersAfter(start(60), until, 1);
     expect(sorted(page.userIds)).toEqual(sorted([u1.userId, u2.userId]));
-    expect(page).toMatchObject({ next: { id: first }, full: true });
+    expect(page).toMatchObject({ next: { id: first } });
     expect(await rides.startedRidersAfter(page.next!, until, 1)).toMatchObject({
       userIds: [u3.userId],
       next: { id: second },
@@ -136,7 +157,7 @@ describe('RIDER_RIDES.startedRidersAfter — старт опубликованн
   });
 });
 
-describe('RIDER_ROUTE_RIDES.passedRidersAfter — засчитанные заезды по checkedAt', () => {
+describe('RIDER_ROUTE_RIDES.passedRidersAfter — засчитанные заезды по моменту записи итога', () => {
   it('только passed в окне; страница и продолжение', async () => {
     const routeRides = port<RiderRouteRides>(RIDER_ROUTE_RIDES);
     const routeId = uuidv7();
@@ -153,20 +174,49 @@ describe('RIDER_ROUTE_RIDES.passedRidersAfter — засчитанные зае�
     for (const doc of docs) {
       await routeRidesDb(h).rides.updateOne(
         { _id: doc._id },
-        { $set: { checkedAt: at.get(doc.userId)! } },
+        { $set: { checkedAt: at.get(doc.userId)!, updatedAt: at.get(doc.userId)! } },
       );
     }
     const until = h.clock.now();
 
     const all = await routeRides.passedRidersAfter(start(10), until, 10);
     expect(sorted(all.userIds)).toEqual(sorted([u1.userId, u2.userId]));
-    expect(all).toMatchObject({ next: { at: ago(3) }, full: false });
+    expect(all).toMatchObject({ next: { at: ago(3) } });
 
     const page = await routeRides.passedRidersAfter(start(10), until, 1);
-    expect(page).toMatchObject({ userIds: [u1.userId], next: { at: ago(5) }, full: true });
+    expect(page).toMatchObject({ userIds: [u1.userId], next: { at: ago(5) } });
     expect(await routeRides.passedRidersAfter(page.next!, until, 1)).toMatchObject({
       userIds: [u2.userId],
-      full: true,
+    });
+  });
+  it('итог записан позже checkedAt больше чем на settleMs (ожидание семафора разбора) — читается по моменту записи', async () => {
+    const routeRides = port<RiderRouteRides>(RIDER_ROUTE_RIDES);
+    const repository = routeRidesRepository(h);
+    const activityId = await seedRouteRide(h, u1.userId, uuidv7(), daysAgo(h, 1), {
+      status: 'queued',
+    });
+    const doc = (await routeRidesDb(h).rides.findOne({ activityId }))!;
+    await routeRidesDb(h).rides.updateOne({ _id: doc._id }, { $set: { status: 'checking' } });
+    // проверка начата 10 мин назад, итог записан 3 мин назад; курсор уже за моментом начала проверки
+    const recorded = await repository.record(
+      doc._id,
+      doc.checkRevision,
+      {
+        status: 'passed',
+        reasons: [],
+        failure: null,
+        segment: null,
+        touchedCorridor: true,
+        engineVersion: 1,
+        trackMap: null,
+        checkedAt: ago(10),
+      },
+      ago(3),
+    );
+    expect(recorded).toBe(true);
+    expect(await routeRides.passedRidersAfter(start(5), h.clock.now(), 10)).toEqual({
+      userIds: [u1.userId],
+      next: { at: ago(3), id: doc._id },
     });
   });
 });
@@ -212,24 +262,21 @@ describe('RIDER_SEASON_STANDINGS.settledRidersAfter — пересчёт сни�
 
     const all = await standings.settledRidersAfter(start(10), until, 10);
     expect(sorted(all.userIds)).toEqual(users);
-    expect(all).toEqual({ userIds: users, next: { at: ago(5), id: finished }, full: false });
+    expect(all).toEqual({ userIds: users, next: { at: ago(5), id: finished } });
 
     const first = await standings.settledRidersAfter(start(10), until, 2);
     expect(first).toEqual({
       userIds: users.slice(0, 2),
       next: { at: ago(5), id: `${finished}|${users[1]}` },
-      full: true,
     });
     const second = await standings.settledRidersAfter(first.next!, until, 2);
     expect(second).toEqual({
       userIds: users.slice(2),
       next: { at: ago(5), id: finished },
-      full: false,
     });
     expect(await standings.settledRidersAfter(second.next!, until, 2)).toEqual({
       userIds: [],
       next: null,
-      full: false,
     });
   });
 
@@ -242,11 +289,33 @@ describe('RIDER_SEASON_STANDINGS.settledRidersAfter — пересчёт сни�
     expect(await standings.settledRidersAfter(around, h.clock.now(), 10)).toEqual({
       userIds: [u1.userId],
       next: { at: endsBefore, id: season },
-      full: false,
     });
     expect(
       (await standings.settledRidersAfter({ at: endsBefore, id: season }, h.clock.now(), 10))
         .userIds,
     ).toEqual([]);
+  });
+
+  it('отмена последней гонки без протокола после конца сезона (pending → final) — событие в момент отмены', async () => {
+    const standings = port<RiderSeasonStandings>(RIDER_SEASON_STANDINGS);
+    const season = await seedSeason(h, 'Сезон 2025', { year: 2025 });
+    await snapshot(season, new Date('2025-11-01T00:00:00Z'), [u1.userId]);
+    const corridor = { routeId: uuidv7(), widthM: 50, distanceM: 8000 };
+    const waiting = await seedProtocolRace(h, season, [], { protocol: false, corridor });
+    // отменённый анонс (без коридора) итог сезона не держал — событие не двигает
+    await seedProtocolRace(h, season, [], { protocol: false, status: 'cancelled' });
+    const passed = { at: new Date('2025-11-01T00:00:00Z'), id: season };
+    expect((await standings.settledRidersAfter(passed, h.clock.now(), 10)).userIds).toEqual([]);
+
+    await racesDb(h).races.updateOne(
+      { _id: waiting },
+      { $set: { status: 'cancelled', cancelledAt: ago(5), updatedAt: ago(5) } },
+    );
+    expect(await standings.settledRidersAfter(passed, h.clock.now(), 10)).toEqual({
+      userIds: [u1.userId],
+      next: { at: ago(5), id: season },
+    });
+    // до settle-границы отмена не видна
+    expect((await standings.settledRidersAfter(passed, ago(6), 10)).userIds).toEqual([]);
   });
 });

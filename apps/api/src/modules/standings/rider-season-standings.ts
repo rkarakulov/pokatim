@@ -85,13 +85,22 @@ export class RiderSeasonStandingsService implements RiderSeasonStandings {
   ): Promise<RiderChanges> {
     const [afterSeason = '', afterUser] = after.id.split('|');
     const finished = await this.seasons.finishedSeasons(until);
-    const computed = await this.repository.computedAtOf(finished.map((season) => season.id));
+    const ids = finished.map((season) => season.id);
+    const [computed, cancelled] = await Promise.all([
+      this.repository.computedAtOf(ids),
+      this.seasons.lastCancelledAt(ids),
+    ]);
     const events = finished
       .flatMap((season) => {
         const computedAt = computed.get(season.id);
         if (!computedAt) return [];
-        const at = new Date(Math.max(computedAt.getTime(), season.endsBefore.getTime()));
-        return at <= until ? [{ id: season.id, at }] : [];
+        const settled = Math.max(computedAt.getTime(), season.endsBefore.getTime());
+        if (settled > until.getTime()) return [];
+        // отмена гонки, ждавшей протокола, делает итог полным без пересчёта снимка (pending → final); отмена позже
+        // `until` — следующим прогоном
+        const cancelledAt = cancelled.get(season.id)?.getTime() ?? 0;
+        const at = cancelledAt > settled && cancelledAt <= until.getTime() ? cancelledAt : settled;
+        return [{ id: season.id, at: new Date(at) }];
       })
       .filter(({ id, at }) => {
         const t = at.getTime() - after.at.getTime();
@@ -116,10 +125,10 @@ export class RiderSeasonStandingsService implements RiderSeasonStandings {
       rows += page.length;
       if (rows >= limit) {
         next = { at: event.at, id: `${event.id}|${page.at(-1) ?? from ?? ''}` };
-        return { userIds: [...userIds], next, full: true };
+        return { userIds: [...userIds], next };
       }
       next = { at: event.at, id: event.id };
     }
-    return { userIds: [...userIds], next, full: false };
+    return { userIds: [...userIds], next };
   }
 }

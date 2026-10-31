@@ -26,7 +26,8 @@ import {
 import { resultsDb } from '../../../test/results';
 import { routeRidesDb } from '../../../test/route-rides';
 import { authed, rider, ridesDb, type Rider } from '../../../test/rides';
-import { placedRow, seedSeason } from '../../../test/standings';
+import { racesDb } from '../../../test/races';
+import { placedRow, seedProtocolRace, seedSeason, syncStandings } from '../../../test/standings';
 import { QUEUE } from '../../queues';
 import { RIDER_ROUTE_RIDES, type RiderRouteRides } from '../route-rides';
 import {
@@ -102,10 +103,10 @@ async function completeQueued(): Promise<unknown[]> {
 const markSynced = (who: Rider) =>
   achievementsDb(h).syncs.insertOne({ _id: who.userId, firstSyncAt: daysAgo(h, 30) });
 
-/** Заезд по маршруту, засчитанный в момент `checkedAt`. */
-async function passedAt(who: Rider, checkedAt: Date) {
+/** Заезд по маршруту, итог `passed` которого записан в момент `at`. */
+async function passedAt(who: Rider, at: Date) {
   const activityId = await seedRouteRide(h, who.userId, uuidv7(), daysAgo(h, 1));
-  await routeRidesDb(h).rides.updateOne({ activityId }, { $set: { checkedAt } });
+  await routeRidesDb(h).rides.updateOne({ activityId }, { $set: { checkedAt: at, updatedAt: at } });
 }
 
 /** Ревизии гонки «на момент» `at` (uuidv7 базы берёт `Date.now()`, а не часы стенда). */
@@ -220,6 +221,44 @@ describe('AC5: выборка райдеров — только изменивш
     expect(await sweep().run()).toMatchObject({ busy: false, enqueued: 1 });
     expect(await h.redis.get(ACHIEVEMENTS_SWEEP_LOCK_KEY)).toBeNull();
   });
+
+  it('аренда замка: продление своим токеном; истекла и досталась другому — ни продления, ни записи курсоров', async () => {
+    const lock = ACHIEVEMENTS_SWEEP_LOCK_KEY;
+    const token = (await state().lock())!;
+    await h.redis.pexpire(lock, 1_000);
+    expect(await state().extend(token)).toBe(true);
+    expect(await h.redis.pttl(lock)).toBeGreaterThan(ACHIEVEMENTS_SERVER_SYNC.lockTtlMs - 10_000);
+
+    await h.redis.set(lock, 'other');
+    const cursor = { at: ago(MINUTE), id: 'x' };
+    expect(await state().extend(token)).toBe(false);
+    expect(await state().setCursors(token, new Map([['route_rides', cursor]]))).toBe(false);
+    expect(await h.redis.get(achievementsCursorKey('route_rides'))).toBeNull();
+    expect(await h.redis.get(lock)).toBe('other');
+    expect(await state().setCursors('other', new Map([['route_rides', cursor]]))).toBe(true);
+    expect(await state().cursor('route_rides')).toEqual(cursor);
+  });
+
+  it('аренда истекла посреди прогона, второй прогон захватил замок — первый не ставит задачи и не откатывает курсоры', async () => {
+    const warn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    const me = await rider(h, 'me@example.by');
+    await markSynced(me);
+    await passedAt(me, ago(5 * MINUTE));
+    const source = h.worker.get<RiderRouteRides>(RIDER_ROUTE_RIDES, { strict: false });
+    vi.spyOn(source, 'passedRidersAfter').mockImplementationOnce(async () => {
+      // замок первого истёк: второй прогон проходит целиком и сдвигает курсор, замок держит третий
+      await h.redis.del(ACHIEVEMENTS_SWEEP_LOCK_KEY);
+      expect(await sweep().run()).toMatchObject({ busy: false, enqueued: 1 });
+      await h.redis.set(ACHIEVEMENTS_SWEEP_LOCK_KEY, 'third');
+      return { userIds: [me.userId], next: { at: ago(9 * MINUTE), id: 'stale' } };
+    });
+
+    await expect(sweep().run()).rejects.toThrow('achievements.sweep lease lost');
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/^achievements\.sweep_lease_lost/));
+    expect(await state().cursor('route_rides')).toMatchObject({ at: ago(5 * MINUTE) });
+    expect(await waiting()).toEqual([riderJob(me)]);
+    expect(await h.redis.get(ACHIEVEMENTS_SWEEP_LOCK_KEY)).toBe('third');
+  });
 });
 
 describe('AC3: протокол опубликован → worker сверяет участника без открытия приложения → push', () => {
@@ -263,5 +302,61 @@ describe('AC3: протокол опубликован → worker сверяет
     expect(expo.delivered[0]!.message.title).toMatch(/Подиум/);
     expect(await notificationsOf(h, newcomer.userId)).toEqual([]);
     expect(await achievementsDb(h).grants.countDocuments({ userId: newcomer.userId })).toBe(0);
+  });
+});
+
+describe('сезон pending → final отменой гонки без протокола — серверная выдача и push без GET', () => {
+  it('конец сезона → сверка видит pending → отмена ждущей гонки → прогон → сезонная выдача origin server → push', async () => {
+    const me = await rider(h, 'me@example.by');
+    await seedPushToken(h, me.userId, 'me');
+    const season = await seedSeason(h, 'Сезон 2025', { year: 2025 });
+    await seedProtocolRace(h, season, [placedRow(me.userId, 1)]);
+    const waitingRace = await seedProtocolRace(h, season, [], {
+      protocol: false,
+      corridor: { routeId: uuidv7(), widthM: 50, distanceM: 8000 },
+    });
+    await syncStandings(h);
+    // первая сверка (GET) — маркер; сезон ждёт протокола — сезонных выдач нет
+    expect((await authed(h, me, 'GET', ACHIEVEMENTS)).status).toBe(200);
+    const seasonal = () => achievementsDb(h).seasonGrants.countDocuments({ userId: me.userId });
+    expect(await seasonal()).toBe(0);
+    const settle = ACHIEVEMENTS_SERVER_SYNC.settleMs + MINUTE;
+
+    h.clock.advance(settle);
+    await queue().add(ACHIEVEMENTS_SWEEP_JOB, {}, { jobId: 'sweep-pending' });
+    const [pending, ...pendingRiders] = await completeQueued();
+    expect(pending).toMatchObject({ enqueued: 1, read: { seasons: 1 } });
+    expect(pendingRiders).toEqual(['reconciled']);
+    expect(await seasonal()).toBe(0);
+    const before = (await eventsOfType(h, ACHIEVEMENTS_GRANT_NOTICED)).length;
+
+    await racesDb(h).races.updateOne(
+      { _id: waitingRace },
+      { $set: { status: 'cancelled', cancelledAt: h.clock.now(), updatedAt: h.clock.now() } },
+    );
+    h.clock.advance(settle);
+    await queue().add(ACHIEVEMENTS_SWEEP_JOB, {}, { jobId: 'sweep-final' });
+    const [final, ...finalRiders] = await completeQueued();
+    expect(final).toMatchObject({ enqueued: 1, read: { seasons: 1 } });
+    expect(finalRiders).toEqual(['reconciled']);
+
+    const events = (await eventsOfType(h, ACHIEVEMENTS_GRANT_NOTICED)).slice(before);
+    expect(events.length).toBeGreaterThan(0);
+    expect(events.map((event) => AchievementsGrantNoticed.parse(event.payload))).toEqual(
+      events.map(() => expect.objectContaining({ grant: 'season', origin: 'server' })),
+    );
+    for (const event of events) {
+      expect(await runIntake(h, ACHIEVEMENTS_GRANT_NOTICED, event._id)).toBe('written');
+    }
+    const notices = await notificationsOf(h, me.userId);
+    expect(notices).toContainEqual(
+      expect.objectContaining({
+        kind: 'achievement_granted',
+        target: expect.objectContaining({ code: 'season_champion' }),
+        push: expect.objectContaining({ state: 'pending' }),
+      }),
+    );
+    await runPush(h, me.userId);
+    expect(expo.delivered.length).toBeGreaterThan(0);
   });
 });

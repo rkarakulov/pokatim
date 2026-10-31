@@ -5,7 +5,7 @@ type Timed<K extends string> = Filter<{ _id: string } & Record<K, Date>>;
 
 /**
  * Keyset «изменилось после» по `(<поле времени>, _id)` — пререндер OG-картинок (`og.sync`, og-images; поле
- * `updatedAt`) и серверная сверка достижений (`achievements.sweep`, achievements-push; `startsAt`, `checkedAt`, …) в
+ * `updatedAt`) и серверная сверка достижений (`achievements.sweep`, achievements-push; окно `changedWithin` — `startsAt`, `updatedAt`) в
  * модулях-владельцах. Общий, как `page-cursor.ts`: одна реализация фильтра и сортировки.
  */
 export interface ChangedCursor {
@@ -20,25 +20,19 @@ export interface ChangedRow {
 }
 
 /**
- * Страница источника серверной сверки достижений (achievements-push): райдеры строк окна, курсор после последней
- * прочитанной строки (`null` — строк нет, курсор прежний) и признак полной страницы (продолжение — следующим прогоном).
+ * Страница источника серверной сверки достижений (achievements-push): райдеры строк окна и курсор после последней
+ * прочитанной строки (`null` — строк нет, курсор прежний); полная страница — продолжение следующим прогоном.
  */
 export interface RiderChanges {
   userIds: string[];
   next: ChangedCursor | null;
-  full: boolean;
 }
 
-/** Строго после курсора; `null` — с начала. Поле времени по умолчанию — `updatedAt`. */
-export function changedAfter(after: ChangedCursor | null): Timed<'updatedAt'>;
-export function changedAfter<K extends string>(after: ChangedCursor | null, field: K): Timed<K>;
-export function changedAfter(
-  after: ChangedCursor | null,
-  field: string = 'updatedAt',
-): Record<string, unknown> {
+/** Строго после курсора по `(updatedAt, _id)`; `null` — с начала. */
+export function changedAfter(after: ChangedCursor | null): Timed<'updatedAt'> {
   if (!after) return {};
   return {
-    $or: [{ [field]: { $gt: after.at } }, { [field]: after.at, _id: { $gt: after.id } }],
+    $or: [{ updatedAt: { $gt: after.at } }, { updatedAt: after.at, _id: { $gt: after.id } }],
   };
 }
 

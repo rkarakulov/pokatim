@@ -138,14 +138,19 @@ worker — PR N2, «Дополнение: серверная сверка» ни
 - **Регламент по курсорам, не события:** fan-out outbox нет (ADR-0017 п. 5), `results.*`/`rides.*` уже заняты
   `notifications-intake`, у «заезд засчитан» и «сезон подведён» событий нет. Очередь `achievements-sync`
   (`AchievementsWorkerModule`): `achievements.sweep` каждую минуту (Минск) + `achievements.sweep.boot`, один прогон за
-  раз (замок Redis `achievements:sweep:lock`); задачи `achievements.rider` (`ach-rider-<uid>-<прогонMs>`, 3 попытки,
+  раз (замок-аренда Redis `achievements:sweep:lock`: продление своим токеном перед каждым шагом, курсоры пишет только
+  владелец — проверка токена и запись одним Lua; аренда потеряна — прогон прекращается без записи курсоров,
+  `achievements.sweep_lease_lost`); задачи `achievements.rider` (`ach-rider-<uid>-<прогонMs>`, 3 попытки,
   экспоненциальная пауза; последняя — лог `achievements.server_sync_failed`, failed-набор).
 - **Источники — по одному методу портов владельцев**, окно `(курсор, until]` по keyset (`changed-since.ts`), ≤ 500
   строк за прогон, `until = now − 2 мин` (запас на коммит): ревизии протоколов (`RIDER_RESULTS.revisedRidersAfter` —
-  журнал по uuidv7 `_id`), прошедшие райды (`RIDER_RIDES.startedRidersAfter`, `until = now − 3 ч` — push после
-  поездки, RC-P1), засчитанные заезды (`RIDER_ROUTE_RIDES.passedRidersAfter`, индекс `0044_route_rides_passed_idx`),
-  итоги сезонов (`RIDER_SEASON_STANDINGS.settledRidersAfter` — момент `max(computedAt, endsBefore)` завершённого
-  сезона, строки снимка по `userId`). Полного скана райдеров нет.
+  журнал по uuidv7 `_id`, получатели страницы — один запрос по парам `(raceId, revision)`), прошедшие райды
+  (`RIDER_RIDES.startedRidersAfter`, `until = now − 3 ч` — push после поездки, RC-P1), засчитанные заезды
+  (`RIDER_ROUTE_RIDES.passedRidersAfter` — по моменту записи итога `updatedAt`, а не `checkedAt`: тот берётся до
+  ожидания семафора разбора; индекс `0044_route_rides_passed_idx`), итоги сезонов
+  (`RIDER_SEASON_STANDINGS.settledRidersAfter` — момент `max(computedAt, endsBefore, последняя отмена гонки с
+  коридором)` завершённого сезона: отмена гонки, ждавшей протокола, делает итог полным без пересчёта снимка —
+  `SEASON_RACES.lastCancelledAt`; строки снимка по `userId`). Полного скана райдеров нет.
 - **Кого сверять:** живые аккаунты (`liveUserIds`, RC-P7) ∩ с маркером первой сверки (`syncedAmong`) — первая сверка
   остаётся тихой при открытии приложения. Курсоры (`achievements:cursor:<source>`) двигаются после постановки задач;
   сбой источника — его курсор стоит, прогон падает после остальных.

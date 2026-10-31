@@ -6,14 +6,14 @@ import { ROUTE_RIDES_COLLECTIONS } from '../../modules/route-rides/route-rides.c
 type IndexDef = { key: IndexSpecification; options: CreateIndexesOptions & { name: string } };
 
 /**
- * Засчитанные заезды по моменту итога (achievements-push N2): источник серверной сверки достижений
- * `RIDER_ROUTE_RIDES.passedRidersAfter` — keyset `(checkedAt, _id)` только по `passed` (частичный индекс: зависшие и
- * незасчитанные в него не входят).
+ * Засчитанные заезды по моменту записи итога (achievements-push N2): источник серверной сверки достижений
+ * `RIDER_ROUTE_RIDES.passedRidersAfter` — keyset `(updatedAt, _id)` только по `passed` (частичный индекс: зависшие и
+ * незасчитанные в него не входят). Не `checkedAt`: он берётся до ожидания семафора разбора и отстаёт от коммита.
  */
 export const ROUTE_RIDES_PASSED_INDEX = {
-  key: { checkedAt: 1, _id: 1 },
+  key: { updatedAt: 1, _id: 1 },
   options: {
-    name: 'route_rides_passed_checked_idx',
+    name: 'route_rides_passed_updated_idx',
     partialFilterExpression: { status: 'passed' },
   },
 } as const satisfies IndexDef;

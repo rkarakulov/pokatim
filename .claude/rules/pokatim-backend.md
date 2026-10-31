@@ -345,10 +345,13 @@ paths:
   базы); `AchievementsModule` — + `IdentityModule`, `ProfileCoreModule`, `ResultsCoreModule`, `AchievementsReadModule`,
   `AchievementsSyncModule`. `AchievementsWorkerModule` (`WorkerModule`, achievements-push N2) — серверная сверка:
   очередь `achievements-sync`, `AchievementsSchedules` (`achievements.sweep` `* * * * *` Минск +
-  `achievements.sweep.boot`), `AchievementsSweep` (курсоры Redis `achievements:cursor:<source>` и замок прогона —
-  `AchievementsSyncState`; источники — по одному методу портов владельцев: `RIDER_RESULTS.revisedRidersAfter`,
-  `RIDER_RIDES.startedRidersAfter` (`until = now − rideSettleMs`), `RIDER_ROUTE_RIDES.passedRidersAfter`,
-  `RIDER_SEASON_STANDINGS.settledRidersAfter`; окно и страница — `changed-since.ts` (`changedWithin`, `RiderChanges`),
+  `achievements.sweep.boot`), `AchievementsSweep` (курсоры Redis `achievements:cursor:<source>` и замок-аренда прогона —
+  `AchievementsSyncState`: `extend` своим токеном перед каждым шагом, `setCursors` — проверка токена и запись одним
+  Lua, потеря аренды — `achievements.sweep_lease_lost` без записи курсоров; источники — по одному методу портов
+  владельцев: `RIDER_RESULTS.revisedRidersAfter` (получатели страницы — один запрос `$or` по `(raceId, revision)`),
+  `RIDER_RIDES.startedRidersAfter` (`until = now − rideSettleMs`), `RIDER_ROUTE_RIDES.passedRidersAfter` (по
+  `updatedAt` — моменту записи итога), `RIDER_SEASON_STANDINGS.settledRidersAfter` (событие — `max(computedAt,
+  endsBefore, SEASON_RACES.lastCancelledAt)`); окно и страница — `changed-since.ts` (`changedWithin`, `RiderChanges`),
   пределы — `ACHIEVEMENTS_SERVER_SYNC`; только `IdentityAccounts.liveUserIds` ∩ `syncedAmong`; курсоры — после
   постановки; сбой источника — лог `achievements.sweep_source_failed`, курсор стоит, прогон падает) →
   `achievements.rider` (`AchievementsSyncProcessor`, `concurrency: 4`, 3 попытки, последняя — лог

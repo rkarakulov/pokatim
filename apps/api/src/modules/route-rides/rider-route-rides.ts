@@ -69,8 +69,7 @@ export class RiderRouteRidesService implements RiderRouteRides {
     const last = docs.at(-1);
     return {
       userIds: [...new Set(docs.map((doc) => doc.userId))],
-      next: last ? { at: last.checkedAt, id: last._id } : null,
-      full: docs.length === limit,
+      next: last ? { at: last.updatedAt, id: last._id } : null,
     };
   }
 }

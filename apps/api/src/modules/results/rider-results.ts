@@ -89,17 +89,10 @@ export class RiderResultsService implements RiderResults {
       uuidv7Floor(new Date(until.getTime() + 1)),
       limit,
     );
-    const userIds = new Set<string>();
-    for (const { raceId, revision } of revisions) {
-      for (const userId of await this.repository.protocolRowUserIds(raceId, revision)) {
-        userIds.add(userId);
-      }
-    }
     const last = revisions.at(-1);
     return {
-      userIds: [...userIds],
+      userIds: await this.repository.protocolRowUserIdsOf(revisions),
       next: last ? { at: last.at, id: last._id } : null,
-      full: revisions.length === limit,
     };
   }
 }

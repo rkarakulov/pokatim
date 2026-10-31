@@ -44,8 +44,9 @@ export interface RiderSeasonStandings {
   ): Promise<RiderSeasonOutcome[]>;
   /**
    * Райдеры строк снимков сезонов, итог которых мог измениться в окне `(after, until]` (серверная сверка достижений,
-   * achievements-push): сезон завершён к `until`, у него есть снимок, и момент `max(computedAt, endsBefore)` — пересчёт
-   * снимка завершённого сезона или конец сезона после пересчёта — попал в окно. Порядок — `(момент, seasonId)`, внутри
+   * achievements-push): сезон завершён к `until`, у него есть снимок, и момент события — `max(computedAt, endsBefore,
+   * последняя отмена гонки с коридором ≤ until)` (пересчёт снимка, конец сезона после пересчёта, отмена гонки, ждавшей
+   * протокола: `pending → final` без пересчёта; порт `SEASON_RACES.lastCancelledAt`) — попал в окно. Порядок — `(момент, seasonId)`, внутри
    * сезона — `userId` ↑ (индекс `season_standing_rows_user_idx`); предел — `limit` строк. Курсор: `id` —
    * `<seasonId>` (сезон пройден) или `<seasonId>|<userId>` (продолжение внутри сезона). Только чтение.
    */

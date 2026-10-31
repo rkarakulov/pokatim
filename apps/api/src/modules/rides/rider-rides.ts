@@ -39,7 +39,6 @@ export class RiderRidesService implements RiderRides {
     return {
       userIds: [...new Set(docs.flatMap((doc) => doc.participants.map((p) => p.userId)))],
       next: last ? { at: last.startsAt, id: last._id } : null,
-      full: docs.length === limit,
     };
   }
 }
