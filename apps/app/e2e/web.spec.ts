@@ -552,6 +552,7 @@ test.describe('достижения без сессии (achievements): HTML б�
       expect(html).not.toContain('achievement-card');
       expect(html).not.toContain('story-preview');
       expect(html).not.toContain('og:title');
+      if (path.includes('/story/')) expect(html).toMatch(/<meta name="robots" content="noindex"/);
 
       await page.goto(path);
       if (WITH_API) {
@@ -592,6 +593,7 @@ test('карточка-приглашение /rides/invite/<id> без сесс
   // экран не публичный: без превью карточки (данных сервера в SSR нет — только оболочка экрана) и без OG
   expect(html).not.toContain('story-preview');
   expect(html).not.toContain('og:title');
+  expect(html).toMatch(/<meta name="robots" content="noindex"/);
 
   await page.goto(`/rides/invite/${UNKNOWN_RIDE_ID}`);
   if (WITH_API) {
@@ -611,6 +613,7 @@ test('карточка маршрута /routes/story/<id> без сессии (
   // экран не публичный: без превью карточки и без OG; `noindex` — префикс `/routes/story/` в robots
   expect(html).not.toContain('story-preview');
   expect(html).not.toContain('og:title');
+  expect(html).toMatch(/<meta name="robots" content="noindex"/);
 
   await page.goto(`/routes/story/${UNKNOWN_ROUTE_ID}`);
   if (WITH_API) {

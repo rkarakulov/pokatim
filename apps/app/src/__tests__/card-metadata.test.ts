@@ -18,10 +18,10 @@ describe('мета экранов карточек для сторис', () => {
       { code: 'race_win' },
       'Карточка достижения — Покатим',
     ],
-  ])('%s — noindex, без og:url', async (_name, generate, params, title) => {
+  ])('%s — noindex, без OG', async (_name, generate, params, title) => {
     const meta = await generate(undefined, params);
     expect(meta).toMatchObject({ title, robots: 'noindex' });
     expect(JSON.stringify(meta)).not.toContain(ID);
-    expect(meta?.openGraph).not.toHaveProperty('url');
+    expect(meta).not.toHaveProperty('openGraph');
   });
 });

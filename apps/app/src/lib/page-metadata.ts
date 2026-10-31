@@ -54,10 +54,12 @@ export function publicPageMetadata({
 }
 
 /**
- * Служебный экран только вошедшим (карточки для сторис и приглашения): нейтральная мета без данных объекта и
- * `noindex`. Адреса закрыты и в `robots.txt` (`SEO_DISALLOW`) — `noindex` страхует, если краулер всё же получит HTML.
+ * Служебный экран только вошедшим (карточки для сторис и приглашения): заголовок вкладки, description и `noindex` — без
+ * OG (превью ссылки на экран за входом не нужно) и данных объекта. Адреса закрыты и в `robots.txt` (`SEO_DISALLOW`) —
+ * `noindex` страхует, если краулер всё же получит HTML.
  */
 export const noindexPageMetadata = (title: string): Metadata => ({
-  ...publicPageMetadata({ title, description: t('app.tagline') }),
+  title: `${title} — ${t('app.name')}`,
+  description: t('app.tagline'),
   robots: 'noindex',
 });
