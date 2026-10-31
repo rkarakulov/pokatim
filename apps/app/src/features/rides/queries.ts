@@ -235,6 +235,31 @@ export function useCancelRide(id: string) {
   });
 }
 
+/**
+ * Фото организатора (ride-photo, ADR-0028): `PUT /v1/rides/:id/photo` сырыми байтами (как аватар — `fetch` с Blob на
+ * всех платформах). Ответ `RideView` → кеш `me` и инвалидация `['rides']`: лента, Главная, деталь и статус карточек
+ * приглашения (`['rides','invite',…]` — новый токен `night` с фото).
+ */
+export function useUploadRidePhoto(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Blob) =>
+      withAccessToken((accessToken) => api.uploadRidePhoto(accessToken, id, body)),
+    networkMode: 'always',
+    onSuccess: (view) => applyRideView(queryClient, view),
+  });
+}
+
+/** Удаление фото своего райда (идемпотентно, `POST /v1/rides/:id/photo/delete`) — так же в кеш и инвалидация. */
+export function useDeleteRidePhoto(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => withAccessToken((accessToken) => api.deleteRidePhoto(accessToken, id)),
+    networkMode: 'always',
+    onSuccess: (view) => applyRideView(queryClient, view),
+  });
+}
+
 /** Жалоба (05b): ответ — `viewer.reported`, кеш `me` и инвалидация, как у других мутаций. */
 export function useReportRide(id: string) {
   const queryClient = useQueryClient();

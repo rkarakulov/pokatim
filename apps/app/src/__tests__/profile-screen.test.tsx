@@ -6,8 +6,8 @@ import { fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-li
 import type { ReactNode } from 'react';
 
 import { useSessionStore } from '@/features/auth/session-store';
-import { imagePickerSupported } from '@/features/profile/image-picker-support';
-import { loadImagePicker } from '@/features/profile/load-image-picker';
+import { imagePickerSupported } from '@/features/media/image-picker-support';
+import { loadImagePicker } from '@/features/media/load-image-picker';
 import { api } from '@/lib/api';
 
 import { liveSession, signInForTest } from './auth-fixtures';

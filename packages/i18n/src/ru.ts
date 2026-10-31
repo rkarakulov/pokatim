@@ -2772,6 +2772,22 @@ export const ru = {
   'rideInvite.pace': 'Темп',
   'rideInvite.unitKm': 'км',
   'rideInvite.unitKmh': 'км/ч',
+  // ride-photo PR B: фото организатора на экране карточки-приглашения ([ASSUMPTION] — копи по прототипу)
+  'rideInvite.photo.title': 'Своё фото',
+  'rideInvite.photo.hint':
+    'Фото — под затемнением на шаблоне «Ночь» и на герое райда в ленте. Геометки и данные камеры мы уберём',
+  'rideInvite.photo.add': 'Добавить своё фото',
+  'rideInvite.photo.replace': 'Заменить фото',
+  'rideInvite.photo.delete': 'Удалить фото',
+  'rideInvite.photo.error.IMAGE_FORMAT_UNSUPPORTED': 'Выберите фото в формате JPEG, PNG или WebP',
+  'rideInvite.photo.error.IMAGE_TOO_LARGE': 'Фото больше 10 МБ — выберите фото поменьше',
+  'rideInvite.photo.error.IMAGE_INVALID': 'Не удалось обработать фото — выберите другое',
+  'rideInvite.photo.error.tooSmall':
+    'Фото слишком маленькое — нужно хотя бы 400 пикселей по короткой стороне',
+  'rideInvite.photo.error.rateLimited': 'Слишком много загрузок фото. Повторите через {time}',
+  'rideInvite.photo.error.busy': 'Фото сейчас обрабатываются. Подождите несколько секунд',
+  'rideInvite.photo.error.invalidState': 'Фото можно добавить только к будущему райду',
+  'rideInvite.photo.error.updateApp': 'Чтобы выбрать фото, обновите приложение',
   'achievementCard.title': 'Карточка достижения',
   'achievementCard.kicker': 'Достижение',
   'achievementCard.kickerLevel': 'Достижение · {level}',
