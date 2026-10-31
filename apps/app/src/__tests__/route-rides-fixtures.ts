@@ -71,6 +71,7 @@ export const rideDetail = (overrides: Partial<RouteRideDetail> = {}): RouteRideD
   },
   createdAt: AT,
   checkedAt: AT,
+  sections: [],
   ...overrides,
 });
 
