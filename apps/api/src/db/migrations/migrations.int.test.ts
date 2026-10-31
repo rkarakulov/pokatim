@@ -57,6 +57,8 @@ import {
 import { ACHIEVEMENT_SEASON_INDEXES, achievementsSeasonal } from './0043_achievements_seasonal';
 import { ROUTE_RIDES_PASSED_INDEX, routeRidesPassedIdx } from './0044_route_rides_passed_idx';
 import { social } from './0045_social';
+import { ridePhotos } from './0046_ride_photos';
+import { RIDE_PHOTOS_COLLECTIONS } from '../../modules/rides/ride-photos.collection';
 import { SOCIAL_COLLECTIONS } from '../../modules/social/social.collection';
 import { PRODUCT_EVENTS_COLLECTIONS } from '../../modules/product-events/product-events.collection';
 import { TICKETS_COLLECTIONS } from '../../modules/tickets/tickets.collection';
@@ -176,6 +178,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0043_achievements_seasonal',
       '0044_route_rides_passed_idx',
       '0045_social',
+      '0046_ride_photos',
     ]);
   });
 
@@ -1906,9 +1909,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     expect(await indexesOf(ROUTE_RIDES_COLLECTIONS.rides)).toEqual(expected);
   });
 
-  it('0045_social: коллекции и индексы «Свои» и журнала метрик; последняя; уникальности; повторный up — без изменений', async () => {
+  it('0045_social: коллекции и индексы «Свои» и журнала метрик; уникальности; повторный up — без изменений', async () => {
     const ids = migrations.map((migration) => migration.id);
-    expect(ids.at(-1)).toBe('0045_social');
     expect(ids.indexOf('0045_social')).toBe(ids.indexOf('0044_route_rides_passed_idx') + 1);
     const index = (key: Record<string, number>, unique = false) => ({
       key,
@@ -1981,5 +1983,40 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     for (const [name, indexes] of Object.entries(expected)) {
       expect(await indexesOf(name)).toEqual(indexes);
     }
+  });
+
+  it('0046_ride_photos: коллекция и индексы фото райда; последняя; одно фото на райд; повторный up — без изменений', async () => {
+    const ids = migrations.map((migration) => migration.id);
+    expect(ids.at(-1)).toBe('0046_ride_photos');
+    expect(ids.indexOf('0046_ride_photos')).toBe(ids.indexOf('0045_social') + 1);
+    const expected = {
+      ride_photos_ride_unique: {
+        key: { rideId: 1 },
+        unique: true,
+        partialFilterExpression: undefined,
+        expireAfterSeconds: undefined,
+      },
+      ride_photos_organizer_idx: {
+        key: { organizerUserId: 1 },
+        unique: false,
+        partialFilterExpression: undefined,
+        expireAfterSeconds: undefined,
+      },
+    };
+    expect(await indexesOf(RIDE_PHOTOS_COLLECTIONS.photos)).toEqual(expected);
+    const photos = h.db.collection<Record<string, unknown> & { _id: string }>(
+      RIDE_PHOTOS_COLLECTIONS.photos,
+    );
+    try {
+      await photos.insertOne({ _id: 'p-0046-1', rideId: 'ride-0046', organizerUserId: 'u-a' });
+      await expect(
+        photos.insertOne({ _id: 'p-0046-2', rideId: 'ride-0046', organizerUserId: 'u-a' }),
+      ).rejects.toThrow(/duplicate key/);
+    } finally {
+      await photos.deleteMany({ _id: /^p-0046-/ });
+    }
+    await ridePhotos.up(h.db);
+    await ridePhotos.up(h.db);
+    expect(await indexesOf(RIDE_PHOTOS_COLLECTIONS.photos)).toEqual(expected);
   });
 });
