@@ -34,29 +34,29 @@ catalogs:
       specifier: 1.64.1
       version: 1.64.1
     '@rkarakulov/api-client-core':
-      specifier: 0.7.1
-      version: 0.7.1
+      specifier: 0.8.0
+      version: 0.8.0
     '@rkarakulov/api-kit':
-      specifier: 0.7.1
-      version: 0.7.1
+      specifier: 0.8.0
+      version: 0.8.0
     '@rkarakulov/config':
-      specifier: 0.7.1
-      version: 0.7.1
+      specifier: 0.8.0
+      version: 0.8.0
     '@rkarakulov/contracts-core':
-      specifier: 0.7.1
-      version: 0.7.1
+      specifier: 0.8.0
+      version: 0.8.0
     '@rkarakulov/design-tokens':
-      specifier: 0.7.1
-      version: 0.7.1
+      specifier: 0.8.0
+      version: 0.8.0
     '@rkarakulov/i18n-core':
-      specifier: 0.7.1
-      version: 0.7.1
+      specifier: 0.8.0
+      version: 0.8.0
     '@rkarakulov/test-kit':
-      specifier: 0.7.1
-      version: 0.7.1
+      specifier: 0.8.0
+      version: 0.8.0
     '@rkarakulov/ui':
-      specifier: 0.7.1
-      version: 0.7.1
+      specifier: 0.8.0
+      version: 0.8.0
     '@swc/core':
       specifier: ^1.16.18
       version: 1.16.18
@@ -147,7 +147,7 @@ importers:
         version: 9.39.5
       '@rkarakulov/config':
         specifier: 'catalog:'
-        version: 0.7.1(@eslint/js@9.39.5)(eslint-config-expo@58.0.4(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))(eslint-plugin-react-hooks@7.1.1(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1))(eslint@9.39.5(supports-color@8.1.1))(globals@17.13.0)(typescript-eslint@8.72.0(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))
+        version: 0.8.0(@eslint/js@9.39.5)(eslint-config-expo@58.0.4(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))(eslint-plugin-react-hooks@7.1.1(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1))(eslint@9.39.5(supports-color@8.1.1))(globals@17.13.0)(typescript-eslint@8.72.0(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))
       dependency-cruiser:
         specifier: 'catalog:'
         version: 18.7.0
@@ -244,7 +244,7 @@ importers:
         version: 1.64.1
       '@rkarakulov/config':
         specifier: 'catalog:'
-        version: 0.7.1(@eslint/js@9.39.5)(eslint-config-expo@58.0.4(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))(eslint-plugin-react-hooks@7.1.1(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1))(eslint@9.39.5(supports-color@8.1.1))(globals@17.13.0)(typescript-eslint@8.72.0(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))
+        version: 0.8.0(@eslint/js@9.39.5)(eslint-config-expo@58.0.4(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))(eslint-plugin-react-hooks@7.1.1(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1))(eslint@9.39.5(supports-color@8.1.1))(globals@17.13.0)(typescript-eslint@8.72.0(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))
       '@testing-library/dom':
         specifier: ^10.4.2
         version: 10.4.2
@@ -343,7 +343,7 @@ importers:
         version: 2.6.2
       '@rkarakulov/api-kit':
         specifier: 'catalog:'
-        version: 0.7.1(@nestjs/bullmq@12.0.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@12.2.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(reflect-metadata@0.2.2)(rxjs@7.8.2))(bullmq@6.4.0(ioredis@6.0.0(supports-color@8.1.1))))(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@12.2.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/platform-fastify@12.2.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@12.2.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(reflect-metadata@0.2.2)(rxjs@7.8.2)))(bullmq@6.4.0(ioredis@6.0.0(supports-color@8.1.1)))(ioredis@6.0.0(supports-color@8.1.1))(mongodb@7.7.0)(reflect-metadata@0.2.2)(rxjs@7.8.2)(zod@4.6.7)
+        version: 0.8.0(@nestjs/bullmq@12.0.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@12.2.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(reflect-metadata@0.2.2)(rxjs@7.8.2))(bullmq@6.4.0(ioredis@6.0.0(supports-color@8.1.1))))(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@12.2.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/platform-fastify@12.2.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@12.2.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(reflect-metadata@0.2.2)(rxjs@7.8.2)))(bullmq@6.4.0(ioredis@6.0.0(supports-color@8.1.1)))(ioredis@6.0.0(supports-color@8.1.1))(mongodb@7.7.0)(reflect-metadata@0.2.2)(rxjs@7.8.2)(zod@4.6.7)
       bullmq:
         specifier: 'catalog:'
         version: 6.4.0(ioredis@6.0.0(supports-color@8.1.1))
@@ -380,10 +380,10 @@ importers:
         version: 12.2.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@12.2.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(reflect-metadata@0.2.2)(rxjs@7.8.2))
       '@rkarakulov/config':
         specifier: 'catalog:'
-        version: 0.7.1(@eslint/js@9.39.5)(eslint-config-expo@58.0.4(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))(eslint-plugin-react-hooks@7.1.1(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1))(eslint@9.39.5(supports-color@8.1.1))(globals@17.13.0)(typescript-eslint@8.72.0(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))
+        version: 0.8.0(@eslint/js@9.39.5)(eslint-config-expo@58.0.4(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))(eslint-plugin-react-hooks@7.1.1(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1))(eslint@9.39.5(supports-color@8.1.1))(globals@17.13.0)(typescript-eslint@8.72.0(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))
       '@rkarakulov/test-kit':
         specifier: 'catalog:'
-        version: 0.7.1(255bbbea1ce9c69f890bf5c510273b24)
+        version: 0.8.0(49406136f5abe3cacf7592f2751ff0c0)
       '@swc/cli':
         specifier: ^0.8.0
         version: 0.8.1(@swc/core@1.16.18)(chokidar@5.0.0)(supports-color@8.1.1)
@@ -470,7 +470,7 @@ importers:
         version: 12.0.1(react-native@0.88.0(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.88.0(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0)
       '@rkarakulov/ui':
         specifier: 'catalog:'
-        version: 0.7.1(@react-native-community/datetimepicker@9.2.1(expo@58.0.16)(react-native@0.88.0(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.88.0(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react-native-web@0.21.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-native@0.88.0(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.88.0(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0)(zod@4.6.7)
+        version: 0.8.0(@react-native-community/datetimepicker@9.2.1(expo@58.0.16)(react-native@0.88.0(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.88.0(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react-native-web@0.21.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-native@0.88.0(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.88.0(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0)(zod@4.6.7)
       '@tanstack/react-query':
         specifier: 'catalog:'
         version: 5.104.5(@types/react@19.3.0)(react@19.3.0)
@@ -600,7 +600,7 @@ importers:
         version: 0.88.0(@babel/core@7.29.7(supports-color@8.1.1))(react@19.3.0)(supports-color@8.1.1)
       '@rkarakulov/config':
         specifier: 'catalog:'
-        version: 0.7.1(@eslint/js@9.39.5)(eslint-config-expo@58.0.4(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))(eslint-plugin-react-hooks@7.1.1(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1))(eslint@9.39.5(supports-color@8.1.1))(globals@17.13.0)(typescript-eslint@8.72.0(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))
+        version: 0.8.0(@eslint/js@9.39.5)(eslint-config-expo@58.0.4(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))(eslint-plugin-react-hooks@7.1.1(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1))(eslint@9.39.5(supports-color@8.1.1))(globals@17.13.0)(typescript-eslint@8.72.0(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))
       '@testing-library/react':
         specifier: 'catalog:'
         version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -645,14 +645,14 @@ importers:
         version: link:../contracts
       '@rkarakulov/api-client-core':
         specifier: 'catalog:'
-        version: 0.7.1(zod@4.6.7)
+        version: 0.8.0(zod@4.6.7)
       zod:
         specifier: 'catalog:'
         version: 4.6.7
     devDependencies:
       '@rkarakulov/config':
         specifier: 'catalog:'
-        version: 0.7.1(@eslint/js@9.39.5)(eslint-config-expo@58.0.4(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))(eslint-plugin-react-hooks@7.1.1(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1))(eslint@9.39.5(supports-color@8.1.1))(globals@17.13.0)(typescript-eslint@8.72.0(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))
+        version: 0.8.0(@eslint/js@9.39.5)(eslint-config-expo@58.0.4(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))(eslint-plugin-react-hooks@7.1.1(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1))(eslint@9.39.5(supports-color@8.1.1))(globals@17.13.0)(typescript-eslint@8.72.0(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
@@ -664,14 +664,14 @@ importers:
     dependencies:
       '@rkarakulov/contracts-core':
         specifier: 'catalog:'
-        version: 0.7.1(zod@4.6.7)
+        version: 0.8.0(zod@4.6.7)
       zod:
         specifier: 'catalog:'
         version: 4.6.7
     devDependencies:
       '@rkarakulov/config':
         specifier: 'catalog:'
-        version: 0.7.1(@eslint/js@9.39.5)(eslint-config-expo@58.0.4(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))(eslint-plugin-react-hooks@7.1.1(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1))(eslint@9.39.5(supports-color@8.1.1))(globals@17.13.0)(typescript-eslint@8.72.0(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))
+        version: 0.8.0(@eslint/js@9.39.5)(eslint-config-expo@58.0.4(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))(eslint-plugin-react-hooks@7.1.1(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1))(eslint@9.39.5(supports-color@8.1.1))(globals@17.13.0)(typescript-eslint@8.72.0(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
@@ -683,11 +683,11 @@ importers:
     dependencies:
       '@rkarakulov/design-tokens':
         specifier: 'catalog:'
-        version: 0.7.1
+        version: 0.8.0
     devDependencies:
       '@rkarakulov/config':
         specifier: 'catalog:'
-        version: 0.7.1(@eslint/js@9.39.5)(eslint-config-expo@58.0.4(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))(eslint-plugin-react-hooks@7.1.1(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1))(eslint@9.39.5(supports-color@8.1.1))(globals@17.13.0)(typescript-eslint@8.72.0(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))
+        version: 0.8.0(@eslint/js@9.39.5)(eslint-config-expo@58.0.4(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))(eslint-plugin-react-hooks@7.1.1(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1))(eslint@9.39.5(supports-color@8.1.1))(globals@17.13.0)(typescript-eslint@8.72.0(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
@@ -702,11 +702,11 @@ importers:
         version: link:../contracts
       '@rkarakulov/i18n-core':
         specifier: 'catalog:'
-        version: 0.7.1
+        version: 0.8.0
     devDependencies:
       '@rkarakulov/config':
         specifier: 'catalog:'
-        version: 0.7.1(@eslint/js@9.39.5)(eslint-config-expo@58.0.4(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))(eslint-plugin-react-hooks@7.1.1(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1))(eslint@9.39.5(supports-color@8.1.1))(globals@17.13.0)(typescript-eslint@8.72.0(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))
+        version: 0.8.0(@eslint/js@9.39.5)(eslint-config-expo@58.0.4(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))(eslint-plugin-react-hooks@7.1.1(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1))(eslint@9.39.5(supports-color@8.1.1))(globals@17.13.0)(typescript-eslint@8.72.0(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
@@ -737,7 +737,7 @@ importers:
         version: 26.2.1
       '@rkarakulov/config':
         specifier: 'catalog:'
-        version: 0.7.1(@eslint/js@9.39.5)(eslint-config-expo@58.0.4(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))(eslint-plugin-react-hooks@7.1.1(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1))(eslint@9.39.5(supports-color@8.1.1))(globals@17.13.0)(typescript-eslint@8.72.0(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))
+        version: 0.8.0(@eslint/js@9.39.5)(eslint-config-expo@58.0.4(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))(eslint-plugin-react-hooks@7.1.1(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1))(eslint@9.39.5(supports-color@8.1.1))(globals@17.13.0)(typescript-eslint@8.72.0(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))
       '@types/geojson':
         specifier: ^7946.0.16
         version: 7946.0.16
@@ -768,7 +768,7 @@ importers:
     devDependencies:
       '@rkarakulov/config':
         specifier: 'catalog:'
-        version: 0.7.1(@eslint/js@9.39.5)(eslint-config-expo@58.0.4(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))(eslint-plugin-react-hooks@7.1.1(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1))(eslint@9.39.5(supports-color@8.1.1))(globals@17.13.0)(typescript-eslint@8.72.0(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))
+        version: 0.8.0(@eslint/js@9.39.5)(eslint-config-expo@58.0.4(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))(eslint-plugin-react-hooks@7.1.1(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1))(eslint@9.39.5(supports-color@8.1.1))(globals@17.13.0)(typescript-eslint@8.72.0(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))
       '@types/node':
         specifier: 'catalog:'
         version: 24.19.2
@@ -3346,13 +3346,13 @@ packages:
     resolution: {integrity: sha512-xBaJish5OeGmniDj9cW5PRa/PtmuVU3ziqrbr5xJj901ZDN4TosrVaNZpEiLZAxdfnhAe7uQ7QFWfjPe9d9K2Q==}
     engines: {node: '>= 10'}
 
-  '@rkarakulov/api-client-core@0.7.1':
-    resolution: {integrity: sha512-LAA621iQDPLqsfMeYicXIS7xlNnxDPQ7SkBiWko/NdQOkbyeO7sBtBAVEJUfdun+nTdQNPU2aN0Ye1UZx17uNQ==, tarball: https://npm.pkg.github.com/download/@rkarakulov/api-client-core/0.7.1/563f57145620f1c21d7462a945430b0840e6618a}
+  '@rkarakulov/api-client-core@0.8.0':
+    resolution: {integrity: sha512-tznQHZvkTBHQ6MB6iRpShDSFW4ec4J1Tw6K4K07jnpE0GNyy0KSDYqYuQIiJaRPxCq0OX9dZwkTOdVZQAL/plw==, tarball: https://npm.pkg.github.com/download/@rkarakulov/api-client-core/0.8.0/621cde5e29bd3fd9259fe82d730f9b1467eee80e}
     peerDependencies:
       zod: ^4.6.7
 
-  '@rkarakulov/api-kit@0.7.1':
-    resolution: {integrity: sha512-S4SYX+68k8IxFYKZ3NNrz1lG+8RVKZv0PCLJOVnSA5CNoYLFFSiIBLsAzh81ZLylyPQy+Iw72a47i0wVr0hCGw==, tarball: https://npm.pkg.github.com/download/@rkarakulov/api-kit/0.7.1/92991d80cfb5a258915fd98b3f7f4362ad2c036e}
+  '@rkarakulov/api-kit@0.8.0':
+    resolution: {integrity: sha512-SsevZqxX0DfjOagTwGLRcPlu69PAXSZzHyE88Z+Yn0NmlsQ7W9J9UUxnQNuumKuPX58zm/V54ZzKkHO4mbyThw==, tarball: https://npm.pkg.github.com/download/@rkarakulov/api-kit/0.8.0/e1f3c08eabcf8377bc8964fbde16587b43b6bbca}
     peerDependencies:
       '@nestjs/bullmq': ^12.0.0
       '@nestjs/common': ^12.2.0
@@ -3372,8 +3372,8 @@ packages:
       pg:
         optional: true
 
-  '@rkarakulov/config@0.7.1':
-    resolution: {integrity: sha512-dnpb65EAPUeFlgXIwfi63Ob6YxzJU5BItPsqs3SjyxJDFKUdFLw/7F3aYblQIzsbmUE0yOgdV1FH23pjT6BrpQ==, tarball: https://npm.pkg.github.com/download/@rkarakulov/config/0.7.1/7f8022efb0db0a6056984fa6bc3f4806ba84453f}
+  '@rkarakulov/config@0.8.0':
+    resolution: {integrity: sha512-U7O0q/ChqWpVckLSbLH167yEunjoDiGaDOJ2iOvcc0E35Y83/Yqe2b6Y6MeuLYiRkqKSJtypSp+GG0fD6BB1BA==, tarball: https://npm.pkg.github.com/download/@rkarakulov/config/0.8.0/9e1c2fe623e3959b92415eef00b5e2ab5104ecc6}
     peerDependencies:
       '@eslint/js': ^9.39.5
       eslint: ^9.39.5
@@ -3382,19 +3382,19 @@ packages:
       globals: '>=17'
       typescript-eslint: ^8.72.0
 
-  '@rkarakulov/contracts-core@0.7.1':
-    resolution: {integrity: sha512-4dnd+yzF/w2QVtGNYGk7c76UgL/42Yij0F3kjTgbUf8dr/LwPwsXkg7SeuK6PhHxdpPjRtY+beSdQAgdd1H56g==, tarball: https://npm.pkg.github.com/download/@rkarakulov/contracts-core/0.7.1/7b0cfbbc8584811d957cff8990a5e03955093af3}
+  '@rkarakulov/contracts-core@0.8.0':
+    resolution: {integrity: sha512-gaMypjg1MsFR6hb6UoYhnrAgvghzXvLVJGJsQ6BLq0QebmFca5VPvvPpBxIzC6NJ9o3nbZ+n9j6TSY1TUa+GmA==, tarball: https://npm.pkg.github.com/download/@rkarakulov/contracts-core/0.8.0/7c00c1cd67c3c2e754388d69a543cf7db39e9b32}
     peerDependencies:
       zod: ^4.6.7
 
-  '@rkarakulov/design-tokens@0.7.1':
-    resolution: {integrity: sha512-lfTWany11PM7HfgL2L1aBlVNZ2qfZHD4FtGLlLVx/AIcvvbkcSu12SZFVzXaDqR+XbbTBZZk8HSeluEqhkac1w==, tarball: https://npm.pkg.github.com/download/@rkarakulov/design-tokens/0.7.1/92e194a1818d635973bacefcaf63df68cba91b27}
+  '@rkarakulov/design-tokens@0.8.0':
+    resolution: {integrity: sha512-tthJfTYFk0JQ3SvNI8w4niZTBOdgfMUJK2NpOlasD3PLJf4luD889XcDo4Mc0MrUZ6DhaawAnEIKjn0zUCXtaQ==, tarball: https://npm.pkg.github.com/download/@rkarakulov/design-tokens/0.8.0/c409060fcaf3b6f3b35cd76eff7cd6b866060a05}
 
-  '@rkarakulov/i18n-core@0.7.1':
-    resolution: {integrity: sha512-Jo5M8jGQzYQXydguneKpN7BJQsMXej59KL27HHkPDpj/+aj/+vJZrQerEU2mbAv5gLpdq55ol2Ph6C6qTKSRpA==, tarball: https://npm.pkg.github.com/download/@rkarakulov/i18n-core/0.7.1/43b126ff8f946720b4ac80dfacd80e809cd3c9f3}
+  '@rkarakulov/i18n-core@0.8.0':
+    resolution: {integrity: sha512-nf8qIePy9l+RPLr7KV5/ivN/owVPdufAY0yQa8hyffdhIRLxacLLlKpn9Jupl95mbtPMwxnMLlishIre3VsGog==, tarball: https://npm.pkg.github.com/download/@rkarakulov/i18n-core/0.8.0/9b6a6e7f9698943dd79fad1decad5e2b4445a177}
 
-  '@rkarakulov/test-kit@0.7.1':
-    resolution: {integrity: sha512-yi4HUHy3sYmWLsX6zt7yk+64TdI/iFoHQ3oQ0PUe75QrFLQT0uxKMHl+nl7VHhbI0Dkimo6yFj3jqVnkhY0EpA==, tarball: https://npm.pkg.github.com/download/@rkarakulov/test-kit/0.7.1/e9e16cb0e2b9d0e5c7feb2e5bc2f04476e510259}
+  '@rkarakulov/test-kit@0.8.0':
+    resolution: {integrity: sha512-3U5duZa7mFJySbAdPXeDcbc7DAgDpWzxw+0k4GLplinuAkyAl0T0xIbQyIF4zWzE827+5uVKD6LqOYEc53CX2g==, tarball: https://npm.pkg.github.com/download/@rkarakulov/test-kit/0.8.0/fb51bf3cb3d455b72a0f39093830342fb0a1101d}
     peerDependencies:
       '@nestjs/bullmq': ^12.0.0
       '@nestjs/common': ^12.2.0
@@ -3415,8 +3415,8 @@ packages:
       pg:
         optional: true
 
-  '@rkarakulov/ui@0.7.1':
-    resolution: {integrity: sha512-S/+XHh5hVB1MZRlxjlZUnEjFG/57q2EfSueJ2AjsxnXXPRVXY7b8wZMq0c9kCpq/lWmrc8Sw1mDlkJ90gjJLcQ==, tarball: https://npm.pkg.github.com/download/@rkarakulov/ui/0.7.1/1348aa706758dbbe33c82d7e088e2c8998b8ea00}
+  '@rkarakulov/ui@0.8.0':
+    resolution: {integrity: sha512-VFSXQrmOyh8XfLAK1+yxGkP7gNh7jRgP3ySDmHw04lv3N5gbTaqoF4oux8tTL9Czyf+AyfUdMrw2SNe/vNHmOQ==, tarball: https://npm.pkg.github.com/download/@rkarakulov/ui/0.8.0/ad703dfdfdca98e064990928cebebb7c3ea32ee4}
     peerDependencies:
       '@react-native-community/datetimepicker': '>=9.2.1'
       react: ^19.3.0
@@ -11577,18 +11577,18 @@ snapshots:
       '@resvg/resvg-js-win32-ia32-msvc': 2.6.2
       '@resvg/resvg-js-win32-x64-msvc': 2.6.2
 
-  '@rkarakulov/api-client-core@0.7.1(zod@4.6.7)':
+  '@rkarakulov/api-client-core@0.8.0(zod@4.6.7)':
     dependencies:
-      '@rkarakulov/contracts-core': 0.7.1(zod@4.6.7)
+      '@rkarakulov/contracts-core': 0.8.0(zod@4.6.7)
       zod: 4.6.7
 
-  '@rkarakulov/api-kit@0.7.1(@nestjs/bullmq@12.0.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@12.2.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(reflect-metadata@0.2.2)(rxjs@7.8.2))(bullmq@6.4.0(ioredis@6.0.0(supports-color@8.1.1))))(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@12.2.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/platform-fastify@12.2.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@12.2.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(reflect-metadata@0.2.2)(rxjs@7.8.2)))(bullmq@6.4.0(ioredis@6.0.0(supports-color@8.1.1)))(ioredis@6.0.0(supports-color@8.1.1))(mongodb@7.7.0)(reflect-metadata@0.2.2)(rxjs@7.8.2)(zod@4.6.7)':
+  '@rkarakulov/api-kit@0.8.0(@nestjs/bullmq@12.0.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@12.2.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(reflect-metadata@0.2.2)(rxjs@7.8.2))(bullmq@6.4.0(ioredis@6.0.0(supports-color@8.1.1))))(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@12.2.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/platform-fastify@12.2.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@12.2.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(reflect-metadata@0.2.2)(rxjs@7.8.2)))(bullmq@6.4.0(ioredis@6.0.0(supports-color@8.1.1)))(ioredis@6.0.0(supports-color@8.1.1))(mongodb@7.7.0)(reflect-metadata@0.2.2)(rxjs@7.8.2)(zod@4.6.7)':
     dependencies:
       '@nestjs/bullmq': 12.0.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@12.2.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(reflect-metadata@0.2.2)(rxjs@7.8.2))(bullmq@6.4.0(ioredis@6.0.0(supports-color@8.1.1)))
       '@nestjs/common': 12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1)
       '@nestjs/core': 12.2.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(reflect-metadata@0.2.2)(rxjs@7.8.2)
       '@nestjs/platform-fastify': 12.2.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@12.2.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(reflect-metadata@0.2.2)(rxjs@7.8.2))
-      '@rkarakulov/contracts-core': 0.7.1(zod@4.6.7)
+      '@rkarakulov/contracts-core': 0.8.0(zod@4.6.7)
       '@types/nodemailer': 8.0.2
       bullmq: 6.4.0(ioredis@6.0.0(supports-color@8.1.1))
       ioredis: 6.0.0(supports-color@8.1.1)
@@ -11598,7 +11598,7 @@ snapshots:
       rxjs: 7.8.2
       zod: 4.6.7
 
-  '@rkarakulov/config@0.7.1(@eslint/js@9.39.5)(eslint-config-expo@58.0.4(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))(eslint-plugin-react-hooks@7.1.1(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1))(eslint@9.39.5(supports-color@8.1.1))(globals@17.13.0)(typescript-eslint@8.72.0(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))':
+  '@rkarakulov/config@0.8.0(@eslint/js@9.39.5)(eslint-config-expo@58.0.4(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))(eslint-plugin-react-hooks@7.1.1(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1))(eslint@9.39.5(supports-color@8.1.1))(globals@17.13.0)(typescript-eslint@8.72.0(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3))':
     dependencies:
       '@eslint/js': 9.39.5
       eslint: 9.39.5(supports-color@8.1.1)
@@ -11607,34 +11607,34 @@ snapshots:
       globals: 17.13.0
       typescript-eslint: 8.72.0(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3)
 
-  '@rkarakulov/contracts-core@0.7.1(zod@4.6.7)':
+  '@rkarakulov/contracts-core@0.8.0(zod@4.6.7)':
     dependencies:
       zod: 4.6.7
 
-  '@rkarakulov/design-tokens@0.7.1': {}
+  '@rkarakulov/design-tokens@0.8.0': {}
 
-  '@rkarakulov/i18n-core@0.7.1': {}
+  '@rkarakulov/i18n-core@0.8.0': {}
 
-  '@rkarakulov/test-kit@0.7.1(255bbbea1ce9c69f890bf5c510273b24)':
+  '@rkarakulov/test-kit@0.8.0(49406136f5abe3cacf7592f2751ff0c0)':
     dependencies:
       '@nestjs/bullmq': 12.0.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@12.2.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(reflect-metadata@0.2.2)(rxjs@7.8.2))(bullmq@6.4.0(ioredis@6.0.0(supports-color@8.1.1)))
       '@nestjs/common': 12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1)
       '@nestjs/core': 12.2.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(reflect-metadata@0.2.2)(rxjs@7.8.2)
       '@nestjs/platform-fastify': 12.2.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@12.2.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(reflect-metadata@0.2.2)(rxjs@7.8.2))
       '@nestjs/testing': 12.2.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@12.2.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(reflect-metadata@0.2.2)(rxjs@7.8.2))
-      '@rkarakulov/api-kit': 0.7.1(@nestjs/bullmq@12.0.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@12.2.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(reflect-metadata@0.2.2)(rxjs@7.8.2))(bullmq@6.4.0(ioredis@6.0.0(supports-color@8.1.1))))(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@12.2.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/platform-fastify@12.2.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@12.2.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(reflect-metadata@0.2.2)(rxjs@7.8.2)))(bullmq@6.4.0(ioredis@6.0.0(supports-color@8.1.1)))(ioredis@6.0.0(supports-color@8.1.1))(mongodb@7.7.0)(reflect-metadata@0.2.2)(rxjs@7.8.2)(zod@4.6.7)
+      '@rkarakulov/api-kit': 0.8.0(@nestjs/bullmq@12.0.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@12.2.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(reflect-metadata@0.2.2)(rxjs@7.8.2))(bullmq@6.4.0(ioredis@6.0.0(supports-color@8.1.1))))(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@12.2.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/platform-fastify@12.2.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@12.2.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(reflect-metadata@0.2.2)(rxjs@7.8.2)))(bullmq@6.4.0(ioredis@6.0.0(supports-color@8.1.1)))(ioredis@6.0.0(supports-color@8.1.1))(mongodb@7.7.0)(reflect-metadata@0.2.2)(rxjs@7.8.2)(zod@4.6.7)
       bullmq: 6.4.0(ioredis@6.0.0(supports-color@8.1.1))
       ioredis: 6.0.0(supports-color@8.1.1)
       mongodb: 7.7.0
       reflect-metadata: 0.2.2
       rxjs: 7.8.2
 
-  '@rkarakulov/ui@0.7.1(@react-native-community/datetimepicker@9.2.1(expo@58.0.16)(react-native@0.88.0(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.88.0(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react-native-web@0.21.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-native@0.88.0(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.88.0(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0)(zod@4.6.7)':
+  '@rkarakulov/ui@0.8.0(@react-native-community/datetimepicker@9.2.1(expo@58.0.16)(react-native@0.88.0(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.88.0(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react-native-web@0.21.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-native@0.88.0(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.88.0(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0)(zod@4.6.7)':
     dependencies:
       '@react-native-community/datetimepicker': 9.2.1(expo@58.0.16)(react-native@0.88.0(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.88.0(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1))(react@19.3.0)
-      '@rkarakulov/api-client-core': 0.7.1(zod@4.6.7)
-      '@rkarakulov/design-tokens': 0.7.1
-      '@rkarakulov/i18n-core': 0.7.1
+      '@rkarakulov/api-client-core': 0.8.0(zod@4.6.7)
+      '@rkarakulov/design-tokens': 0.8.0
+      '@rkarakulov/i18n-core': 0.8.0
       react: 19.3.0
       react-dom: 19.3.0(react@19.3.0)
       react-native: 0.88.0(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.88.0(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.3.0)(react@19.3.0)(supports-color@8.1.1)

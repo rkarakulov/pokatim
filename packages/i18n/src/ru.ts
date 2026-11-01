@@ -3360,7 +3360,7 @@ export const ru = {
   },
   'social.going.kicker': 'Идёт',
   'social.connect': 'В свои',
-  'social.connected': 'В своих',
+  'social.connected': 'Убрать из своих',
   'social.count': 'Свои · {count}',
   'social.title': 'Свои',
   'social.row.manual': 'Добавлены вами',
