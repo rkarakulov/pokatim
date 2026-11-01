@@ -147,12 +147,15 @@ paths:
   нет `WEB_ORIGIN` — ни запросов, ни картинки. Сезон и профиль райдера — своя картинка через `ownOgImage` (схема id
   по виду — `OG_CARD_ID`); мета райдера — без ПДн, `publicId` только в URL `og:image`. Свой fetch и расчёт версии в приложении — запрещены.
 - `robots.txt` и `sitemap.xml` (landing-seo) — API-маршруты `src/app/{robots.txt,sitemap.xml}+api.ts`, правила —
-  `src/lib/seo.ts`. **Новый экран в `src/app`** — классифицируй: только вошедшим, онбординг, токен в URL — префикс в
+  `src/lib/seo.ts`. `sitemap.xml` — sitemap index (sitemap-index); дочерние карты — **в корне**, тот же маршрут с
+  query (`?kind=static`, `?kind=<вид>&page=<n>`, разбор — `parseSitemapQuery`): карта по протоколу перечисляет только URL
+  ниже своего каталога, подкаталог `/sitemap/…` для `/races/…` недействителен. Ответы — `src/lib/sitemap-route.ts`.
+  **Новый экран в `src/app`** — классифицируй: только вошедшим, онбординг, токен в URL — префикс в
   `SEO_DISALLOW`; публичный — в `PUBLIC` сторожа `__tests__/seo-routes.test.ts`. Публичную страницу с `noindex` в мета
   не закрывай (краулер не увидит `noindex`); исключения — ссылки с токеном и экраны только для вошедших (карточки для
   сторис, приглашение райда: `Disallow` + `noindexPageMetadata` как защита в глубину). `/v1/` не закрывай: Googlebot при рендере
   соблюдает robots и для fetch — публичный экран потеряет данные из API. Новый индексируемый вид объекта — `SITEMAP_KINDS` в contracts и
-  `GET /v1/sitemap` (`sharing`, порты владельцев).
+  источник `SitemapService` (`sharing`, `sitemapRange` порта владельца по `_id` ↑ + индекс `(status, _id, updatedAt)`).
 - Гостевой лендинг `/welcome` (guest-landing, `docs/product/landing.md`) — корневой `src/app/welcome.tsx` в том же
   `Stack.Protected guard={!signedIn}`, что `(onboarding)` (не в группе: `initialRouteName` группы не трогаем); экран —
   `features/landing/`. `loader` — четыре публичных списка (`loadLandingSeed`, части `null`, не бросает; маршруты —
@@ -426,7 +429,9 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   вошедшему и после найденного профиля, как `['riders','viewer',id]`), `['social','connections']`; блок K6
   `rider-social-block.tsx` под шапкой `/riders/[id]` («Я иду» строки «Идёт» — `useRideRsvp` + перезапрос
   `['social','rider',id]`; гость — «В свои» → вход с возвратом); «Свои · N» в `/profile` → экран `/social`
-  (`app/social.tsx` за `useSettingsShell`, `SEO_DISALLOW`): убранная строка остаётся с «В свои» (состояние экрана),
+  (`app/social.tsx` за `useSettingsShell`, `SEO_DISALLOW`): кнопки — действия («В свои» / «Убрать из своих»; в списке
+  «Убрать» / «Вернуть»), `reserveLabels` и `accessibilityLabel` с именем; убранная строка остаётся приглушённой
+  (`layout.mutedOpacity`, текст строки тот же, «Убраны из своих» — в a11y) с «Вернуть» (состояние экрана),
   уход (`useFocusEffect` cleanup) — `invalidateQueries(['social'])`. Подсказка K3 — `name-hint.tsx` (`NameHint`;
   условие — `publicId === null` из `['profile']`, `useNameMissing`): в `/profile` вместо прежней строки, на Главной —
   в слоте `socialSlotIndex` (`home/sections.ts`, слот P7) с «Не сейчас» на 14 дней (`pokatim.nameHint`,

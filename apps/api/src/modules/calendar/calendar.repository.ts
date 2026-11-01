@@ -8,6 +8,11 @@ import {
   type ChangedCursor,
   changedAfter,
   type ChangedRow,
+  CHANGED_ROW_PROJECTION,
+  changedRows,
+  ID_SORT,
+  type IdRange,
+  idWithin,
 } from '../../changed-since';
 import type { DbSession } from '../../db';
 import { calendarCollections, type CalendarStartDoc } from './calendar.collection';
@@ -139,6 +144,21 @@ export class CalendarRepository {
       .limit(limit)
       .toArray();
     return docs.map((doc) => ({ id: doc._id, updatedAt: doc.updatedAt }));
+  }
+
+  /**
+   * Опубликованные старты диапазона `_id` ↑ (карта сайта, sitemap-index) — покрывающий индекс
+   * `calendar_starts_sitemap_idx`. Курсор — для `sitemapRange` и проверки плана в тесте.
+   */
+  sitemapCursor(range: IdRange, limit: number) {
+    return this.starts
+      .find({ status: 'published', ...idWithin(range) }, { projection: CHANGED_ROW_PROJECTION })
+      .sort(ID_SORT)
+      .limit(limit);
+  }
+
+  async sitemapRange(range: IdRange, limit: number): Promise<ChangedRow[]> {
+    return changedRows(await this.sitemapCursor(range, limit).toArray());
   }
 
   /** Опубликованный старт по id (публичная карточка). */

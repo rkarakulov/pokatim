@@ -1023,6 +1023,13 @@ export function createApiClient({
         RouteRideTrack,
         authorized(accessToken, { method: 'GET', ...withCredentials }),
       ),
+    /** Удаление своего заезда (route-rides-07): `204`; чужой, неизвестный, невидимый маршрут — `404`, лимит — `429`. */
+    deleteRouteRide: (accessToken: string, routeId: string, rideId: string) =>
+      request(
+        `/v1/routes/${encodeURIComponent(routeId)}/rides/${encodeURIComponent(rideId)}/delete`,
+        z.undefined(),
+        authorized(accessToken, { method: 'POST', body: '{}', ...withCredentials }),
+      ),
     /**
      * Таблица «Другие» маршрута каталога (route-rides-04): лучшие пройденные заезды райдеров с согласием и своя
      * строка; маршрут не каталога — `404`.

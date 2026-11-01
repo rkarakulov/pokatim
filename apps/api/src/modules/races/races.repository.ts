@@ -8,6 +8,11 @@ import {
   type ChangedCursor,
   changedAfter,
   type ChangedRow,
+  CHANGED_ROW_PROJECTION,
+  changedRows,
+  ID_SORT,
+  type IdRange,
+  idWithin,
 } from '../../changed-since';
 import type { DbSession } from '../../db';
 import {
@@ -428,6 +433,31 @@ export class RacesRepository {
       .limit(limit)
       .toArray();
     return docs.map((doc) => ({ id: doc._id, updatedAt: doc.updatedAt }));
+  }
+
+  /**
+   * Опубликованные гонки диапазона `_id` ↑ (карта сайта, sitemap-index) — покрывающий индекс `races_sitemap_idx`.
+   * Курсор — для `sitemapRange` и проверки плана в тесте.
+   */
+  sitemapCursor(range: IdRange, limit: number) {
+    return this.c.races
+      .find({ status: 'published', ...idWithin(range) }, { projection: CHANGED_ROW_PROJECTION })
+      .sort(ID_SORT)
+      .limit(limit);
+  }
+
+  async sitemapRange(range: IdRange, limit: number): Promise<ChangedRow[]> {
+    return changedRows(await this.sitemapCursor(range, limit).toArray());
+  }
+
+  /** Сезоны (все публичны) диапазона `_id` ↑ (карта сайта, sitemap-index) — индекс `_id_`. */
+  async sitemapSeasonsRange(range: IdRange, limit: number): Promise<ChangedRow[]> {
+    const docs = await this.c.seasons
+      .find(idWithin(range), { projection: CHANGED_ROW_PROJECTION })
+      .sort(ID_SORT)
+      .limit(limit)
+      .toArray();
+    return changedRows(docs);
   }
 
   /** Опубликованная или отменённая гонка (публичная карточка); черновик — нет. */

@@ -110,6 +110,16 @@ describe('карточка строки любому вошедшему (P4, Q2)
     expect(view.queryByRole('button', { name: 'Оспорить результат' })).toBeNull();
   });
 
+  it('связь уже есть — «Убрать из своих» без имени райдера (A12)', async () => {
+    getMyRaceEntry.mockResolvedValue(noEntry());
+    getRiderSocial.mockResolvedValue({ ...social(), connected: true });
+    await open(rivalUrl);
+    const view = await card();
+    const remove = await view.findByRole('button', { name: 'Убрать из своих' });
+    expect(within(remove).getByText('Убрать из своих')).toBeOnTheScreen();
+    expect(view.queryByRole('button', { name: /Анна/ })).toBeNull();
+  });
+
   it('не-участник после публикации протокола — «Оспорить» не всплывает (RC-P4-10)', async () => {
     getMyRaceEntry.mockResolvedValue(noEntry());
     getMyRaceDisputes.mockResolvedValue(

@@ -106,6 +106,7 @@ Documentation Sync §10 — ADR-0027, `social.md`, `home.md`, все пять `.
   понадобятся правка кода и доков.
 - **evidence:** §12: «RC-P7-1 реализован вариантом (a) — ждёт ответа автора».
 - **recommended_fix:** до merge получить ответ пользователя и снять `[ASSUMPTION]` или отметить решение в PR.
+- **resolved:** 2026-11-01 автор подтвердил вариант (a) — взаимная связь; `[ASSUMPTION]` снят в `social.md`.
 
 Итог: CRITICAL — 0, HIGH — 0, MEDIUM — 2, LOW — 5. Вердикт — APPROVE.
 
