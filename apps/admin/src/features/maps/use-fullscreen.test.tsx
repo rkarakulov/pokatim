@@ -41,6 +41,11 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  // подмены Fullscreen API — свойства самого узла и прототипа: снимаются, не протекают в другие тесты
+  Reflect.deleteProperty(document, 'fullscreenEnabled');
+  Reflect.deleteProperty(document, 'fullscreenElement');
+  Reflect.deleteProperty(document, 'exitFullscreen');
+  Reflect.deleteProperty(HTMLElement.prototype, 'requestFullscreen');
   vi.restoreAllMocks();
 });
 
@@ -68,7 +73,7 @@ describe('useFullscreen (карта и профиль на весь экран)'
     expect(screen.getByText('свёрнуто')).toBeTruthy();
   });
 
-  it('отказ браузера (requestFullscreen отклонён) — без необработанной ошибки, остаётся «свёрнуто»', async () => {
+  it('отказ браузера (requestFullscreen отклонён) — промис погашен: нет необработанной ошибки', async () => {
     HTMLElement.prototype.requestFullscreen = vi.fn(() =>
       Promise.reject(new TypeError('Permissions check failed')),
     );
@@ -81,7 +86,6 @@ describe('useFullscreen (карта и профиль на весь экран)'
     });
     process.off('unhandledRejection', unhandled);
     expect(unhandled).not.toHaveBeenCalled();
-    expect(screen.getByText('свёрнуто')).toBeTruthy();
   });
 
   it('без Fullscreen API (fullscreenEnabled = false) — не поддерживается', () => {

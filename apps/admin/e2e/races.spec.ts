@@ -219,14 +219,17 @@ test('сезон → гонка организатора → публикаци�
   expect(errors).toEqual([]);
 });
 
-/** Холст MapLibre той же высоты, что и место карты (не 0 — иначе серый квадрат без подложки и линии). */
+/** Холст MapLibre во всю высоту места карты (не 0 — иначе серый квадрат без подложки и линии). */
 async function expectMapCanvasFilled(scope: Locator) {
   const map = scope.getByTestId('route-map');
   const canvas = scope.getByTestId('route-map-canvas');
   await expect
     .poll(async () => {
-      const [outer, inner] = await Promise.all([map.boundingBox(), canvas.boundingBox()]);
-      return outer && inner && inner.height > 0 ? Math.round(outer.height - inner.height) : null;
+      const [inner, outer] = await Promise.all([
+        canvas.evaluate((node) => node.clientHeight),
+        map.evaluate((node) => node.clientHeight),
+      ]);
+      return outer > 0 && inner === outer;
     })
-    .toBeLessThanOrEqual(2);
+    .toBe(true);
 }
