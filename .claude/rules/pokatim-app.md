@@ -671,7 +671,10 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   карточек `['rides','invite',…]`); тексты — `ride-photo-errors.ts`. Герой — `SectionHero photo` (`RideHero`:
   `api.ridePhotoUrl`): `expo-image` `cover` декоративно (`accessible={false}`, пустой alt) под `components/photo-scrim.tsx`
   (полосы `View` по профилю `photoScrimHero` — без провала, порог контраста на всей высоте; у 4a — свой `photoScrim`; цвет
-  `overlay.scrim`, `aria-hidden`), текст и линия — `text.onPhoto`; ошибка картинки — типографский герой. Свой градиент
+  `overlay.scrim`, `aria-hidden`), текст и линия — `text.onPhoto`; ошибка картинки — типографский герой. Тот же герой —
+  шапка карточки `rides/[id]` (ride-photo-followups, `ride-detail.tsx`: `photo` по `api.ridePhotoUrl` — абсолютный
+  адрес из `EXPO_PUBLIC_API_URL`, SSR и клиент совпадают); скрытый (`photo: null`) — типографский. Уведомление
+  `ride_photo_reset` — заголовок и текст с сервера, цель `ride` → `/rides/<id>`, своего кода нет. Свой градиент
   или значения затемнения — только через профили `photoScrim*` `@pokatim/design-tokens` (тест контраста зон текста).
 - Шит «Райд опубликован» (ride-published-og): форма создания ведёт на `/rides/<id>?published=1`; шит — только
   организатору (`viewer.role` сервера) будущего райда после монтирования (`components/modal-sheet.tsx` — модальный
