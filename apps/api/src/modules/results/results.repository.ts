@@ -832,6 +832,15 @@ export class ResultsRepository {
     return doc?.userId ?? null;
   }
 
+  /** Гонка заявки (social-p7: название гонки для «Респекта» строке результата). */
+  async entryRaceId(entryId: string): Promise<string | null> {
+    const doc = await this.c.entries.findOne(
+      { _id: entryId },
+      { projection: { _id: 0, raceId: 1 } },
+    );
+    return doc?.raceId ?? null;
+  }
+
   /** Активные заявки гонки (индекс `race_entries_race_idx`). */
   countActiveEntries(raceId: string, session?: DbSession): Promise<number> {
     return this.c.entries.countDocuments({ raceId, status: 'active' }, { session });

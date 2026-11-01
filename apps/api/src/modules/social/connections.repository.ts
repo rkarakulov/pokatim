@@ -3,7 +3,7 @@ import { isDuplicateKey, MONGO_DB, uuidv7 } from '@rkarakulov/api-kit/mongo';
 import type { AnyBulkWriteOperation, Collection, Db, Filter } from 'mongodb';
 
 import type { DbSession } from '../../db';
-import type { ConnectionPair } from './social.policy';
+import { type ConnectionPair, SOCIAL_POLICY } from './social.policy';
 import { type ConnectionDoc, socialCollections } from './social.collection';
 
 /**
@@ -209,6 +209,35 @@ export class ConnectionsRepository {
 
   findPair(pair: ConnectionPair): Promise<ConnectionDoc | null> {
     return this.connections.findOne(pair);
+  }
+
+  /** Связь пары есть и не убрана (`owner_other_unique`, P7). */
+  async isConnected(pair: ConnectionPair): Promise<boolean> {
+    return (await this.connections.countDocuments({ ...pair, removedAt: null }, { limit: 1 })) > 0;
+  }
+
+  /** Владельцы не убранных связей к `otherId` (`rider_connections_other_idx`, P7: «Свои идут», Главная). */
+  async ownerIdsOf(otherId: string): Promise<string[]> {
+    const docs = await this.connections
+      .find({ otherId, removedAt: null }, { projection: { _id: 0, ownerId: 1 } })
+      .toArray();
+    return docs.map((doc) => doc.ownerId);
+  }
+
+  /** Кто из `otherIds` у владельца в не убранных связях (`owner_other_unique`, P7: взаимность RC-P7-1a). */
+  async otherIdsAmong(ownerId: string, otherIds: readonly string[]): Promise<Set<string>> {
+    const found = new Set<string>();
+    for (let start = 0; start < otherIds.length; start += SOCIAL_POLICY.bulkBatch) {
+      const chunk = otherIds.slice(start, start + SOCIAL_POLICY.bulkBatch);
+      const docs = await this.connections
+        .find(
+          { ownerId, otherId: { $in: [...chunk] }, removedAt: null },
+          { projection: { _id: 0, otherId: 1 } },
+        )
+        .toArray();
+      for (const doc of docs) found.add(doc.otherId);
+    }
+    return found;
   }
 
   /** Стирание (K13): связи райдера в обе стороны. */

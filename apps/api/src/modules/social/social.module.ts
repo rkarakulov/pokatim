@@ -32,11 +32,14 @@ import { SocialConnectionsController } from './social-connections.controller';
 import { SocialErasure } from './social-erasure';
 import { SocialIntakeProcessor } from './social-intake.processor';
 import { SocialMaintenanceProcessor, SocialSchedules } from './social-maintenance.processor';
+import { SOCIAL_NOTICES } from './social-notices.port';
+import { SocialNoticesService } from './social-notices.service';
 
 /**
- * Ядро «Свои» без HTTP (ADR-0027): единственные писатели связей, явки, реакций и кодов приглашений, сервисы домена и
- * порт стирания `SocialErasure` (`account`). Производители — только через порты (`RIDES_FOR_SOCIAL`, `RIDER_NAMES`) и
- * журнал метрик `PRODUCT_EVENTS`.
+ * Ядро «Свои» без HTTP (ADR-0027): единственные писатели связей, явки, реакций и кодов приглашений, сервисы домена,
+ * порт стирания `SocialErasure` (`account`) и порт уведомлений `SOCIAL_NOTICES` (`notifications`, P7). Производители —
+ * только через порты (`RIDES_FOR_SOCIAL`, `RIDER_NAMES`) и журнал метрик `PRODUCT_EVENTS`; события `social.*` — outbox
+ * в транзакции действия.
  */
 @Module({
   imports: [RidesCoreModule, ProfileCoreModule, ProductEventsCoreModule],
@@ -51,6 +54,8 @@ import { SocialMaintenanceProcessor, SocialSchedules } from './social-maintenanc
     SocialErasure,
     SocialRideParticipantsService,
     InviteCodes,
+    SocialNoticesService,
+    { provide: SOCIAL_NOTICES, useExisting: SocialNoticesService },
   ],
   exports: [
     SocialConnectionsService,
@@ -62,6 +67,8 @@ import { SocialMaintenanceProcessor, SocialSchedules } from './social-maintenanc
     InviteCodes,
     // захват «Как прошёл райд?» регламента `SocialWorkerModule` (P5); вне модуля `social` не уходит
     AttendanceRepository,
+    // порт уведомлений K10 для `NotificationsWorkerModule` (P7)
+    SOCIAL_NOTICES,
   ],
 })
 export class SocialCoreModule {}
