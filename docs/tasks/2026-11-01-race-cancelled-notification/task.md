@@ -18,7 +18,7 @@
 - `notifications`: маршрут типа в `notificationsOutboxRoutes`; intake — `RaceRegistry.get` (нет — `gone`; статус не
   `cancelled` — `state`), получатели — `ResultsNotices.protocolAudience` (активные заявки), цель `race`, группа
   `races`, без письма (N2 не меняется). Текст — `notification-texts.ts`.
-- Тексты: заголовок «Гонка отменена», текст ««{гонка}» отменена. Причина — {причина}.» (свой словарь причин сервера,
+- Тексты: заголовок «Гонка отменена», текст ««{гонка}»: гонка отменена. Причина — {причина}.» (свой словарь причин сервера,
   как `REJECTION` маршрутов).
 - Приложение: отдельного кода нет (текст и цель — снимок сервера, цель `race` → `/races/<id>`); тест экрана на текст и
   переход.
@@ -46,4 +46,24 @@
 
 ## 12. Outcome
 
-(заполняется после реализации)
+### Changes
+
+- contracts: `race_cancelled` в конце `NOTIFICATION_KINDS`.
+- races: `races.events.ts` (`RACES_RACE_CANCELLED`, `RacesRaceCancelled`), outbox в `RacesService.cancel`.
+- notifications: маршрут типа, `NotificationIntake.raceCancelled`, `KIND_GROUPS.race_cancelled = races`, текст и
+  словарь причин `RACE_CANCEL`.
+- Документы: `notifications.md` (N3, «Тексты v1»), ADR-0017 (дополнение), `pokatim-backend.md`.
+
+### Tests
+
+- unit: `notification-intake.test.ts` (invalid_payload / gone / state / черновик), `notification-texts.test.ts`
+  (строка таблицы + каждая причина), `notifications.policy.test.ts`, контракт — порядок справочника.
+- int: `races-admin.int.test.ts` (одно событие при отмене, нет при 409 и при протоколе),
+  `notifications-intake.int.test.ts` (панель → центр: активной заявке, push pending, без письма; снятым и посторонним
+  — нет; гонка не отменена — skipped).
+- app: `notifications.test.tsx` — текст и переход на `/races/<id>`.
+
+### Review
+
+Codex pass 1 — APPROVE без находок; Claude pass 1 — APPROVE, 4 LOW: ADR-0017 и task.md поправлены; LOW-4 (отдельный
+int на выключенный `push.races`) — не делаем: решение доставки общее по группе, группа покрыта unit-тестом политики.
