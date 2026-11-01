@@ -49,11 +49,11 @@
    («Меня не было»; без тела, ответ — тот же `RideParticipants`); скрытый райд не организатору и неизвестный — `404`
    до вызова сервиса явки. «В свои» / «Убрать» (P3) — один
    идемпотентный `PUT riders/:publicId/social/connection { connected }` вместо пары глаголов (DELETE в CORS нет).
-4. **Автоявка — второе событие `tracks`.** После обработки заезда `tracks` в той же транзакции пишет
-   `tracks.activity-recorded {activityId, userId}` → очередь `social-intake`. `social` читает старт заезда портом
-   `ACTIVITY_STARTS` и точный старт райда портом `RIDES_FOR_SOCIAL` (только при маршруте каталога). `activity-ready`
-   и `results-intake` не меняются. Регламент `social-maintenance` раз в 30 минут шлёт «Как прошёл райд?» через 4 ч
-   после старта.
+4. **Автоявка — подписка `social` на `tracks.activity-ready`** (fan-out `mergeOutboxRoutes`, api-kit ≥ 0.6.0),
+   нового события в `tracks` нет. Группу и старт основной `social` читает портом `ACTIVITY_STARTS`, райды —
+   `RIDES_FOR_SOCIAL` (точный старт — только при маршруте каталога). `results-intake` не меняется. Регламент
+   `social-maintenance` раз в 30 мин отбирает райды через 4 ч после старта: захват `askedAt` в документе явки райда и
+   точка привязки P7 `RIDE_ASK_DUE` в той же транзакции. Уточнено в P5 (2026-11-01).
 5. **Атрибуция приглашения — в `identity`.** `RegisterRequest.invite` (необязательное поле, старые сборки
    совместимы; неверный формат отбрасывается, не 400) сохраняется на `users.invite`; при **первом** подтверждении
    e-mail аккаунта **с кодом** — по ссылке из письма или сбросом пароля (общий шаг `AccountConfirmation`, условная
@@ -89,7 +89,8 @@
 
 ## Последствия
 
-- Новые очереди `social-intake`, `social-maintenance`; новые outbox-события в `tracks` и `identity`.
+- Новые очереди `social-intake`, `social-maintenance`; новое outbox-событие в `identity` (`tracks` — без новых
+  событий, P5).
 - `notifications` получает Nest-импорт `profile` (`ProfileCoreModule`, порт `RIDER_NAMES`) в P1 и `social` (порт
   аудитории) — в P7, когда появится потребитель (правило «текст — снимок» в `pokatim-backend.md` и `pokatim-db.md`
   дополняется исключением для группы «Свои»).

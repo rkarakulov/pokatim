@@ -9,6 +9,8 @@ import { ActivitySourceService } from './activity-source';
 import { ActivityTotalsService } from './activity-totals';
 import { ACTIVITY_TOTALS } from './activity-totals.port';
 import { ACTIVITY_SOURCE } from './activity-source.port';
+import { ActivityStartsService } from './activity-starts';
+import { ACTIVITY_STARTS } from './activity-starts.port';
 import { FsTrackFileStore } from './fs-track-file-store';
 import { TRACK_FILE_STORE } from './track-file-store';
 import { TrackErasure } from './track-erasure';
@@ -24,8 +26,8 @@ import { TracksRepository } from './tracks.repository';
 
 /**
  * Ядро `tracks` для API и worker: репозиторий, хранилище исходников (порт, на dev — ФС), приём исходника,
- * удаление, порт `TrackIngest` для модуля `devices`, `ActivitySource` для `results`, `TrackErasure` для `account` и
- * `TracksOverview` для «Обзора» панели (только через `index.ts`).
+ * удаление, порт `TrackIngest` для модуля `devices`, `ActivitySource` для `results`, `ActivityStarts` для `social`
+ * (автоявка, P5), `TrackErasure` для `account` и `TracksOverview` для «Обзора» панели (только через `index.ts`).
  */
 @Module({
   providers: [
@@ -45,6 +47,8 @@ import { TracksRepository } from './tracks.repository';
     { provide: ACTIVITY_TOTALS, useExisting: ActivityTotalsService },
     TrackErasure,
     TracksOverview,
+    ActivityStartsService,
+    { provide: ACTIVITY_STARTS, useExisting: ActivityStartsService },
   ],
   exports: [
     TRACK_INGEST,
@@ -56,6 +60,7 @@ import { TracksRepository } from './tracks.repository';
     TrackUploadsService,
     TrackErasure,
     TracksOverview,
+    ACTIVITY_STARTS,
   ],
 })
 export class TracksCoreModule {}
