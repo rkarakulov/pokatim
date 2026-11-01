@@ -1,7 +1,14 @@
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-import { type APIRequestContext, type Browser, expect, type Page, test } from '@playwright/test';
+import {
+  type APIRequestContext,
+  type Browser,
+  expect,
+  type Locator,
+  type Page,
+  test,
+} from '@playwright/test';
 
 import { verificationToken } from './mailpit';
 import { API_URL, apiEnv, MAP_STYLE_STUB, MAP_STYLE_URL, ORIGIN } from './project';
@@ -148,6 +155,8 @@ test('сезон → гонка организатора → публикаци�
     }),
   ).toBeVisible();
   await expect(raceMap.getByRole('button', { name: 'Приблизить' })).toBeVisible();
+  // холст карты занимает место карты: CSS MapLibre (ленивый чанк) не делает контейнер relative с высотой 0
+  await expectMapCanvasFilled(raceMap);
   await expect(raceMap.getByRole('slider', { name: /^Профиль высоты/ })).toBeVisible();
   await org.getByRole('button', { name: 'Опубликовать' }).click();
   await org.getByRole('dialog').getByRole('button', { name: 'Опубликовать' }).click();
@@ -164,6 +173,7 @@ test('сезон → гонка организатора → публикаци�
   ).toBeVisible();
   await org.getByRole('button', { name: 'Приблизить' }).click();
   await expect(org.getByRole('button', { name: 'Показать маршрут целиком' })).toBeVisible();
+  await expectMapCanvasFilled(org.getByTestId('route-view'));
   const profile = org.getByRole('slider', { name: /^Профиль высоты/ });
   const before = await profile.getAttribute('aria-valuetext');
   await profile.focus();
@@ -208,3 +218,15 @@ test('сезон → гонка организатора → публикаци�
 
   expect(errors).toEqual([]);
 });
+
+/** Холст MapLibre той же высоты, что и место карты (не 0 — иначе серый квадрат без подложки и линии). */
+async function expectMapCanvasFilled(scope: Locator) {
+  const map = scope.getByTestId('route-map');
+  const canvas = scope.getByTestId('route-map-canvas');
+  await expect
+    .poll(async () => {
+      const [outer, inner] = await Promise.all([map.boundingBox(), canvas.boundingBox()]);
+      return outer && inner && inner.height > 0 ? Math.round(outer.height - inner.height) : null;
+    })
+    .toBeLessThanOrEqual(2);
+}

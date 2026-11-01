@@ -8,6 +8,7 @@ import { useMemo } from 'react';
 
 import { formatKmFromMeters } from '../../format';
 import { Banner, Button, LinePreview } from '../../ui';
+import type { MapFullscreen } from '../maps/MapControls';
 import { mapStyleUrl } from '../maps/map-style';
 import { RouteMap } from '../maps/RouteMap';
 import { routeQuery } from './routes-query';
@@ -32,17 +33,20 @@ function routeMeta(route: RouteLineData): string {
  * Линия маршрута на подложке (routes-05, A1, RC-9): с env стиля — карта MapLibre с толстой линией (`RouteMap`), без
  * env или без геометрии — прежнее SVG-превью `LinePreview`. `corridorWidthM` — карта гонки с коридором
  * (panel-race-map): слой коридора на карте и подпись с допуском (в `LinePreview` коридора нет — только в подписи).
+ * `fullscreen` — кнопка «На весь экран» на карте (admin-maps-desktop); у `LinePreview` её нет.
  */
 export function RouteLine({
   route,
   variant,
   scrub,
   corridorWidthM,
+  fullscreen,
 }: {
   route: RouteLineData;
   variant: 'page' | 'compact';
   scrub?: ScrubStore;
   corridorWidthM?: number;
+  fullscreen?: MapFullscreen;
 }) {
   const geometry = useMemo(() => geometryFromLine(route.line), [route.line]);
   const styleUrl = mapStyleUrl();
@@ -68,6 +72,7 @@ export function RouteLine({
       variant={variant}
       {...(scrub ? { scrub } : {})}
       {...(corridorWidthM !== undefined ? { corridorWidthM } : {})}
+      {...(fullscreen ? { fullscreen } : {})}
     />
   );
 }
