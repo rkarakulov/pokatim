@@ -56,14 +56,38 @@ function GoingRow({ ride, publicId, now }: { ride: RideCard; publicId: string; n
   );
 }
 
-/** «В свои» / «В своих» вошедшего: повтор убирает (K1, без подтверждения); отказ — текстом у кнопки. Карточка строки результата гонки (P4) — тоже. */
-export function ConnectButton({ publicId, connected }: { publicId: string; connected: boolean }) {
+/**
+ * Кнопка связи вошедшего — всегда действие: «В свои» (основная) / «Убрать из своих» (вторичная), без подтверждения
+ * (K1); отказ — текстом у кнопки. Имя — только в подписи для скринридера (у карточки строки результата гонки, P4,
+ * имени нет — A12).
+ */
+export function ConnectButton({
+  publicId,
+  connected,
+  name,
+}: {
+  publicId: string;
+  connected: boolean;
+  name?: string;
+}) {
   const mutation = useSetRiderConnection(publicId, { refreshList: true });
   return (
     <View style={styles.connect}>
       <View style={styles.start}>
         <Button
-          label={t(connected ? 'social.connected' : 'social.connect')}
+          label={t(connected ? 'social.disconnect' : 'social.connect')}
+          {...(name
+            ? {
+                accessibilityLabel: t(
+                  connected ? 'social.a11y.disconnect' : 'social.a11y.connect',
+                  {
+                    name,
+                  },
+                ),
+              }
+            : {})}
+          // ширина — по самой длинной подписи: смена состояния вёрстку не двигает
+          reserveLabels={[t('social.connect'), t('social.disconnect')]}
           variant={connected ? 'secondary' : 'primary'}
           loading={mutation.isPending}
           onPress={() => mutation.mutate(!connected)}
@@ -76,7 +100,15 @@ export function ConnectButton({ publicId, connected }: { publicId: string; conne
   );
 }
 
-function RiderSocialContent({ data, publicId }: { data: RiderSocial; publicId: string }) {
+function RiderSocialContent({
+  data,
+  publicId,
+  name,
+}: {
+  data: RiderSocial;
+  publicId: string;
+  name: string;
+}) {
   const theme = useTheme();
   const now = useMinskClockAfterMount([]);
   if (data.self) return null;
@@ -89,23 +121,26 @@ function RiderSocialContent({ data, publicId }: { data: RiderSocial; publicId: s
       {data.going ? (
         <GoingRow ride={data.going} publicId={publicId} now={now ?? new Date()} />
       ) : null}
-      <ConnectButton publicId={publicId} connected={data.connected} />
+      <ConnectButton publicId={publicId} connected={data.connected} name={name} />
     </View>
   );
 }
 
 /**
  * Блок «Свои» на чужом профиле (P3, K6): «Вместе ехали N раз · последний — дата» (N > 0), «Идёт» — ближайший райд
- * (только если зритель у райдера в «своих» — решает сервер), «В свои» / «В своих». Свой профиль — ничего. Гость —
+ * (только если зритель у райдера в «своих» — решает сервер), «В свои» / «Убрать из своих». Свой профиль — ничего. Гость —
  * только «В свои» → вход с возвратом на профиль (как «Пожаловаться»). Сессия неизвестна — ничего (без рассинхрона
  * гидрации). Состояние запроса — `AsyncContent`; 404 (профиль скрыли между запросами) — блок молчит.
  */
 export function RiderSocialBlock({
   id,
+  name,
   session,
   query,
 }: {
   id: string;
+  /** имя райдера — для подписи кнопки скринридеру */
+  name: string;
   session: RiderSocialSession;
   query: ReturnType<typeof useRiderSocial>;
 }) {
@@ -117,7 +152,11 @@ export function RiderSocialBlock({
     };
     return (
       <View style={styles.start}>
-        <Button label={t('social.connect')} onPress={signIn} />
+        <Button
+          label={t('social.connect')}
+          accessibilityLabel={t('social.a11y.connect', { name })}
+          onPress={signIn}
+        />
       </View>
     );
   }
@@ -131,7 +170,7 @@ export function RiderSocialBlock({
         </View>
       }
     >
-      {(data) => <RiderSocialContent data={data} publicId={id} />}
+      {(data) => <RiderSocialContent data={data} publicId={id} name={name} />}
     </AsyncContent>
   );
 }

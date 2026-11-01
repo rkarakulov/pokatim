@@ -103,6 +103,8 @@ export const layout = {
   badgeGrid: 72,
   badgeHero: 152,
   ticketQr: 240,
+  /** прозрачность приглушённой строки списка (убранный из «Своих» до ухода с экрана) */
+  mutedOpacity: 0.45,
 } as const;
 
 /**

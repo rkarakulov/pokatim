@@ -1,8 +1,9 @@
 /// <reference types="jest" />
 import { ApiHttpError } from '@pokatim/api-client';
 import type { RiderSocial, SocialConnectionRow } from '@pokatim/contracts';
+import { layout, themes } from '@pokatim/design-tokens';
 import { fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
-import { Text } from 'react-native';
+import { Text, useColorScheme } from 'react-native';
 
 import { useSessionStore } from '@/features/auth/session-store';
 import { api } from '@/lib/api';
@@ -44,6 +45,8 @@ const social = (connected: boolean): RiderSocial => ({
   going: null,
 });
 
+// jest-пресет React Native подменяет useColorScheme на jest.fn(() => 'light')
+const colorScheme = jest.mocked(useColorScheme);
 const list = jest.mocked(api.listSocialConnections);
 const setConnection = jest.mocked(api.setRiderConnection);
 
@@ -68,6 +71,7 @@ beforeEach(() => {
   });
 });
 afterEach(() => {
+  colorScheme.mockReturnValue('light');
   jest.useRealTimers();
   jest.clearAllMocks();
 });
@@ -88,40 +92,81 @@ describe('экран «Свои» /social (P3, K6)', () => {
     await waitFor(() => expect(router.getPathname()).toBe(`/riders/${BORIS}`));
   });
 
-  it('«В своих» → PUT false, строка остаётся с «В свои»; повтор → PUT true; список не перезапрашивается', async () => {
+  it('«Убрать» → PUT false, строка остаётся приглушённой с «Вернуть»; «Вернуть» → PUT true; список не перезапрашивается', async () => {
     setConnection.mockResolvedValueOnce(social(false));
     await openSocial();
     expect(await screen.findByText('Борис Л.')).toBeOnTheScreen();
-    await fireEvent.press(rowOf(BORIS).getByRole('button', { name: 'В своих' }));
+    // обычная строка: имя основным цветом, аватар без приглушения
+    expect(rowOf(BORIS).getByText('Борис Л.')).toHaveStyle({ color: themes.light.text.primary });
+    expect(
+      rowOf(BORIS).getByTestId('social-row-avatar', { includeHiddenElements: true }),
+    ).not.toHaveStyle({
+      opacity: layout.mutedOpacity,
+    });
+    const remove = rowOf(BORIS).getByRole('button', { name: 'Убрать из своих: Борис Л.' });
+    expect(within(remove).getByText('Убрать')).toBeOnTheScreen();
+    await fireEvent.press(remove);
     expect(setConnection).toHaveBeenCalledWith(liveSession.accessToken, BORIS, {
       connected: false,
     });
-    expect(await rowOf(BORIS).findByRole('button', { name: 'В свои' })).toBeOnTheScreen();
-    expect(rowOf(BORIS).getByText('Борис Л.')).toBeOnTheScreen();
+
+    const restore = await rowOf(BORIS).findByRole('button', { name: 'Вернуть в свои: Борис Л.' });
+    expect(within(restore).getByText('Вернуть')).toBeOnTheScreen();
+    // убранная строка: серое имя, аватар приглушён, подпись та же (высота строки не меняется)
+    expect(rowOf(BORIS).getByText('Борис Л.')).toHaveStyle({ color: themes.light.text.secondary });
+    expect(rowOf(BORIS).getByText('Добавлены вами')).toBeOnTheScreen();
+    expect(
+      rowOf(BORIS).getByTestId('social-row-avatar', { includeHiddenElements: true }),
+    ).toHaveStyle({
+      opacity: layout.mutedOpacity,
+    });
+    expect(
+      rowOf(BORIS).getByRole('link', { name: 'Борис Л.. Добавлены вами. Убраны из своих' }),
+    ).toBeOnTheScreen();
 
     setConnection.mockResolvedValueOnce(social(true));
-    await fireEvent.press(rowOf(BORIS).getByRole('button', { name: 'В свои' }));
+    await fireEvent.press(restore);
     expect(setConnection).toHaveBeenLastCalledWith(liveSession.accessToken, BORIS, {
       connected: true,
     });
-    expect(await rowOf(BORIS).findByRole('button', { name: 'В своих' })).toBeOnTheScreen();
+    expect(
+      await rowOf(BORIS).findByRole('button', { name: 'Убрать из своих: Борис Л.' }),
+    ).toBeOnTheScreen();
+    expect(rowOf(BORIS).getByRole('link', { name: 'Борис Л.. Добавлены вами' })).toBeOnTheScreen();
+    expect(rowOf(BORIS).getByText('Борис Л.')).toHaveStyle({ color: themes.light.text.primary });
     expect(list).toHaveBeenCalledTimes(1);
   });
 
-  it('новый ответ списка сбрасывает убранные на экране (вернули из профиля — снова «В своих»)', async () => {
+  it('тёмная тема: убранная строка — серое имя тёмной темы', async () => {
+    colorScheme.mockReturnValue('dark');
+    setConnection.mockResolvedValueOnce(social(false));
+    await openSocial();
+    expect(await screen.findByText('Борис Л.')).toHaveStyle({ color: themes.dark.text.primary });
+    await fireEvent.press(rowOf(BORIS).getByRole('button', { name: 'Убрать из своих: Борис Л.' }));
+    expect(
+      await rowOf(BORIS).findByRole('button', { name: 'Вернуть в свои: Борис Л.' }),
+    ).toBeOnTheScreen();
+    expect(rowOf(BORIS).getByText('Борис Л.')).toHaveStyle({ color: themes.dark.text.secondary });
+  });
+
+  it('новый ответ списка сбрасывает убранные на экране (вернули из профиля — снова «Убрать»)', async () => {
     setConnection.mockResolvedValueOnce(social(false));
     const client = createTestQueryClient();
     await openSocial(client);
     expect(await screen.findByText('Борис Л.')).toBeOnTheScreen();
-    await fireEvent.press(rowOf(BORIS).getByRole('button', { name: 'В своих' }));
-    expect(await rowOf(BORIS).findByRole('button', { name: 'В свои' })).toBeOnTheScreen();
+    await fireEvent.press(rowOf(BORIS).getByRole('button', { name: 'Убрать из своих: Борис Л.' }));
+    expect(
+      await rowOf(BORIS).findByRole('button', { name: 'Вернуть в свои: Борис Л.' }),
+    ).toBeOnTheScreen();
 
     // ответ сервера тот же (структурно равен), меняется только dataUpdatedAt
     jest.setSystemTime(new Date('2026-10-31T10:01:00Z'));
     await client.refetchQueries({ queryKey: ['social'] });
     // список перемонтирован — строку ищем заново на каждой попытке
     await waitFor(() =>
-      expect(rowOf(BORIS).getByRole('button', { name: 'В своих' })).toBeOnTheScreen(),
+      expect(
+        rowOf(BORIS).getByRole('button', { name: 'Убрать из своих: Борис Л.' }),
+      ).toBeOnTheScreen(),
     );
   });
 
@@ -135,8 +180,10 @@ describe('экран «Свои» /social (P3, K6)', () => {
     );
     await openSocial();
     expect(await screen.findByText('Анна К.')).toBeOnTheScreen();
-    await fireEvent.press(rowOf(ANNA).getByRole('button', { name: 'В своих' }));
-    await fireEvent.press(await rowOf(ANNA).findByRole('button', { name: 'В свои' }));
+    await fireEvent.press(rowOf(ANNA).getByRole('button', { name: 'Убрать из своих: Анна К.' }));
+    await fireEvent.press(
+      await rowOf(ANNA).findByRole('button', { name: 'Вернуть в свои: Анна К.' }),
+    );
     expect(
       await rowOf(ANNA).findByText('Слишком много действий, попробуйте позже'),
     ).toBeOnTheScreen();
