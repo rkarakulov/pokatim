@@ -17,6 +17,7 @@ import { RoutesCoreModule } from '../routes';
 import { TicketsCoreModule } from '../tickets';
 import { AchievementsSyncModule } from '../achievements';
 import { ProfileCoreModule } from '../profile';
+import { SocialCoreModule } from '../social';
 import { NotificationIntake } from './notification-intake';
 import { NotificationErasure } from './notification-erasure';
 import { NotificationSettingsService } from './notification-settings.service';
@@ -90,7 +91,8 @@ export class NotificationsModule {}
  * порты через их `index.ts`: `RESULTS_NOTICES` и `RACE_REGISTRY` (`ResultsCoreModule` реэкспортирует `RacesCoreModule`),
  * `DISPUTE_NOTICES`, `RIDE_NOTICES`, `ROUTE_NOTICES`, `TICKET_NOTICES` (`TicketsCoreModule`, PR D),
  * `ACHIEVEMENT_NOTICES` (`AchievementsSyncModule`, achievements-push), `IdentityAccounts`; имена «Своих» в push —
- * `RIDER_NAMES` (`ProfileCoreModule`, social-p1).
+ * `RIDER_NAMES` (`ProfileCoreModule`, social-p1); состояние «Своих» и аудитория «Свои идут» — `SOCIAL_NOTICES`
+ * (`SocialCoreModule`, social-p7; `social` о `notifications` не знает — цикла нет).
  */
 @Module({
   imports: [
@@ -103,6 +105,8 @@ export class NotificationsModule {}
     AchievementsSyncModule,
     IdentityAccountsModule,
     ProfileCoreModule,
+    // social-p7: порт `SOCIAL_NOTICES` (уведомления «Свои» K10)
+    SocialCoreModule,
     BullModule.registerQueue(
       { name: QUEUE.notificationsIntake },
       { name: QUEUE.notificationsDelivery },

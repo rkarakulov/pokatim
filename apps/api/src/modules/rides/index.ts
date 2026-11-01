@@ -30,11 +30,12 @@ export {
 export { RidesOverview } from './rides-overview';
 /**
  * Порт для `social` («Свои», ADR-0027): факты райда для явки — фаза, старт, участники, точная точка старта; P5 — райды
- * участника по окну старта и начавшиеся райды для «Как прошёл райд?».
+ * участника по окну старта и начавшиеся райды для «Как прошёл райд?»; P7 — ближайшие райды «своих» (Главная).
  */
 export {
   RIDES_FOR_SOCIAL,
   type RidesForSocial,
   type SocialRideFacts,
   type SocialStartedRide,
+  type SocialUpcomingRide,
 } from './rides-for-social.port';

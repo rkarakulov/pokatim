@@ -304,6 +304,51 @@ export class ResultsRepository {
   }
 
   /**
+   * Строки протоколов гонок `raceIds` у пользователей `userIds` (Главная «Свои», social-p7): все ревизии —
+   * текущую отсекает вызывающий; индекс `race_protocol_rows_user_idx`; без флагов и попытки. Пустой вход — без запроса.
+   */
+  protocolRowsOfUsers(
+    userIds: readonly string[],
+    raceIds: readonly string[],
+    session?: DbSession,
+  ): Promise<
+    Pick<
+      RaceProtocolRowDoc,
+      | 'raceId'
+      | 'revision'
+      | 'entryId'
+      | 'userId'
+      | 'place'
+      | 'tied'
+      | 'status'
+      | 'groupKey'
+      | 'elapsedSec'
+    >[]
+  > {
+    if (userIds.length === 0 || raceIds.length === 0) return Promise.resolve([]);
+    return this.c.protocolRows
+      .find(
+        { userId: { $in: [...userIds] }, raceId: { $in: [...raceIds] } },
+        {
+          session,
+          projection: {
+            _id: 0,
+            raceId: 1,
+            revision: 1,
+            entryId: 1,
+            userId: 1,
+            place: 1,
+            tied: 1,
+            status: 1,
+            groupKey: 1,
+            elapsedSec: 1,
+          },
+        },
+      )
+      .toArray();
+  }
+
+  /**
    * Заявки-финишёры пользователя (rider-links-in-tables): условие — как у таблицы финишёров (`finishersFilter`) по
    * `userId` вместо гонки; индекс `race_entries_user_idx` `(userId, status)`. Публикацию протокола проверяет вызывающий.
    */
@@ -830,6 +875,15 @@ export class ResultsRepository {
       { projection: { _id: 0, userId: 1 } },
     );
     return doc?.userId ?? null;
+  }
+
+  /** Гонка заявки (social-p7: название гонки для «Респекта» строке результата). */
+  async entryRaceId(entryId: string): Promise<string | null> {
+    const doc = await this.c.entries.findOne(
+      { _id: entryId },
+      { projection: { _id: 0, raceId: 1 } },
+    );
+    return doc?.raceId ?? null;
   }
 
   /** Активные заявки гонки (индекс `race_entries_race_idx`). */

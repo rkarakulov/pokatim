@@ -49,6 +49,7 @@ import { routeRideAutoPlans } from './0046_route_ride_auto_plans';
 import { ridePhotos } from './0047_ride_photos';
 import { raceEntryNumbers } from './0048_race_entry_numbers';
 import { routeRidesLeaderboardIdx } from './0049_route_rides_leaderboard_idx';
+import { socialHome } from './0050_social_home';
 
 /**
  * Миграции MongoDB по порядку (`db:migrate`, `.claude/rules/db.md`): новая — в конец списка, применённые не
@@ -104,4 +105,5 @@ export const migrations: readonly MongoMigration[] = [
   ridePhotos,
   raceEntryNumbers,
   routeRidesLeaderboardIdx,
+  socialHome,
 ];

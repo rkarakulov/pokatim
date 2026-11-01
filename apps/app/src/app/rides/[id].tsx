@@ -58,7 +58,18 @@ export const generateMetadata: GenerateMetadataFunction = async (_request, param
 };
 
 export default function RideRoute() {
-  const { id, published } = useLocalSearchParams<{ id: string; published?: string }>();
+  const { id, published, from } = useLocalSearchParams<{
+    id: string;
+    published?: string;
+    from?: string;
+  }>();
   const seed = useLoaderSeed<RideDetail>();
-  return <RideDetailScreen id={String(id)} seed={seed} published={published === '1'} />;
+  return (
+    <RideDetailScreen
+      id={String(id)}
+      seed={seed}
+      published={published === '1'}
+      fromNotification={from === 'notification'}
+    />
+  );
 }

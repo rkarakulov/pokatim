@@ -53,7 +53,7 @@ describe('subscribePushResponses — нажатие на push (N10)', () => {
     subscribePushResponses({ onOpen, onReceive: jest.fn() });
 
     expect(onOpen).toHaveBeenCalledWith({ type: 'ride', rideId: RIDE });
-    expect(pushTargetPath(onOpen.mock.calls[0][0])).toBe(`/rides/${RIDE}`);
+    expect(pushTargetPath(onOpen.mock.calls[0][0])).toBe(`/rides/${RIDE}?from=notification`);
     expect(Notifications.clearLastNotificationResponse).toHaveBeenCalled();
   });
 

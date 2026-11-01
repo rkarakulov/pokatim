@@ -3389,4 +3389,18 @@ export const ru = {
   'social.respect.author': 'Респект автору',
   'social.respect.error.unknown': 'Не удалось сохранить респект',
   'rides.thanks.error.not_found': 'Райдер больше недоступен — обновите список',
+  // «Свои», P7: секция на Главной (K7)
+  'social.home.kicker': 'Свои',
+  'social.home.title': 'Что у своих',
+  'social.home.all': 'Все свои',
+  'social.home.goingOne': '{name} идёт',
+  'social.home.goingMany': '{name} и ещё {count} идут',
+  'social.home.result': '{name} · {time}',
+  'social.home.faster': 'на {delta} быстрее вас',
+  'social.home.slower': 'на {delta} медленнее вас',
+  'social.home.same': 'одно время с вами',
+  'social.home.route': 'Новый маршрут от {name}',
+  'social.home.a11yRide': '{going}. {ride}',
+  'social.home.a11yResult': '{name}, {race}: место {place}, время {time}',
+  'social.home.a11yRoute': 'Новый маршрут от {name}: {route}',
 } as const;

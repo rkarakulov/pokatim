@@ -11,7 +11,8 @@ paths:
 
 - Контексты `src/modules/<context>/`: identity, profile, routes, rides, calendar, races, results, disputes,
   seasons, gamification, sharing, notifications, moderation, media (по мере появления).
-  Есть: `identity` (учётка, сессии, `AuthGuard`), `profile` (онбординг: опрос, коллекция `profiles`; `GET /v1/profile` — ответы опроса своего
+  Есть: `identity` (учётка, сессии, `AuthGuard`; P7 — активный день `ActiveDay`, единственное ребро к другому модулю —
+  лист `product-events`), `profile` (онбординг: опрос, коллекция `profiles`; `GET /v1/profile` — ответы опроса своего
   пользователя для Главной, публичное имя и согласие, `no-store`, документа нет — `[]` / `null` / `false`;
   `PATCH /v1/profile` — частичное обновление имени и согласия, лимит `profile-update:<uid>` 30/ч; user-theme
   (ADR-0021): `ProfileView.themeId` (нет выбора — `classic`), `PUT /v1/profile/theme` `{ themeId }` — одна атомарная
@@ -740,7 +741,12 @@ RC-A1, ADR-0019).
   `profile` — источник без порта: `PROFILE_FIELD_RESET` и схема `ProfileFieldReset` из `profile/index.ts`, payload
   самодостаточен, живость получателя — `liveUserIds`; Nest-импорт `ProfileCoreModule` — в `NotificationsModule` и
   `NotificationsWorkerModule` (не в `NotificationsCoreModule`) ради порта `RIDER_NAMES` для имён «Своих» (social-p1); схлопывание `profile:<uid>:<field>` по `seq`, событие без `seq` — `invalid_payload`.
-- Маршруты объявляет подписчик: `notificationsOutboxRoutes` (16 типов → `notifications-intake`, последний — `rides.photo-reset`; `achievements.grant-noticed`
+- Маршруты объявляет подписчик: `notificationsOutboxRoutes` (20 типов → `notifications-intake`; `rides.photo-reset` (ride-photo-followups); social-p7 — четыре
+  `social.*`, черновики — `socialNoticeDraft`, `drafts(type, payload, now, eventId)`: процессор передаёт id события;
+  «Свои идут» — вторая ветка `rides.participant-joined` (записавшийся — участник с `seq` события, только публичный,
+  аудитория — `SOCIAL_NOTICES.goingAudience` без организатора и участников); названия — `RIDE_NOTICES`,
+  `ROUTE_NOTICES`, `RACE_REGISTRY` + `RESULTS_NOTICES.entryRace`; `NotificationsWorkerModule` импортирует
+  `SocialCoreModule`; `achievements.grant-noticed`
   — порт `ACHIEVEMENT_NOTICES`, черновик с `inApp` при `origin: 'read'` → push `skipped`/`in_app`
   (`initialDelivery(…, { inApp })`, флаг идёт и в пачку `FanoutJobData.inApp`), схлопывание `achievement:<grantId>` по
   рангу; `tickets.reminder-due` — получателю своя цель `ticket` через `NoticeDraft.targets`). Очереди:
@@ -784,7 +790,7 @@ RC-A1, ADR-0019).
 ## «Свои» (`social`, `product-events`, ADR-0027 Proposed, `docs/product/social.md`)
 
 - Модуль `social` — потребитель: `social → rides, profile, product-events, identity, results, routes, tracks` (P0;
-  `identity` — `AuthGuard` контроллеров с P2; `results`, `routes` — P4; `tracks` — порт `ACTIVITY_STARTS`, P5) только через
+  `identity` — `AuthGuard` контроллеров с P2; `results`, `routes` — P4, Главная P7; `tracks` — порт `ACTIVITY_STARTS`, P5) только через
   `index.ts` и порты: `RIDES_FOR_SOCIAL`
   (`rides-for-social.port.ts`, `rideFacts`: фаза — `ridePhase` внутри `rides`, участники «Иду» с организатором первым,
   точная точка старта при `startPrecise`; `nextRideCard` (P3, «Идёт») — ближайший опубликованный будущий райд райдера
@@ -813,7 +819,7 @@ RC-A1, ADR-0019).
   (`social.events.ts`, новые типы — в конец). `SocialIntakeProcessor` — таблица `тип → { схема, обработчик }` (P5
   дописывает строку): неизвестное имя — бросок, payload не по схеме — `skipped`. `InviteIntake.handle`: код → владелец
   (`unknown_code`), свой (`self`), живость обоих — `IdentityAccounts.liveUserIds` (`inviter_deleted` /
-  `invitee_deleted`), `linkInvite` (`linked` / `already_linked`); точка уведомления P7 — после `linkInvite`. Логи — id
+  `invitee_deleted`), `linkInvite` (`linked` / `already_linked`); уведомление пригласившему — outbox в транзакции `linkInvite` (P7). Логи — id
   события и итог, без кода. `linkInvite` → `boolean`: `invite-registered` (`userId` пригласившего) — когда у стороны
   пригласившего `inviteAt` впервые стал не-`null` (`upsertInvite` → `inserted | invited | unchanged`, RC-P6-8).
 - Явка (RC-2a) — транзакция: условная запись документа явки райда → явившиеся → `rideConnectionDiff` с парами райда
@@ -865,9 +871,32 @@ RC-A1, ADR-0019).
   `[now − askAfterMs − askCatchUpMs; now − askAfterMs]` (4 ч, догон 24 ч, `SOCIAL_POLICY`), полный проход окна за
   прогон без курсора → `askedAmong` → на райд транзакция `claimAsk` (захват `askedAt`) → `entriesIn` → адресаты
   `rideAskRecipients` (участники «Иду» без записи явки, только живые) → точка P7 `RIDE_ASK_DUE.due(tx, { rideId,
-  userIds })`; до P7 — заглушка `LoggingRideAskDue` (лог `social.ride_ask_due ride count`). Сбой райда — лог
+  userIds })` — P7: `OutboxRideAskDue` (outbox `social.ride-ask-due` в той же транзакции, лог `social.ride_ask_due
+  ride count`; сбой `append` откатывает захват). Сбой райда — лог
   `social.ride_ask_failed`, в конце — исключение.
+- Уведомления K10 (P7): outbox `social.*` — в транзакции действия, payload — только id: `social.reaction-created
+  { reactionId }` (приватный `insert` реакций), `social.connection-added { ownerId, otherId }` (`addManual`: только
+  если связи не было и захвачена отметка K11 `claimManualNotice` — `manualNoticeAt` не моложе `manualRenotifyMs`),
+  `social.invite-registered { inviterId, inviteeId }` (`linkInvite`, при `registered`), `social.ride-ask-due { rideId,
+  userIds }` (`OutboxRideAskDue` — реализация `RIDE_ASK_DUE` в `SocialWorkerModule`, заглушки `LoggingRideAskDue` нет).
+  `socialOutboxRoutes` их не содержит — маршрут у подписчика (`notificationsOutboxRoutes`). Порт `SOCIAL_NOTICES`
+  (`social-notices.port.ts`, `SocialCoreModule`): `reaction` (снята — `null`), `connected`, `goingAudience` (взаимные
+  связи, RC-P7-1a).
+- Главная (P7, K7): `SocialHomeController` (`GET social/home`, `AuthGuard`, `no-store`) → `SocialHomeService`
+  (`SocialModule`): лимит `social-home:<uid>` первым → `listOf` (публичные, ≤ `homeConnectionsMax`) → райды — только
+  взаимные «свои» (`ConnectionsRepository.ownerIdsOf`) → порты `RIDES_FOR_SOCIAL.upcomingWithRiders`,
+  `RESULTS_FOR_SOCIAL.recentResults` (`ResultsReadService.recentPublicRows`: `RACE_REGISTRY.protocolsPublishedSince`,
+  те же предикаты таблицы), `ROUTES_FOR_SOCIAL.recentByAuthors` (`toCatalogCard`, имя — `RIDER_NAMES`;
+  `RoutesCoreModule` импортирует `ProfileCoreModule`) → чистые `social-home.view.ts` (`pickHomeRows` — по кругу видов,
+  ≤ 3). Запросы портов — с `hint` своих индексов (`rides_participant_idx`, `races_protocol_published_idx`,
+  `routes_catalog_idx`).
+- Активный день (P7, K12): `AuthGuard` → `ActiveDay.touch` (`identity/active-day.ts`, провайдер и экспорт
+  `IdentityModule`, `IdentityModule` импортирует `ProductEventsCoreModule`): `REDIS` `SET NX EX` до конца суток по
+  Минску + 1 ч → `PRODUCT_EVENTS.record(active-day)`; ожидание ≤ `ACTIVE_DAY_WAIT_MS` (200), не бросает; сбой — `DEL`
+  ключа и лог `product_events.record_failed type=active-day error=<класс>`. Тесты, считающие `product_events` после
+  HTTP-запросов, фильтруют `type`; отказ `record` в тестах — по типу события, не `mockRejectedValueOnce`.
 - Модуль `product-events` — листовой (dependency-cruiser `product-events-leaf`): порт `PRODUCT_EVENTS.record(event,
   session?)`, справочник и `props` — `product-events.types.ts` (zod, `strictObject`, без id пользователей, RC-11, RC-12).
   `social` пишет события в своей транзакции; вызывающий вне транзакции — после основной записи, сбой — лог
-  `product_events.record_failed type=<t>` без отказа. Коллекцию `product_events` пишет только модуль.
+  `product_events.record_failed type=<t>` без отказа. Коллекцию `product_events` пишет только модуль. Пишут `social`,
+  `rides`, `identity` (P7); новых очередей «Свои» в P7 нет.
