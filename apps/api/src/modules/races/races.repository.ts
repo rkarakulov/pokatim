@@ -227,6 +227,19 @@ export class RacesRepository {
   }
 
   /** Гонки по id (`_id` — индекс); незнакомые id — без документа. */
+  /**
+   * Опубликованные гонки с протоколом, опубликованным не раньше `since` (Главная «Свои», social-p7):
+   * `protocolPublishedAt ↓, _id ↓`, ≤ `limit`; индекс `races_protocol_published_idx`.
+   */
+  protocolsPublishedSince(since: Date, limit: number): Promise<RaceDoc[]> {
+    return this.c.races
+      .find({ status: 'published', protocolPublishedAt: { $gte: since } })
+      .sort({ protocolPublishedAt: -1, _id: -1 })
+      .hint('races_protocol_published_idx')
+      .limit(limit)
+      .toArray();
+  }
+
   findRaces(ids: readonly string[]): Promise<RaceDoc[]> {
     if (ids.length === 0) return Promise.resolve([]);
     return this.c.races.find({ _id: { $in: [...new Set(ids)] } }).toArray();

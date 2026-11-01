@@ -199,3 +199,18 @@ describe('api-client: реакции (P4)', () => {
     });
   });
 });
+
+describe('api-client: Главная «Свои» (P7)', () => {
+  it('getSocialHome — GET с Bearer; незнакомый вид строки отброшен', async () => {
+    const { calls, api } = client(200, { items: [{ kind: 'photo' }] });
+    await expect(api.getSocialHome('t')).resolves.toEqual({ items: [] });
+    expect(calls).toEqual([
+      {
+        url: 'https://api.test/v1/social/home',
+        method: 'GET',
+        authorization: 'Bearer t',
+        body: undefined,
+      },
+    ]);
+  });
+});

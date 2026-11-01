@@ -29,6 +29,7 @@ import {
 import { RACE_REGISTRY, type RaceForResults, type RaceRegistry } from '../races';
 import { ACTIVITY_SOURCE, type ActivitySource } from '../tracks';
 import { RESULT_DISPUTE_GATE, type ResultDisputeGate } from './result-dispute-gate.port';
+import type { SocialRaceResult } from './results-for-social.port';
 import type {
   AttemptSegmentDoc,
   RaceAttemptDoc,
@@ -66,6 +67,9 @@ const groupOfEntry = (entry: Pick<RaceEntryDoc, 'groupKey'> | null): ResultGroup
 /**
  * Группа публичной таблицы по умолчанию (RC-10): `overall` в схеме `overall`, иначе первая непустая, иначе `m_u40`.
  */
+/** Гонок с протоколом за окно Главной «Свои» — не больше (social-p7, RC-P7-16). */
+const RECENT_PROTOCOL_RACES = 20;
+
 const defaultGroup = (race: RaceForResults, groups: readonly GroupCount[]): ResultGroupKey =>
   race.groupScheme === 'overall' ? 'overall' : (groups[0]?.key ?? 'm_u40');
 const invalidCursor = () =>
@@ -456,6 +460,73 @@ export class ResultsReadService {
       const row = await this.repository.protocolRow(race.id, revision, entryId, session);
       return row && isPublicProtocolRow(row) ? { ...target, userId: row.userId } : null;
     });
+  }
+
+  /**
+   * Строки опубликованных протоколов «своих» за окно (Главная «Свои», social-p7, порт `RESULTS_FOR_SOCIAL`): гонки с
+   * протоколом не раньше `since` (`RACE_REGISTRY.protocolsPublishedSince`, ≤ `RECENT_PROTOCOL_RACES`) и видимостью
+   * `protocol` (`publicTableMode`) → в одной snapshot-сессии текущая ревизия каждой и строки `userIds` ∪ зрителя
+   * этой ревизии, видимые в публичной таблице (`isPublicProtocolRow`). `viewerElapsedSec` — видимая строка зрителя той
+   * же гонки и группы (`groupKey ?? 'overall'`). Порядок: протокол ↓, гонка ↑, место ↑, заявка ↑; ≤ `limit`.
+   */
+  async recentPublicRows(
+    userIds: readonly string[],
+    viewerId: string,
+    since: Date,
+    limit: number,
+  ): Promise<SocialRaceResult[]> {
+    if (userIds.length === 0) return [];
+    const races = (await this.races.protocolsPublishedSince(since, RECENT_PROTOCOL_RACES)).filter(
+      (race) => publicTableMode(race) === 'protocol',
+    );
+    if (races.length === 0) return [];
+    const rows = await this.repository.withSnapshot(async (session) => {
+      const revisions = new Map(
+        await Promise.all(
+          races.map(
+            async (race) => [race.id, await this.protocolRevision(race.id, session)] as const,
+          ),
+        ),
+      );
+      const all = await this.repository.protocolRowsOfUsers(
+        [...new Set([...userIds, viewerId])],
+        races.map((race) => race.id),
+        session,
+      );
+      return all.filter(
+        (row) => row.revision === revisions.get(row.raceId) && isPublicProtocolRow(row),
+      );
+    });
+    const groupOf = (row: { raceId: string; groupKey?: ResultGroupKey }) =>
+      `${row.raceId}\u0000${row.groupKey ?? 'overall'}`;
+    const viewer = new Map(
+      rows.filter((row) => row.userId === viewerId).map((row) => [groupOf(row), row.elapsedSec]),
+    );
+    const byId = new Map(races.map((race) => [race.id, race]));
+    return rows
+      .filter((row) => row.userId !== viewerId)
+      .map((row): SocialRaceResult => {
+        const race = byId.get(row.raceId)!;
+        return {
+          raceId: race.id,
+          raceTitle: race.title,
+          publishedAt: race.protocolPublishedAt!,
+          entryId: row.entryId,
+          userId: row.userId,
+          place: row.place!,
+          tied: row.tied,
+          elapsedSec: row.elapsedSec,
+          viewerElapsedSec: viewer.get(groupOf(row)) ?? null,
+        };
+      })
+      .sort(
+        (a, b) =>
+          b.publishedAt.getTime() - a.publishedAt.getTime() ||
+          a.raceId.localeCompare(b.raceId) ||
+          a.place - b.place ||
+          a.entryId.localeCompare(b.entryId),
+      )
+      .slice(0, limit);
   }
 
   /**

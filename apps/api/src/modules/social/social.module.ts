@@ -30,6 +30,8 @@ import { RiderSocialController } from './rider-social.controller';
 import { RiderSocialService } from './rider-social.service';
 import { SocialConnectionsController } from './social-connections.controller';
 import { SocialErasure } from './social-erasure';
+import { SocialHomeController } from './social-home.controller';
+import { SocialHomeService } from './social-home.service';
 import { SocialIntakeProcessor } from './social-intake.processor';
 import { SocialMaintenanceProcessor, SocialSchedules } from './social-maintenance.processor';
 import { SOCIAL_NOTICES } from './social-notices.port';
@@ -69,13 +71,15 @@ import { SocialNoticesService } from './social-notices.service';
     AttendanceRepository,
     // порт уведомлений K10 для `NotificationsWorkerModule` (P7)
     SOCIAL_NOTICES,
+    // взаимность связей для Главной `SocialModule` (P7); вне модуля `social` не уходит
+    ConnectionsRepository,
   ],
 })
 export class SocialCoreModule {}
 
 /**
  * HTTP «Свои» (якорь композиции `AppModule`, RC-13): участники, явка и «спасибо» райда (P2, P4), профиль райдера и
- * список «Свои» (P3), «Респект» (P4), код приглашения (P6); P7 — свои контроллеры. Порты `RIDER_PROFILES`,
+ * список «Свои» (P3), «Респект» (P4), код приглашения (P6), секция Главной `GET social/home` (P7). Порты `RIDER_PROFILES`,
  * `RIDES_FOR_SOCIAL`, `RESULTS_FOR_SOCIAL` и `ROUTES_FOR_SOCIAL` — из ядер владельцев (порты «Респекта» нужны только
  * HTTP, RC-P4-12).
  */
@@ -94,8 +98,9 @@ export class SocialCoreModule {}
     RiderSocialController,
     SocialConnectionsController,
     SocialRespectController,
+    SocialHomeController,
   ],
-  providers: [RiderSocialService, SocialRespectService],
+  providers: [RiderSocialService, SocialRespectService, SocialHomeService],
 })
 export class SocialModule {}
 

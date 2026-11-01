@@ -639,6 +639,35 @@ export class RidesRepository {
   }
 
   /**
+   * Главная «Свои» (social-p7): опубликованные райды со стартом в `(now, until]`, где участник «Иду» (или организатор —
+   * первый участник) — кто-то из `riderIds` (`rides_participant_idx`), `startsAt ↑, _id ↑`, ≤ `limit`. Проекция —
+   * поля зрителя и `userId` всех участников (роль зрителя — по ним же).
+   */
+  upcomingWithParticipants(
+    riderIds: readonly string[],
+    now: Date,
+    until: Date,
+    limit: number,
+  ): Promise<RideDoc[]> {
+    return (
+      this.rides
+        .find(
+          {
+            'participants.userId': { $in: [...riderIds] },
+            status: 'published',
+            startsAt: { $gt: now, $lte: until },
+          },
+          { projection: { ...VIEWER_FIELDS, 'participants.userId': 1 } },
+        )
+        .sort({ startsAt: 1, _id: 1 })
+        // окно старта в фильтре делает кандидатом `rides_feed_idx` (скан всей ленты недели) — план фиксирован
+        .hint('rides_participant_idx')
+        .limit(limit)
+        .toArray()
+    );
+  }
+
+  /**
    * Райды из `ids`, «прошедшие» по условию `pastFactsOf` (опубликован, старт до `now`) без участия — объект ручной выдачи
    * достижения (порт `RIDER_RIDES.ridesOf`, achievements-panel). Скрытый и отменённый — нет.
    */
