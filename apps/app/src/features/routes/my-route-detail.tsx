@@ -377,11 +377,17 @@ export function MyRouteDetailScreen({ id }: { id: string }) {
   const ready = valid && route.data?.status === 'ready';
   const rides = useRouteRides(id, ready);
   const now = useMinskClock([route.dataUpdatedAt, rides.dataUpdatedAt]);
-  // pull-to-refresh — карточка, карта (повтор после ошибки геометрии) и «Мои заезды»
+  // pull-to-refresh — карточка, карта (только повтор после ошибки: геометрия готового неизменна, как у каталога; в
+  // `fill` ошибка обновления при показанной карте не видна — routes-07, ревью pass 2) и «Мои заезды»
   const refetchers = useMemo(
     () => [
       route.refetch,
-      () => queryClient.refetchQueries({ queryKey: myRoutesKeys.map(id), type: 'active' }),
+      () =>
+        queryClient.refetchQueries({
+          queryKey: myRoutesKeys.map(id),
+          type: 'active',
+          predicate: (query) => query.state.data === undefined,
+        }),
       ...(ready ? [rides.refetch] : []),
     ],
     [route.refetch, queryClient, id, ready, rides.refetch],

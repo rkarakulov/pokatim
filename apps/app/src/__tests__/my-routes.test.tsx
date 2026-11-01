@@ -492,6 +492,15 @@ describe('фиксы ревью pass 1', () => {
     expect(getMineMap).toHaveBeenCalledTimes(2);
   });
 
+  it('pull-to-refresh при показанной карте геометрию не перезапрашивает (неизменна; ревью pass 2)', async () => {
+    await openDetail(ring.id);
+    await showMap();
+    await pullDetail();
+    await waitFor(() => expect(getMine).toHaveBeenCalledTimes(2));
+    expect(getMineMap).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText(mapLabel)).toBeOnTheScreen();
+  });
+
   it('удалён на другом устройстве: обновление с 404 при показанных данных — «Маршрут недоступен», карты нет', async () => {
     await openDetail(ring.id);
     await showMap();
