@@ -639,6 +639,35 @@ export class RidesRepository {
   }
 
   /**
+   * Главная «Свои» (social-p7): опубликованные райды со стартом в `(now, until]`, где участник «Иду» (или организатор —
+   * первый участник) — кто-то из `riderIds` (`rides_participant_idx`), `startsAt ↑, _id ↑`, ≤ `limit`. Проекция —
+   * поля зрителя и `userId` всех участников (роль зрителя — по ним же).
+   */
+  upcomingWithParticipants(
+    riderIds: readonly string[],
+    now: Date,
+    until: Date,
+    limit: number,
+  ): Promise<RideDoc[]> {
+    return (
+      this.rides
+        .find(
+          {
+            'participants.userId': { $in: [...riderIds] },
+            status: 'published',
+            startsAt: { $gt: now, $lte: until },
+          },
+          { projection: { ...VIEWER_FIELDS, 'participants.userId': 1 } },
+        )
+        .sort({ startsAt: 1, _id: 1 })
+        // окно старта в фильтре делает кандидатом `rides_feed_idx` (скан всей ленты недели) — план фиксирован
+        .hint('rides_participant_idx')
+        .limit(limit)
+        .toArray()
+    );
+  }
+
+  /**
    * Райды из `ids`, «прошедшие» по условию `pastFactsOf` (опубликован, старт до `now`) без участия — объект ручной выдачи
    * достижения (порт `RIDER_RIDES.ridesOf`, achievements-panel). Скрытый и отменённый — нет.
    */
@@ -841,7 +870,10 @@ export class RidesRepository {
     );
   }
 
-  /** Сброс фото модератором по `photoId` карточки (любой статус): после записи; `null` — фото уже другое или нет. */
+  /**
+   * Сброс фото модератором по `photoId` карточки (любой статус): после записи; `null` — фото уже другое или нет.
+   * `noticeSeq` +1 — номер события `rides.photo-reset` (ride-photo-followups R7).
+   */
   resetPhoto(
     tx: DbSession,
     id: string,
@@ -850,17 +882,31 @@ export class RidesRepository {
   ): Promise<RideModerationDoc | null> {
     return this.rides.findOneAndUpdate(
       { _id: id, photoId },
-      { $set: { photoId: null, updatedAt: now } },
+      { $set: { photoId: null, updatedAt: now }, $inc: { noticeSeq: 1 } },
       { session: tx, returnDocument: 'after', projection: { participants: 0 } },
     );
   }
 
-  /** Фото — текущее фото нескрытого райда (отдача байтов и рендер приглашения проверяют на каждом запросе). */
-  async isCurrentPhoto(rideId: string, photoId: string): Promise<boolean> {
+  /**
+   * Райд не скрыт и (если задано) `photoId` — его текущее фото: одно условие для отдачи фото, рендера приглашения и
+   * отдачи PNG приглашения (ride-photo-followups); статус и фаза иначе не проверяются.
+   */
+  async isShareable(rideId: string, photoId: string | null): Promise<boolean> {
     const doc = await this.rides.findOne(
-      { _id: rideId, photoId, status: { $ne: 'hidden' } },
+      { _id: rideId, status: { $ne: 'hidden' }, ...(photoId === null ? {} : { photoId }) },
       { projection: { _id: 1 } },
     );
+    return doc !== null;
+  }
+
+  /** Фото — текущее фото нескрытого райда (отдача байтов и рендер приглашения проверяют на каждом запросе). */
+  isCurrentPhoto(rideId: string, photoId: string): Promise<boolean> {
+    return this.isShareable(rideId, photoId);
+  }
+
+  /** Фото — текущее фото райда любого статуса (отдача фото карточке модерации, ride-photo-followups). */
+  async hasPhoto(rideId: string, photoId: string): Promise<boolean> {
+    const doc = await this.rides.findOne({ _id: rideId, photoId }, { projection: { _id: 1 } });
     return doc !== null;
   }
 

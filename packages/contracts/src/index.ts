@@ -62,3 +62,4 @@ export * from './social/ride-participants.schema.ts';
 export * from './social/invite.schema.ts';
 export * from './social/rider-social.schema.ts';
 export * from './social/reactions.schema.ts';
+export * from './social/home.schema.ts';

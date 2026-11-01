@@ -10,6 +10,7 @@ import {
   SOCIAL_PARTICIPANT_RIDES_MAX,
   type SocialRideFacts,
   type SocialStartedRide,
+  type SocialUpcomingRide,
 } from './rides-for-social.port';
 import type { RideDoc } from './rides.collection';
 import { ridePhase } from './rides.policy';
@@ -81,6 +82,29 @@ export class RidesForSocialService implements RidesForSocial {
       })),
       next: last ? { at: last.startsAt, id: last._id } : null,
     };
+  }
+
+  async upcomingWithRiders(
+    riderIds: readonly string[],
+    viewerId: string,
+    now: Date,
+    until: Date,
+    limit: number,
+  ): Promise<SocialUpcomingRide[]> {
+    if (riderIds.length === 0) return [];
+    const docs = await this.repository.upcomingWithParticipants(riderIds, now, until, limit);
+    if (docs.length === 0) return [];
+    const [routes, reported] = await Promise.all([
+      lookupRoutes(this.rideRoutes, docs, viewerId),
+      this.reports.reportedRideIds(
+        viewerId,
+        docs.map((doc) => doc._id),
+      ),
+    ]);
+    return docs.map((doc) => ({
+      card: rideCardOf(doc, viewerId, now, routes, reported.has(doc._id)),
+      participantIds: doc.participants.map((participant) => participant.userId),
+    }));
   }
 
   async nextRideCard(riderId: string, viewerId: string, now: Date): Promise<RideCard | null> {

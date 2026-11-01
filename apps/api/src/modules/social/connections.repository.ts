@@ -3,7 +3,7 @@ import { isDuplicateKey, MONGO_DB, uuidv7 } from '@rkarakulov/api-kit/mongo';
 import type { AnyBulkWriteOperation, Collection, Db, Filter } from 'mongodb';
 
 import type { DbSession } from '../../db';
-import type { ConnectionPair } from './social.policy';
+import { type ConnectionPair, SOCIAL_POLICY } from './social.policy';
 import { type ConnectionDoc, socialCollections } from './social.collection';
 
 /**
@@ -46,17 +46,51 @@ export class ConnectionsRepository {
     this.connections = socialCollections(db).connections;
   }
 
-  /** «В свои» (K1): upsert пары, `manualAt = now`, `removedAt = null`. `true` — документ создан. */
-  async upsertManual(tx: DbSession, pair: ConnectionPair, now: Date): Promise<boolean> {
-    const result = await this.connections.updateOne(
+  /**
+   * «В свои» (K1): upsert пары, `manualAt = now`, `removedAt = null`. `created` — документ создан, `connectedBefore` —
+   * связь уже была и не убрана (любой источник; K11, P7: тогда без уведомления).
+   */
+  async upsertManual(
+    tx: DbSession,
+    pair: ConnectionPair,
+    now: Date,
+  ): Promise<{ created: boolean; connectedBefore: boolean }> {
+    const before = await this.connections.findOneAndUpdate(
       pair,
       {
         $set: { manualAt: now, removedAt: null, updatedAt: now },
         $setOnInsert: { ...fresh(now), inviteAt: null },
       },
-      { upsert: true, session: tx },
+      { upsert: true, session: tx, returnDocument: 'before', projection: { removedAt: 1 } },
     );
-    return result.upsertedCount > 0;
+    return {
+      created: before === null,
+      connectedBefore: before !== null && before.removedAt === null,
+    };
+  }
+
+  /**
+   * K11 (P7): отметка уведомления о ручном добавлении пары — если прошлого не было (`manualNoticeAt` нет или `null`)
+   * или оно старше `renotifyMs`. `true` — отметка поставлена, уведомлять.
+   */
+  async claimManualNotice(
+    tx: DbSession,
+    pair: ConnectionPair,
+    now: Date,
+    renotifyMs: number,
+  ): Promise<boolean> {
+    const result = await this.connections.updateOne(
+      {
+        ...pair,
+        $or: [
+          { manualNoticeAt: null },
+          { manualNoticeAt: { $lte: new Date(now.getTime() - renotifyMs) } },
+        ],
+      },
+      { $set: { manualNoticeAt: now } },
+      { session: tx },
+    );
+    return result.modifiedCount > 0;
   }
 
   /**
@@ -209,6 +243,51 @@ export class ConnectionsRepository {
 
   findPair(pair: ConnectionPair): Promise<ConnectionDoc | null> {
     return this.connections.findOne(pair);
+  }
+
+  /** Связь пары есть и не убрана (`owner_other_unique`, P7). */
+  async isConnected(pair: ConnectionPair): Promise<boolean> {
+    return (await this.connections.countDocuments({ ...pair, removedAt: null }, { limit: 1 })) > 0;
+  }
+
+  /** Владельцы не убранных связей к `otherId` (`rider_connections_other_idx`, P7: «Свои идут»). */
+  async ownerIdsOf(otherId: string): Promise<string[]> {
+    const docs = await this.connections
+      .find({ otherId, removedAt: null }, { projection: { _id: 0, ownerId: 1 } })
+      .toArray();
+    return docs.map((doc) => doc.ownerId);
+  }
+
+  /** Кто из `ownerIds` держит не убранную связь к `otherId` (`owner_other_unique`, P7: взаимность Главной). */
+  async ownersAmong(otherId: string, ownerIds: readonly string[]): Promise<Set<string>> {
+    const found = new Set<string>();
+    for (let start = 0; start < ownerIds.length; start += SOCIAL_POLICY.bulkBatch) {
+      const chunk = ownerIds.slice(start, start + SOCIAL_POLICY.bulkBatch);
+      const docs = await this.connections
+        .find(
+          { ownerId: { $in: [...chunk] }, otherId, removedAt: null },
+          { projection: { _id: 0, ownerId: 1 } },
+        )
+        .toArray();
+      for (const doc of docs) found.add(doc.ownerId);
+    }
+    return found;
+  }
+
+  /** Кто из `otherIds` у владельца в не убранных связях (`owner_other_unique`, P7: взаимность RC-P7-1a). */
+  async otherIdsAmong(ownerId: string, otherIds: readonly string[]): Promise<Set<string>> {
+    const found = new Set<string>();
+    for (let start = 0; start < otherIds.length; start += SOCIAL_POLICY.bulkBatch) {
+      const chunk = otherIds.slice(start, start + SOCIAL_POLICY.bulkBatch);
+      const docs = await this.connections
+        .find(
+          { ownerId, otherId: { $in: [...chunk] }, removedAt: null },
+          { projection: { _id: 0, otherId: 1 } },
+        )
+        .toArray();
+      for (const doc of docs) found.add(doc.otherId);
+    }
+    return found;
   }
 
   /** Стирание (K13): связи райдера в обе стороны. */

@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { ConnectionSource } from '@pokatim/contracts';
 import { CLOCK, type Clock, RateLimiter } from '@rkarakulov/api-kit/core';
+import { MongoOutboxWriter } from '@rkarakulov/api-kit/mongo';
 
 import { MongoTransactions } from '../../db';
 import { domainError } from '../../error-messages';
@@ -8,6 +9,12 @@ import { consumeUserLimit } from '../../user-limit';
 import { PRODUCT_EVENTS, type ProductEvents } from '../product-events';
 import { type PublicRiderCard, RIDER_NAMES, type RiderNameDirectory } from '../profile';
 import { ConnectionsRepository } from './connections.repository';
+import {
+  SOCIAL_CONNECTION_ADDED,
+  SOCIAL_INVITE_REGISTERED,
+  type SocialConnectionAdded,
+  type SocialInviteRegistered,
+} from './social.events';
 import { connectionSources, SOCIAL_POLICY, socialBlocked } from './social.policy';
 
 /** Строка списка «своих» владельца (K6): только публичные профили. */
@@ -42,6 +49,7 @@ export class SocialConnectionsService {
     private readonly connections: ConnectionsRepository,
     private readonly rateLimiter: RateLimiter,
     private readonly transactions: MongoTransactions,
+    private readonly outbox: MongoOutboxWriter,
     @Inject(RIDER_NAMES) private readonly names: RiderNameDirectory,
     @Inject(PRODUCT_EVENTS) private readonly events: ProductEvents,
     @Inject(CLOCK) private readonly clock: Clock,
@@ -50,7 +58,8 @@ export class SocialConnectionsService {
   /**
    * «В свои» (K1, K11): лимит — на каждую попытку и до остальных проверок (против перебора профилей); себе — нельзя;
    * неизвестный, непубличный и удалённый — одинаковый `404 NOT_FOUND` (RC-16). Снимает `removedAt`. `true` — связь
-   * создана.
+   * создана. Уведомление «Вас добавили» (K10, K11, P7) — outbox `social.connection-added` в той же транзакции, только
+   * если связи не было (или убрана) и по паре не уведомляли последние `manualRenotifyMs` (`claimManualNotice`).
    */
   async addManual(ownerId: string, otherId: string): Promise<boolean> {
     const now = this.clock.now();
@@ -67,12 +76,19 @@ export class SocialConnectionsService {
     const pair = { ownerId, otherId };
     // гонка первых upsert одной пары (и с пересчётом явки) — `WriteConflict`, повтор `withTransaction` (RC-P3-2)
     return this.transactions.run(async (tx) => {
-      const created = await this.connections.upsertManual(tx, pair, now);
+      const { created, connectedBefore } = await this.connections.upsertManual(tx, pair, now);
       if (created) {
         await this.events.record(
           { type: 'connection-created', userId: ownerId, props: { source: 'manual' } },
           tx,
         );
+      }
+      if (
+        !connectedBefore &&
+        (await this.connections.claimManualNotice(tx, pair, now, SOCIAL_POLICY.manualRenotifyMs))
+      ) {
+        const payload: SocialConnectionAdded = pair;
+        await this.outbox.append(tx, { type: SOCIAL_CONNECTION_ADDED, payload });
       }
       return created;
     });
@@ -85,8 +101,9 @@ export class SocialConnectionsService {
 
   /**
    * Связь `invite` в обе стороны (K9): событие `connection-created` — по созданным документам; `invite-registered`
-   * (K12, `userId` пригласившего) — когда у стороны `inviter → invitee` `inviteAt` впервые стал не-`null` (RC-P6-8).
-   * Возвращает этот признак (P7); повтор — `false`, без дублей. Гонка первых upsert пары — повтор `withTransaction`.
+   * (K12, `userId` пригласившего) и outbox `social.invite-registered` (уведомление K10, P7) — когда у стороны
+   * `inviter → invitee` `inviteAt` впервые стал не-`null` (RC-P6-8). Возвращает этот признак; повтор — `false`, без
+   * дублей. Гонка первых upsert пары — повтор `withTransaction`.
    */
   async linkInvite(inviterId: string, inviteeId: string): Promise<boolean> {
     if (inviterId === inviteeId) return false;
@@ -109,6 +126,8 @@ export class SocialConnectionsService {
       }
       if (registered) {
         await this.events.record({ type: 'invite-registered', userId: inviterId, props: {} }, tx);
+        const payload: SocialInviteRegistered = { inviterId, inviteeId };
+        await this.outbox.append(tx, { type: SOCIAL_INVITE_REGISTERED, payload });
       }
       return registered;
     });

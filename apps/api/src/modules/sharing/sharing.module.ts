@@ -34,6 +34,7 @@ import { RouteCardController } from './route-card.controller';
 import { RouteCardInputs } from './route-card.inputs';
 import { RouteCardService } from './route-card.service';
 import { StoryCardImageController } from './story-card-image.controller';
+import { StoryCardImageService } from './story-card-image.service';
 import { StoryCardCache } from './story-card.cache';
 import { StoryCardController } from './story-card.controller';
 import { StoryCardInputs } from './story-card.inputs';
@@ -84,6 +85,7 @@ import { StoryCardService } from './story-card.service';
     RouteCardService,
     RouteCardInputs,
     StoryCardCache,
+    StoryCardImageService,
     OgCardInputs,
     OgCardCache,
     OgCardQueue,

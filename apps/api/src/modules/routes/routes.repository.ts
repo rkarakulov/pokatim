@@ -389,6 +389,35 @@ export class RoutesRepository {
     );
   }
 
+  /**
+   * Главная «Свои» (social-p7, RC-P7-14): готовые маршруты райдеров `authorIds` в каталоге (`IN_CATALOG`), опубликованные
+   * не раньше `since`, с согласием на подпись автора (`publication.showAuthorName`); `catalog.publishedAt ↓, _id ↓`,
+   * ≤ `limit`; индекс `routes_catalog_idx` (план фиксирован, как у `listCatalog`).
+   */
+  recentRiderCatalog(
+    authorIds: readonly string[],
+    since: Date,
+    limit: number,
+  ): Promise<RouteDoc[]> {
+    if (authorIds.length === 0) return Promise.resolve([]);
+    return this.c.routes
+      .find({
+        $and: [
+          { status: 'ready', ...IN_CATALOG },
+          {
+            origin: 'rider',
+            ownerUserId: { $in: [...authorIds] },
+            'publication.showAuthorName': true,
+            'catalog.publishedAt': { $gte: since },
+          },
+        ],
+      })
+      .sort({ 'catalog.publishedAt': -1, _id: -1 })
+      .hint(CATALOG_INDEX)
+      .limit(limit)
+      .toArray();
+  }
+
   /** Коды городов старта маршрутов каталога (чипы фильтра), включая одобренные маршруты райдеров. */
   async catalogCities(): Promise<CityCode[]> {
     const cities: unknown[] = await this.c.routes.distinct('catalog.city', {

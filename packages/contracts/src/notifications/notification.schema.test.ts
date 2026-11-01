@@ -96,6 +96,7 @@ describe('справочники уведомлений (только в кон�
       'social_respect',
       'social_invite_registered',
       'social_ride_ask',
+      'ride_photo_reset',
     ]);
     expect(PUSH_PLATFORMS).toEqual(['ios', 'android']);
   });
@@ -169,6 +170,25 @@ describe('ответы (tolerantEnum, неизвестная цель)', () => {
     ]) {
       expect(NotificationTargetView.parse(target)).toEqual({ type: 'unknown' });
     }
+  });
+
+  it('вид ride_photo_reset в сборке без него — unknown, заголовок и текст с сервера (ride-photo-followups)', () => {
+    const OLD_KINDS = NOTIFICATION_KINDS.slice(0, -1) as unknown as readonly [string, ...string[]];
+    expect(OLD_KINDS).not.toContain('ride_photo_reset');
+    const old = NotificationView.extend({ kind: tolerantEnum(OLD_KINDS) });
+    const item = view({
+      kind: 'ride_photo_reset',
+      group: 'rides',
+      title: 'Фото райда удалено',
+      body: 'Модератор удалил фото райда «Кофе».',
+      target: { type: 'ride', rideId: ID },
+    });
+    const parsed = old.parse(item);
+    expect(parsed.kind).toBe('unknown');
+    expect(parsed.title).toBe('Фото райда удалено');
+    expect(parsed.body).toBe('Модератор удалил фото райда «Кофе».');
+    expect(parsed.target).toEqual({ type: 'ride', rideId: ID });
+    expect(NotificationView.parse(item).kind).toBe('ride_photo_reset');
   });
 
   it('группа achievements и вид achievement_granted в сборке без них — unknown', () => {

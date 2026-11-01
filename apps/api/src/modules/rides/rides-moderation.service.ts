@@ -20,7 +20,12 @@ import { PanelAudit } from '../panel';
 import type { RideReportDoc } from './ride-reports.collection';
 import { RidePhotosRepository } from './ride-photos.repository';
 import { RideReportsRepository } from './ride-reports.repository';
-import { RIDES_REPORTS_RESOLVED, type RidesReportsResolved } from './rides.events';
+import {
+  RIDES_PHOTO_RESET,
+  RIDES_REPORTS_RESOLVED,
+  type RidesPhotoReset,
+  type RidesReportsResolved,
+} from './rides.events';
 import { type ModerationAction, moderationTransition, ridePhase } from './rides.policy';
 import { type RideModerationDoc, RidesRepository } from './rides.repository';
 
@@ -154,8 +159,9 @@ export class RidesModerationService {
   /**
    * «Удалить фото» (ride-photo, ADR-0028, R10): транзакция «условная запись райда по `photoId` карточки первой →
    * документ `ride_photos` удалён → `ride.photo_reset` в журнал» (`details: null` — без id фото). Фото нет — успех без
-   * журнала; фото уже другое — 409 `CONFLICT` (модератор не удалит фото, которого не видел). Жалобы, `version` и
-   * уведомления не трогаются.
+   * журнала; фото уже другое — 409 `CONFLICT` (модератор не удалит фото, которого не видел). Жалобы и `version` не
+   * трогаются. Сброс пишет в ту же транзакцию событие `rides.photo-reset` (уведомление организатору,
+   * ride-photo-followups R10); ветки «фото нет» и 409 — без события.
    */
   resetPhoto(
     actorUserId: string,
@@ -179,6 +185,9 @@ export class RidesModerationService {
         reason: body.reason,
         details: null,
       });
+      // уведомление организатору (ride-photo-followups R10): в транзакции сброса, порядок — `noticeSeq` после записи
+      const payload: RidesPhotoReset = { rideId: id, seq: updated.noticeSeq ?? 1 };
+      await this.outbox.append(tx, { type: RIDES_PHOTO_RESET, payload });
       return detailOf(updated, await this.reports.latest(id, tx), now);
     });
   }

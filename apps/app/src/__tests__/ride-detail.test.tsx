@@ -229,6 +229,13 @@ describe('карточка райда: гость (AC8)', () => {
 describe('карточка райда: вошедший (AC1–AC6)', () => {
   beforeEach(signedIn);
 
+  it('переход из уведомления (`?from=notification`) — «Я иду» с источником notification (K12, social-p7)', async () => {
+    joinRide.mockResolvedValue(view({ goingCount: 6 }, viewer('participant', { canLeave: true })));
+    await openSignedIn(`/rides/${ID}?from=notification`);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Я иду' }));
+    expect(joinRide).toHaveBeenCalledWith(liveSession.accessToken, ID, 'notification');
+  });
+
   it('состояние зрителя — me с Bearer; «Я иду» → «Вы идёте · …» и «Не иду»; «Не иду» → снова «Я иду»', async () => {
     joinRide.mockResolvedValue(view({ goingCount: 6 }, viewer('participant', { canLeave: true })));
     leaveRide.mockResolvedValue(view({ goingCount: 5 }, viewer('none', { canJoin: true })));
@@ -879,6 +886,57 @@ describe('карточка райда: маршрут (05c)', () => {
 
     await fireEvent.press(screen.getByRole('button', { name: 'Маршрут райда' }));
     expect(router.getPathname()).toBe(`/routes/mine/${ROUTE_ID}`);
+  });
+});
+
+describe('карточка райда: фото в шапке (ride-photo-followups AC1)', () => {
+  const PHOTO = { id: 'PhOtOiDpHoToIdPhOtOiD_' };
+  const PHOTO_URL = `https://api.test/v1/ride-photos/${PHOTO.id}`;
+  const heroPhoto = () =>
+    screen.queryByTestId('section-hero-photo', { includeHiddenElements: true });
+  const scrim = () => screen.queryByTestId('photo-scrim', { includeHiddenElements: true });
+
+  beforeEach(() => {
+    jest
+      .mocked(api.ridePhotoUrl)
+      .mockImplementation((id) => `https://api.test/v1/ride-photos/${id}`);
+  });
+
+  it('гость: райд с фото — фото под затемнением в герое, декоративное', async () => {
+    getRide.mockResolvedValue({ ...detail, photo: PHOTO });
+    await renderRouter(appRoutes, { initialUrl: `/rides/${ID}` });
+
+    expect(await screen.findByLabelText(heroLabel)).toBeOnTheScreen();
+    expect(api.ridePhotoUrl).toHaveBeenCalledWith(PHOTO.id);
+    expect(heroPhoto()).toHaveProp('source', { uri: PHOTO_URL });
+    expect(heroPhoto()).toHaveProp('accessibilityLabel', '');
+    expect(scrim()).toBeTruthy();
+  });
+
+  it('вошедший: фото из ответа me; картинка не загрузилась — типографский герой', async () => {
+    signedIn();
+    getRideForViewer.mockResolvedValue(view({ photo: PHOTO }, viewer('none', { canJoin: true })));
+    await openSignedIn();
+
+    await waitFor(() => expect(heroPhoto()).toHaveProp('source', { uri: PHOTO_URL }));
+    await fireEvent(heroPhoto()!, 'error');
+    expect(heroPhoto()).toBeNull();
+    expect(scrim()).toBeNull();
+    expect(screen.getByLabelText(heroLabel)).toBeOnTheScreen();
+  });
+
+  it('без фото и у скрытого (photo: null) — типографский герой', async () => {
+    signedIn();
+    getRide.mockRejectedValue(new ApiHttpError(404, { code: 'NOT_FOUND', message: 'x' }));
+    getRideForViewer.mockResolvedValue(view({ phase: 'hidden', photo: null }, viewer('organizer')));
+    await openSignedIn();
+
+    expect(
+      await screen.findByText('Райд скрыт модератором. Другие райдеры его не видят'),
+    ).toBeOnTheScreen();
+    expect(heroPhoto()).toBeNull();
+    expect(scrim()).toBeNull();
+    expect(api.ridePhotoUrl).not.toHaveBeenCalled();
   });
 });
 
