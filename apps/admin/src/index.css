@@ -922,7 +922,7 @@ select.field__control option:disabled {
 }
 
 /* фото организатора в карточке модерации райда (ride-photo PR C): ширина --panel-ride-photo-preview, высота — по
-   пропорциям фото; скрытый райд — плашка той же ширины вместо картинки (отдача 404) */
+   пропорциям фото; «Фото недоступно» — плашка той же ширины; у скрытого райда — пометка под картинкой */
 .ride-photo-preview {
   display: block;
   width: var(--panel-ride-photo-preview);
@@ -943,6 +943,11 @@ select.field__control option:disabled {
 
 .ride-photo-preview--skeleton {
   aspect-ratio: 16 / 9;
+}
+
+.ride-photo-preview__note {
+  display: block;
+  margin-top: var(--space-s2);
 }
 
 .ride-photo-preview__actions {
