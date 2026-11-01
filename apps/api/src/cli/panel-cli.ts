@@ -22,8 +22,8 @@ export const CLI_USAGE = `Панель «Протокол» — команды �
 
   reserved-names
       Профили, где имя или клуб совпадает со служебной подписью таблицы («Райдер #N», «Участник», «Вы»;
-      сохранены до запрета, name-consent-prompt N8): id пользователя и карточка в панели. Только чтение —
-      сбросьте имя или клуб в карточке «Профили райдеров» (журнал действий).
+      сохранены до запрета, name-consent-prompt N8): id пользователя, поля и карточка в панели («скрыт» —
+      профиль не публичен, карточка поле не показывает). Только чтение — сброс модератором (runbook deploy.md).
 
 Коды выхода: 0 — готово (уже администратор; 2FA не подключена), 2 — неверные аргументы или пользователь не подходит, 1 — сбой.
 `;
@@ -103,10 +103,9 @@ const FIELD_LABEL = { name: 'имя', club: 'клуб' } as const;
 
 async function reservedNames(lines: ReservedRiderLines, io: CliIo): Promise<number> {
   const found = await lines.find();
-  for (const { userId, fields } of found) {
-    io.stdout(
-      `${userId}\t${fields.map((field) => FIELD_LABEL[field]).join(', ')}\t/admin/rider-profiles/${userId}\n`,
-    );
+  for (const { userId, fields, visible } of found) {
+    const labels = fields.map((field) => FIELD_LABEL[field]).join(', ');
+    io.stdout(`${userId}\t${labels}\t${visible ? `/admin/rider-profiles/${userId}` : 'скрыт'}\n`);
   }
   io.stdout(
     found.length === 0

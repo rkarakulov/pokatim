@@ -589,7 +589,7 @@ export class ProfileRepository {
 
   /**
    * Страница профилей с именем или клубом по `_id` ↑ (разовая выборка служебных подписей, `ReservedRiderLines`): только
-   * `_id`, `publicName`, `club`. Скан коллекции по `_id` — команда сервера, не HTTP.
+   * `_id`, `publicName`, `club`, `showNameInResults`. Скан коллекции по `_id` — команда сервера, не HTTP.
    */
   linesPage(afterId: string | null, limit: number) {
     return this.profiles
@@ -598,7 +598,11 @@ export class ProfileRepository {
           ...(afterId === null ? {} : { _id: { $gt: afterId } }),
           $or: [{ publicName: { $type: 'string' } }, { club: { $type: 'string' } }],
         },
-        { projection: { _id: 1, publicName: 1, club: 1 }, sort: { _id: 1 }, limit },
+        {
+          projection: { _id: 1, publicName: 1, club: 1, showNameInResults: 1 },
+          sort: { _id: 1 },
+          limit,
+        },
       )
       .toArray();
   }

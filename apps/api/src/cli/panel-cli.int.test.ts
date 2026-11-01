@@ -209,7 +209,7 @@ describe('CLI reserved-names (name-consent-prompt N8)', () => {
     const base = { rideReasons: [], surveyCompletedAt: null, updatedAt: now };
     await profilesCollection(h).insertMany([
       { _id: 'u-number', ...base, publicName: 'Райдер #12', showNameInResults: true },
-      { _id: 'u-club', ...base, publicName: 'Анна К.', club: 'участник' },
+      { _id: 'u-club', ...base, publicName: 'Анна К.', showNameInResults: true, club: 'участник' },
       { _id: 'u-both', ...base, publicName: 'вы', club: 'Райдер № 3' },
       { _id: 'u-clean', ...base, publicName: 'Райдер из Минска', club: 'Велоклуб' },
       { _id: 'u-empty', ...base },
@@ -220,7 +220,8 @@ describe('CLI reserved-names (name-consent-prompt N8)', () => {
     expect(result.code).toBe(0);
     const rows = result.stdout.trim().split('\n');
     expect(rows.slice(0, -1)).toEqual([
-      'u-both\tимя, клуб\t/admin/rider-profiles/u-both',
+      // без согласия — карточка имя и клуб не покажет: «скрыт» (сброс — эндпоинтами, runbook)
+      'u-both\tимя, клуб\tскрыт',
       'u-club\tклуб\t/admin/rider-profiles/u-club',
       'u-number\tимя\t/admin/rider-profiles/u-number',
     ]);
