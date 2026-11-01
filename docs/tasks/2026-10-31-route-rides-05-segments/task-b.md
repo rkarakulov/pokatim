@@ -178,7 +178,14 @@ Contracts-first выполнен (PR A). TDD, отдельный коммит н
 
 ## 8.2 Deviations from spec
 
-(заполняет coder)
+Все `[ASSUMPTION]` §8 и RC-1…RC-10 — по рекомендациям (a) (решение оркестратора). Отклонения — только в примерах:
+
+- **Время — «0:18:04», не «18:04».** Обязательный reuse `formatElapsed` (`@pokatim/i18n`) всегда даёт `ч:мм:сс`; так же
+  выглядит время маршрута и «Лучший: 2:04:37». Свой формат «мм:сс» для участков не заводился. Дельта
+  (`formatDeltaSec`) — «+0:12», как в спеке.
+- **`failed` с непустым `sections`** — по формуле §11 (`sections.length > 0 && !isPendingCheck`) блок был бы показан;
+  сервер у `failed` отдаёт `[]` (PR A), поэтому компонентный тест «сбой — блока нет» использует ответ сервера, а не
+  искусственный `failed` с участками. Видимость по статусу `failed` клиент не дублирует.
 
 ## 8.3 Security checklist
 
@@ -330,3 +337,23 @@ API/контракты/api-client; поле состояния участков 
 новые адреса, запросы, ключи кэша; e2e-засев длинных маршрутов; `@rkarakulov/*`.
 
 ## 12. Outcome (заполняет coder)
+
+Коммиты (ветка `feature/route-rides-sections-app`, от PR A):
+
+1. `route-rides-05 B: форматтеры участков, км с десятыми, тексты; «Разметка трека…» (RC-5)` — ключи
+   `routes.rides.result.{sections,sectionsPassed,sectionsHint,section,sectionBest}`, правка
+   `routes.rides.track.unavailable`; `export const km` (`routes/format.ts`); `routeRideSectionsShown`,
+   `routeRideSectionsSummary`, `routeRideSectionView` (`route-ride-format.ts`); фикстура `rideSection`; unit-тесты.
+2. `route-rides-05 B: блок «Участки» на экране результата заезда` — `route-ride-sections.tsx`, встраивание в
+   `RideView`; 7 компонентных тестов (`__tests__/route-ride.test.tsx`).
+3. Доки: `docs/product/routes.md` (U1–U4 — приложение сделано), `.claude/rules/pokatim-app.md` (абзац route-rides-05
+   PR B), этот файл, `pr-b.md`.
+
+Проверки (таргетные, полный `pnpm check` и e2e — не гонялись по решению оркестратора):
+
+- `jest src/__tests__/route-ride src/__tests__/theme-guards src/features/route-rides src/features/routes/format.test.ts
+  src/__tests__/i18n` → 9 suites, 163 tests passed; `my-track-format.test.ts` (гонки) — 6 passed, не менялся.
+- `tsc --noEmit` (`@pokatim/app`) → OK; `pnpm --filter @pokatim/i18n test` → 16 passed.
+- `eslint --max-warnings=0` и `prettier --check` по затронутым файлам → OK; `pnpm arch:check` → no dependency violations.
+- Ручная проверка iOS/Android/web, крупный шрифт, VoiceOver/TalkBack, тёмная тема — **NOT VERIFIED** (нужна выкладка
+  PR A на dev и маршрут ≥ 15 км).
