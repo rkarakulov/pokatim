@@ -293,46 +293,50 @@ function MyRouteSheet({
   const [sheetHeight, setSheetHeight] = useState<number | undefined>(undefined);
   const [renaming, setRenaming] = useState(false);
   return (
-    <KeyboardAvoidingArea testID="my-route-keyboard-area" style={styles.area}>
-      <View style={StyleSheet.absoluteFill}>
-        <RouteLineMap
-          mapQuery={myRouteMapOptions(route.id)}
-          accessibilityLabel={t('routes.mine.detail.map.label', {
-            distance: routeKm(route.distanceM),
-          })}
-          failedMessage={t('routes.mine.detail.map.failed')}
-          skeletonTestID="my-route-map-skeleton"
-          fill
-          bottomInset={sheetHeight}
-        />
-      </View>
-      <BottomSheet
-        expanded={expanded}
-        onExpandedChange={setExpanded}
-        onVisibleHeightChange={setSheetHeight}
-        collapseLabel={t('routes.detail.sheet.collapse')}
-        expandLabel={t('routes.detail.sheet.expand')}
-        header={<MyRouteSheetHeader route={route} />}
-      >
-        <ScrollView
-          testID="my-route-detail"
-          contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled"
-          refreshControl={refresh}
+    <KeyboardAvoidingArea testID="my-route-keyboard-area" style={styles.keyboard}>
+      {/* отступ клавиатуры уменьшает эту область: шторка (`absolute`, `bottom: 0`) поднимается с её низом —
+          абсолютные дети позиционируются от края padding-box, padding самого `KeyboardAvoidingView` их не двигает */}
+      <View testID="my-route-area" style={styles.area}>
+        <View style={StyleSheet.absoluteFill}>
+          <RouteLineMap
+            mapQuery={myRouteMapOptions(route.id)}
+            accessibilityLabel={t('routes.mine.detail.map.label', {
+              distance: routeKm(route.distanceM),
+            })}
+            failedMessage={t('routes.mine.detail.map.failed')}
+            skeletonTestID="my-route-map-skeleton"
+            fill
+            bottomInset={sheetHeight}
+          />
+        </View>
+        <BottomSheet
+          expanded={expanded}
+          onExpandedChange={setExpanded}
+          onVisibleHeightChange={setSheetHeight}
+          collapseLabel={t('routes.detail.sheet.collapse')}
+          expandLabel={t('routes.detail.sheet.expand')}
+          header={<MyRouteSheetHeader route={route} />}
         >
-          <AsyncContent query={query} skeleton={null}>
-            {(data) => (
-              <MyRouteSheetBody
-                route={data}
-                rides={rides}
-                now={now}
-                renaming={renaming}
-                onRenamingChange={setRenaming}
-              />
-            )}
-          </AsyncContent>
-        </ScrollView>
-      </BottomSheet>
+          <ScrollView
+            testID="my-route-detail"
+            contentContainerStyle={styles.content}
+            keyboardShouldPersistTaps="handled"
+            refreshControl={refresh}
+          >
+            <AsyncContent query={query} skeleton={null}>
+              {(data) => (
+                <MyRouteSheetBody
+                  route={data}
+                  rides={rides}
+                  now={now}
+                  renaming={renaming}
+                  onRenamingChange={setRenaming}
+                />
+              )}
+            </AsyncContent>
+          </ScrollView>
+        </BottomSheet>
+      </View>
     </KeyboardAvoidingArea>
   );
 }
@@ -444,6 +448,7 @@ export function MyRouteDetailScreen({ id }: { id: string }) {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
+  keyboard: { flex: 1 },
   content: { paddingHorizontal: size.gutter, paddingBottom: space.s6 },
   // область карты под шапкой: карта — на всю, шторка — поверх (касания до карты под ней не доходят)
   area: { flex: 1, overflow: 'hidden' },

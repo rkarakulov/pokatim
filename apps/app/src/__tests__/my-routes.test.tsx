@@ -363,6 +363,10 @@ describe('карточка своего маршрута (AC3, M3)', () => {
     // KeyboardAvoidingView с behavior="padding" добавляет отступ снизу (без клавиатуры — 0)
     const area = screen.getByTestId('my-route-keyboard-area');
     expect(StyleSheet.flatten(area.props.style)).toMatchObject({ paddingBottom: 0, flex: 1 });
+    // шторка — во внутренней области: отступ уменьшает её, и `absolute`-шторка поднимается с её низом (ревью pass 1)
+    const inner = within(area).getByTestId('my-route-area');
+    expect(StyleSheet.flatten(inner.props.style)).toMatchObject({ flex: 1 });
+    expect(within(inner).getByTestId('bottom-sheet')).toBeOnTheScreen();
     expect(screen.getByTestId('my-route-detail')).toHaveProp(
       'keyboardShouldPersistTaps',
       'handled',
