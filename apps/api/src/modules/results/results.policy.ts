@@ -280,6 +280,24 @@ export function disqualifiedBeforePublication(
 }
 
 /**
+ * Режим публичной таблицы гонки (§7.7, P4 RC-P4-1) — общий для `publicResults` и цели «Респекта»: отменённая или без
+ * коридора — пусто; протокол опубликован — строки текущей ревизии; иначе — живые места.
+ */
+export function publicTableMode(
+  race: Pick<RaceForResults, 'status' | 'corridor' | 'protocolPublishedAt'>,
+): 'empty' | 'provisional' | 'protocol' {
+  if (race.status === 'cancelled' || race.corridor === null) return 'empty';
+  return race.protocolPublishedAt !== null ? 'protocol' : 'provisional';
+}
+
+/** Строка протокола в публичной таблице: с местом и без DQ (P4 RC-P4-1, как фильтрует `protocolResults`). */
+export function isPublicProtocolRow<Row extends Pick<RaceProtocolRowDoc, 'status' | 'place'>>(
+  row: Row,
+): row is Row & { place: number } {
+  return row.status !== 'dq' && row.place !== null;
+}
+
+/**
  * Блок действий участника из-за спора (D-39, RC-6) — одна функция для «моего участия» и сервера: DQ до публикации →
  * `disqualified`; открытый спор против заявки → `dispute_open`; иначе `null`.
  */

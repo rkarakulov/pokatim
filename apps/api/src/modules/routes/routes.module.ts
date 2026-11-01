@@ -32,6 +32,8 @@ import { RoutesPublicController } from './routes-public.controller';
 import { RoutesMaintenanceProcessor, RoutesSchedules } from './routes-maintenance.processor';
 import { RoutesForSharingService } from './routes-for-sharing';
 import { ROUTES_FOR_SHARING } from './routes-for-sharing.port';
+import { RoutesForSocialService } from './routes-for-social';
+import { ROUTES_FOR_SOCIAL } from './routes-for-social.port';
 import { RoutesOverview } from './routes-overview';
 import { RoutesPublicService } from './routes-public.service';
 import { RoutesRepository } from './routes.repository';
@@ -43,7 +45,8 @@ import { RoutesViewerController } from './routes-viewer.controller';
  * (через `index.ts`), порт стирания `RouteErasure` для `account`, порт `RouteNotices` для `notifications`, порт
  * `RideRoutes` для `rides` (05c, без кэша), порт `RouteRideRoutes` для `route-rides` (route-rides-01, без кэша); удаление
  * маршрута с жалобами (`RouteDeletion`, routes-06) — общее для «Моих» и стирания; очереди модерации для «Обзора»
- * панели (`RoutesOverview`, admin-overview); порт OG-картинки `RoutesForSharing` для `sharing` (og-images).
+ * панели (`RoutesOverview`, admin-overview); порт OG-картинки `RoutesForSharing` для `sharing` (og-images); порт
+ * `RoutesForSocial` для `social` («Свои» P4: маршрут райдера в каталоге — цель «Респекта автору»).
  */
 @Module({
   providers: [
@@ -63,6 +66,8 @@ import { RoutesViewerController } from './routes-viewer.controller';
     RoutesOverview,
     RoutesForSharingService,
     { provide: ROUTES_FOR_SHARING, useExisting: RoutesForSharingService },
+    RoutesForSocialService,
+    { provide: ROUTES_FOR_SOCIAL, useExisting: RoutesForSocialService },
   ],
   exports: [
     RoutesRepository,
@@ -76,6 +81,7 @@ import { RoutesViewerController } from './routes-viewer.controller';
     ROUTE_RIDE_ROUTES,
     RoutesOverview,
     ROUTES_FOR_SHARING,
+    ROUTES_FOR_SOCIAL,
   ],
 })
 export class RoutesCoreModule {}

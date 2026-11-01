@@ -19,13 +19,19 @@ const DAY_MS = 24 * HOUR_MS;
 
 /**
  * Правила «Свои» (`docs/product/social.md`): лимит ручного «В свои» (K11, `consumeUserLimit` `social-manual:<uid>`),
- * лимит ручных отметок явки (`social-attendance:<uid>`), окно ручной явки (K2), пороги автоявки (K2 `[ASSUMPTION]`, P5), «Как прошёл райд?» и повтор уведомления о ручном
+ * лимит ручных отметок явки (`social-attendance:<uid>`), лимиты «спасибо» и «респекта» (P4), окно ручной явки (K2), пороги автоявки (K2 `[ASSUMPTION]`, P5), «Как прошёл райд?» и повтор уведомления о ручном
  * добавлении (K10, K11 — P7), пачка `bulkWrite` пересчёта связей.
  */
 export const SOCIAL_POLICY = {
   manualLimit: { limit: 30, windowSec: 86_400 },
   /** «Я был на райде» и «Меня не было» (P2): общий ключ `social-attendance:<uid>`, на каждую попытку */
   attendanceLimit: { limit: 60, windowSec: 3600 },
+  /** «Спасибо за компанию» (P4): ключ `social-thanks:<uid>`, на каждую попытку («Поблагодарить всех» — одна) */
+  thanksLimit: { limit: 60, windowSec: 3600 },
+  /** «Респект» (P4): общий ключ `social-respect:<uid>` для строки результата и маршрута, на каждую попытку `PUT` */
+  respectLimit: { limit: 60, windowSec: 3600 },
+  /** Сколько последних поставивших «Респект» читать для `from` получателя (P4); остальные — числом */
+  respectFromMax: 100,
   attendanceWindowMs: 7 * DAY_MS,
   autoAttendance: { beforeMs: 30 * MINUTE_MS, afterMs: 2 * HOUR_MS, radiusM: 500 },
   askAfterMs: 4 * HOUR_MS,

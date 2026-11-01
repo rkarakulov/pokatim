@@ -25,6 +25,7 @@ import { DocumentTitle } from '@/components/document-title';
 import { OfflineBanner } from '@/components/offline-banner';
 import { formatKm, formatMinskDateTime } from '@/features/devices/format';
 import { DetailRow } from '@/features/routes/detail-row';
+import { RouteAuthorRespect } from '@/features/social/respect-block';
 import { routeKm } from '@/features/routes/format';
 import { useMinskClock } from '@/lib/use-minsk-clock';
 import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
@@ -157,6 +158,8 @@ function RideView({
     <View style={styles.detail}>
       <Kicker label={t('routes.rides.result.title')} />
       <RideVerdict ride={ride} routeId={routeId} />
+      {/* «Респект автору» (P4, K8): после «Маршрут пройден», не на своём маршруте; команды — сервер не даст */}
+      {ride.status === 'passed' && !mine ? <RouteAuthorRespect routeId={routeId} /> : null}
       <OriginNote ride={ride} />
       {routeRideComparisonLines(ride, now).map((line) => (
         <Text key={line} style={[textStyle('body'), { color: theme.text.primary }]}>

@@ -108,6 +108,14 @@ beforeEach(() => {
   );
   getMyRaceEntry.mockResolvedValue(noEntryTiers());
   jest.mocked(api.getMyRaceDisputes).mockResolvedValue(myDisputes());
+  // «Респект» (P4): по умолчанию — доступен, никто не поставил
+  jest.mocked(api.getRaceEntryRespect).mockResolvedValue({
+    available: true,
+    respected: false,
+    count: 0,
+    own: false,
+    from: null,
+  });
 });
 afterEach(() => {
   onlineManager.setOnline(true);
@@ -178,7 +186,10 @@ describe('таблица: вкладки групп (07c, RC-11)', () => {
     );
     const router = await openSignedIn();
 
-    expect(await screen.findByLabelText('2, Вы, 1:42:05')).toBeOnTheScreen();
+    // своя строка — нажимаема при заявке (P4 RC-P4-11)
+    expect(
+      await screen.findByRole('button', { name: 'Вы, 2 место, 1:42:05. Открыть карточку' }),
+    ).toBeOnTheScreen();
     await waitFor(() => expect(tab('Женщины до 40')).toBeSelected());
     expect(getRaceResults).toHaveBeenCalledWith(RACE_ID, { limit: 50, group: 'w_u40' });
 
@@ -194,14 +205,13 @@ describe('таблица: вкладки групп (07c, RC-11)', () => {
 });
 
 describe('споры только в своей группе (07c, ревью pass 2)', () => {
-  it('вкладка чужой группы — строки не нажимаемы; своя — нажимаемы', async () => {
+  it('вкладка чужой группы — строки нажимаемы («Респект», P4 Q2), подачу решает карточка', async () => {
     enteredWomen();
     await openSignedIn();
 
     expect(await screen.findByRole('button', { name: /Анна К\./ })).toBeOnTheScreen();
     await fireEvent.press(tab('Мужчины до 40'));
-    expect(await screen.findByLabelText('1, Участник, 1:30:00')).toBeOnTheScreen();
-    expect(screen.queryByRole('button', { name: /Участник/ })).toBeNull();
+    expect(await screen.findByRole('button', { name: /Участник/ })).toBeOnTheScreen();
   });
 
   it('карточка соперника своей группы — «Оспорить результат»', async () => {

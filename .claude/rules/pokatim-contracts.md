@@ -280,6 +280,12 @@ paths:
   .default(null)`), запрос `SetRiderConnectionRequest` (`strictObject({ connected })`), `SocialConnectionRow` (без
   `userId`, `sources` — `tolerantEnum(CONNECTION_SOURCES)`), `SocialConnections` (`items`, `count`). api-client —
   `getRiderSocial`, `setRiderConnection` (`PUT`), `listSocialConnections`.
+  Реакции (P4) — `src/social/reactions.schema.ts`: `RideThanksRequest` (`strictObject({ publicId? })`),
+  `SetRespectRequest` (`strictObject({ respected })`), `RespectState` (все поля `.default`, `from:
+  RideRiderGroup.nullable()` — только получателю); в `ride-participants.schema.ts` — `RideAttendedRow` (`self`,
+  `thanked`), `RideAttendedGroup` («Ехали N»), `RideAttendance.allThanked` (`.default(false)`). api-client —
+  `thankRideRiders(token, id, publicId?)` (без `publicId` — тело `{}`), `getRaceEntryRespect`, `setRaceEntryRespect`,
+  `getRouteRespect`, `setRouteRespect` (`PUT`).
 - Фото организатора райда (ride-photo, ADR-0028): `src/rides/ride.schema.ts` — `RIDE_PHOTO_MAX_BYTES` (10 МиБ),
   `RIDE_PHOTO_MAX_EDGE_PX` (1600), `RIDE_PHOTO_MIN_SHORT_PX` (400), `RidePhotoId` (= `OpaqueToken` из
   `auth/verification.schema.ts`), `RidePhotoRef` (`{ id }`), `RideSummary.photo` (`.nullable().default(null)` — старый

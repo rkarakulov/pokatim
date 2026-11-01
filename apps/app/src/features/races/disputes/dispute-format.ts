@@ -98,18 +98,6 @@ export function rivalAction(
   };
 }
 
-/**
- * Строка таблицы нажимаема, только когда карточке есть что показать (RC-14): гостю, неучастнику и на чужую группу
- * зачёта — нет.
- */
-export function canOpenRival(
-  disputes: MyRaceDisputes | null | undefined,
-  entryId: string,
-  otherGroup = false,
-): boolean {
-  return disputes ? rivalAction(disputes, entryId, otherGroup) !== null : false;
-}
-
 /** Опрос споров — пока есть открытый спор (решение, отзыв). */
 export function needsDisputePolling(disputes: MyRaceDisputes | null | undefined): boolean {
   if (!disputes) return false;

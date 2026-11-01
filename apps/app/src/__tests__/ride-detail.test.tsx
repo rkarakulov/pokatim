@@ -39,6 +39,7 @@ const joinRide = jest.mocked(api.joinRide);
 const leaveRide = jest.mocked(api.leaveRide);
 const rideParticipants = jest.mocked(api.rideParticipants);
 const markRideAttended = jest.mocked(api.markRideAttended);
+const thankRideRiders = jest.mocked(api.thankRideRiders);
 const declineRideAttendance = jest.mocked(api.declineRideAttendance);
 const share = jest.mocked(shareLink);
 
@@ -892,15 +893,24 @@ describe('участники и явка (P2, K4, K5)', () => {
       publicId: index === 1 ? null : PUB(index),
       avatar: index === 0 ? { id: AV(index) } : null,
     }));
+  type AttendedRows = {
+    riders: (RideParticipants['riders'][number] & { self?: boolean; thanked?: boolean })[];
+    hiddenCount: number;
+  };
   const attendance = (
     state: 'none' | 'attended' | 'declined',
     flags: { canMark: boolean; canDecline: boolean },
-    attended: RideParticipants['attendance'] extends infer A
-      ? A extends { attended: infer G }
-        ? G
-        : never
-      : never = null,
-  ) => ({ state, ...flags, attended });
+    attended: AttendedRows | null = null,
+    allThanked = false,
+  ) => ({
+    state,
+    ...flags,
+    attended: attended && {
+      hiddenCount: attended.hiddenCount,
+      riders: attended.riders.map((row) => ({ self: false, thanked: false, ...row })),
+    },
+    allThanked,
+  });
   const participants = (over: Partial<RideParticipants> = {}): RideParticipants => ({
     riders: rows(2),
     hiddenCount: 1,
@@ -1150,5 +1160,110 @@ describe('участники и явка (P2, K4, K5)', () => {
     await openSignedIn();
     expect(await screen.findByText('Райд прошёл')).toBeOnTheScreen();
     expect(screen.queryByText('Добавьте имя — свои увидят вас')).toBeNull();
+  });
+});
+
+describe('«Спасибо за компанию» в «Ехали N» (P4, K5)', () => {
+  beforeEach(signedIn);
+
+  const PUB = (n: number) => `${'p'.repeat(42)}${n}`;
+  const row = (
+    n: number,
+    over: { self?: boolean; thanked?: boolean; publicId?: string | null } = {},
+  ) => ({
+    name: `Райдер ${n}`,
+    publicId: PUB(n),
+    avatar: null,
+    self: false,
+    thanked: false,
+    ...over,
+  });
+  const rode = (
+    riders: ReturnType<typeof row>[],
+    { hiddenCount = 0, allThanked = false }: { hiddenCount?: number; allThanked?: boolean } = {},
+  ): RideParticipants => ({
+    riders: [],
+    hiddenCount: 0,
+    attendance: {
+      state: 'attended',
+      canMark: false,
+      canDecline: true,
+      attended: { riders, hiddenCount },
+      allThanked,
+    },
+  });
+  const past = () =>
+    getRideForViewer.mockResolvedValue(
+      view({ phase: 'past', goingCount: 3 }, viewer('participant')),
+    );
+
+  it('у строки — «Спасибо за компанию», у себя и непубличного — нет; «Вы сказали спасибо»', async () => {
+    past();
+    rideParticipants.mockResolvedValue(
+      rode([row(1, { self: true }), row(2), row(3, { thanked: true }), row(4, { publicId: null })]),
+    );
+    await openSignedIn();
+    expect(await screen.findByText('Ехали 4')).toBeOnTheScreen();
+    expect(screen.getAllByRole('button', { name: 'Спасибо за компанию' })).toHaveLength(1);
+    expect(screen.getByText('Вы сказали спасибо')).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: 'Поблагодарить всех' })).toBeOnTheScreen();
+  });
+
+  it('«Спасибо за компанию» → POST с publicId, ответ в кэш — «Вы сказали спасибо»', async () => {
+    past();
+    rideParticipants.mockResolvedValue(rode([row(1, { self: true }), row(2)]));
+    thankRideRiders.mockResolvedValue(
+      rode([row(1, { self: true }), row(2, { thanked: true })], { allThanked: true }),
+    );
+    await openSignedIn();
+    await fireEvent.press(await screen.findByRole('button', { name: 'Спасибо за компанию' }));
+    expect(thankRideRiders).toHaveBeenCalledWith(liveSession.accessToken, ID, PUB(2));
+    expect(await screen.findByText('Вы сказали спасибо')).toBeOnTheScreen();
+    expect(screen.getByText('Вы поблагодарили всех')).toBeOnTheScreen();
+    expect(screen.queryByRole('button', { name: 'Поблагодарить всех' })).toBeNull();
+  });
+
+  it('«Поблагодарить всех» → POST без publicId → «Вы поблагодарили всех»', async () => {
+    past();
+    rideParticipants.mockResolvedValue(rode([row(1, { self: true }), row(2)], { hiddenCount: 2 }));
+    thankRideRiders.mockResolvedValue(
+      rode([row(1, { self: true }), row(2, { thanked: true })], {
+        hiddenCount: 2,
+        allThanked: true,
+      }),
+    );
+    await openSignedIn();
+    await fireEvent.press(await screen.findByRole('button', { name: 'Поблагодарить всех' }));
+    expect(thankRideRiders).toHaveBeenCalledWith(liveSession.accessToken, ID, undefined);
+    expect(await screen.findByText('Вы поблагодарили всех')).toBeOnTheScreen();
+  });
+
+  it('ехал один — ни «Поблагодарить всех», ни текста', async () => {
+    past();
+    rideParticipants.mockResolvedValue(rode([row(1, { self: true })], { allThanked: true }));
+    await openSignedIn();
+    expect(await screen.findByText('Ехал 1')).toBeOnTheScreen();
+    expect(screen.queryByRole('button', { name: 'Поблагодарить всех' })).toBeNull();
+    expect(screen.queryByText('Вы поблагодарили всех')).toBeNull();
+  });
+
+  it('отказ 409 not_attended — баннер с причиной, участники перечитаны', async () => {
+    past();
+    rideParticipants.mockResolvedValue(rode([row(1, { self: true }), row(2)]));
+    thankRideRiders.mockRejectedValueOnce(
+      new ApiHttpError(409, {
+        code: 'SOCIAL_ACTION_BLOCKED',
+        message: 'x',
+        details: { reason: 'not_attended' },
+      }),
+    );
+    await openSignedIn();
+    const calls = () => rideParticipants.mock.calls.length;
+    await fireEvent.press(await screen.findByRole('button', { name: 'Спасибо за компанию' }));
+    const before = calls();
+    expect(
+      await screen.findByText('Сказать спасибо можно только тем, кто был на райде вместе с вами'),
+    ).toBeOnTheScreen();
+    await waitFor(() => expect(calls()).toBeGreaterThanOrEqual(before));
   });
 });

@@ -21,15 +21,31 @@ export const RideRiderGroup = z.object({
 });
 export type RideRiderGroup = z.infer<typeof RideRiderGroup>;
 
+/** Строка «Ехали N» (P4, K5, RC-P4-7): `self` — строка зрителя (без «Спасибо»), `thanked` — зритель уже сказал спасибо. */
+export const RideAttendedRow = RideRiderRow.extend({
+  self: z.boolean().default(false),
+  thanked: z.boolean().default(false),
+});
+export type RideAttendedRow = z.infer<typeof RideAttendedRow>;
+
+/** «Ехали N»: публичные явившиеся строками с флагами зрителя, остальные — числом. */
+export const RideAttendedGroup = z.object({
+  riders: z.array(RideAttendedRow),
+  hiddenCount: z.number().int().min(0),
+});
+export type RideAttendedGroup = z.infer<typeof RideAttendedGroup>;
+
 /**
  * Явка зрителя-участника; флаги — `attendanceCheck` сервера (окно, роль, фаза). `attended` — «Ехали N», только при
- * явке. Незнакомое `state` (`'unknown'`) — клиент показывает только список участников.
+ * явке. `allThanked` — зритель поблагодарил всех явившихся «Ехали N», кроме себя (скрытых тоже; нет других — `true`,
+ * P4). Незнакомое `state` (`'unknown'`) — клиент показывает только список участников.
  */
 export const RideAttendance = z.object({
   state: tolerantEnum(RIDE_ATTENDANCE_STATES),
   canMark: z.boolean().default(false),
   canDecline: z.boolean().default(false),
-  attended: RideRiderGroup.nullable().default(null),
+  attended: RideAttendedGroup.nullable().default(null),
+  allThanked: z.boolean().default(false),
 });
 export type RideAttendance = z.infer<typeof RideAttendance>;
 

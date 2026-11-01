@@ -1,5 +1,11 @@
 import { isNetworkError } from '@pokatim/api-client';
-import type { RideAttendance, RideDetail, RideParticipants } from '@pokatim/contracts';
+import type {
+  RideAttendance,
+  RideAttendedGroup,
+  RideAttendedRow,
+  RideDetail,
+  RideParticipants,
+} from '@pokatim/contracts';
 import { space } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
 import {
@@ -19,13 +25,16 @@ import { useProfile } from '@/features/profile/queries';
 import {
   attendanceErrorText,
   type AttendanceAction,
+  thanksErrorText,
   type useRideAttendance,
   type useRideParticipants,
+  useRideThanks,
 } from './participants-queries';
 import { RideRiderList } from './ride-rider-list';
 
 type ParticipantsQuery = ReturnType<typeof useRideParticipants>;
 type AttendanceMutation = ReturnType<typeof useRideAttendance>;
+type ThanksMutation = ReturnType<typeof useRideThanks>;
 
 /** Блок явки по флагам сервера (K5, RC-3, RC-10): только прошедший райд и участник с известным состоянием. */
 function attendanceOf(ride: RideDetail, data: RideParticipants): RideAttendance | null {
@@ -98,6 +107,61 @@ function AttendanceActions({
   );
 }
 
+/** «Спасибо за компанию» у строки «Ехали N» (K5): не себе и только публичному; после — текст, без отмены. */
+function ThanksRowAction({ row, mutation }: { row: RideAttendedRow; mutation: ThanksMutation }) {
+  const theme = useTheme();
+  const publicId = row.publicId;
+  if (row.self || publicId === null) return null;
+  if (row.thanked) {
+    return (
+      <Text style={[textStyle('meta'), { color: theme.text.secondary }]}>
+        {t('rides.thanks.done')}
+      </Text>
+    );
+  }
+  return (
+    <TextAction
+      label={t('rides.thanks.one')}
+      disabled={mutation.isPending}
+      onPress={() => mutation.mutate(publicId)}
+    />
+  );
+}
+
+/** «Поблагодарить всех» над списком (K5, Q1): нет других явившихся — ничего; все поблагодарены — текст. */
+function ThanksAll({
+  rode,
+  allThanked,
+  mutation,
+}: {
+  rode: RideAttendedGroup;
+  allThanked: boolean;
+  mutation: ThanksMutation;
+}) {
+  const theme = useTheme();
+  // строка зрителя — среди явившихся (публичная строкой, иначе в числе)
+  const others = rode.riders.length + rode.hiddenCount - 1;
+  if (others <= 0) return null;
+  if (allThanked) {
+    return (
+      <Text style={[textStyle('body'), { color: theme.text.secondary }]}>
+        {t('rides.thanks.allDone')}
+      </Text>
+    );
+  }
+  return (
+    <View style={styles.start}>
+      <Button
+        label={t('rides.thanks.all')}
+        variant="secondary"
+        loading={mutation.isPending && mutation.variables === null}
+        disabled={mutation.isPending}
+        onPress={() => mutation.mutate(null)}
+      />
+    </View>
+  );
+}
+
 function ParticipantsContent({
   ride,
   data,
@@ -108,6 +172,7 @@ function ParticipantsContent({
   mutation: AttendanceMutation;
 }) {
   const theme = useTheme();
+  const thanks = useRideThanks(ride.id);
   const attendance = attendanceOf(ride, data);
   const rode = attendance?.state === 'attended' ? attendance.attended : null;
   // в окне явки — кнопки; после окна — только «Ехали N» при явке (K5)
@@ -122,7 +187,11 @@ function ParticipantsContent({
           >
             {t('rides.attendance.rode', { count: rode.riders.length + rode.hiddenCount })}
           </Text>
-          <RideRiderList group={rode} />
+          <ThanksAll rode={rode} allThanked={attendance?.allThanked ?? false} mutation={thanks} />
+          <RideRiderList
+            group={rode}
+            trailing={(row) => <ThanksRowAction row={row} mutation={thanks} />}
+          />
         </View>
       ) : (
         <RideRiderList group={data} />
@@ -134,6 +203,9 @@ function ParticipantsContent({
       {attendance && mutation.error ? (
         <Banner tone="error" message={attendanceErrorText(mutation.error)} />
       ) : null}
+      {rode && thanks.error ? (
+        <Banner tone="error" message={thanksErrorText(thanks.error)} />
+      ) : null}
       {attendance && (actionable || rode) ? <NameHint /> : null}
     </View>
   );
@@ -141,7 +213,7 @@ function ParticipantsContent({
 
 /**
  * Участники и явка карточки райда вошедшему («Свои» P2, K4, K5): список публичных участников или «Ехали N» на
- * прошедшем с явкой, три состояния явки в окне по флагам сервера. Первая загрузка — скелетон на месте блока; ошибка без
+ * прошедшем с явкой (с «Спасибо за компанию» и «Поблагодарить всех», P4), три состояния явки в окне по флагам сервера. Первая загрузка — скелетон на месте блока; ошибка без
  * данных — баннер с повтором, остальная карточка видна (AGENTS §4.12).
  */
 export function RideParticipantsBlock({

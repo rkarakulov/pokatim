@@ -80,6 +80,14 @@ beforeEach(() => {
   getRaceResults.mockResolvedValue(resultsPage(rows));
   getMyRaceEntry.mockResolvedValue(myEntry());
   getMyRaceDisputes.mockResolvedValue(myDisputes());
+  // «Респект» (P4): по умолчанию — доступен, никто не поставил
+  jest.mocked(api.getRaceEntryRespect).mockResolvedValue({
+    available: true,
+    respected: false,
+    count: 0,
+    own: false,
+    from: null,
+  });
 });
 afterEach(() => {
   jest.clearAllMocks();
@@ -87,37 +95,37 @@ afterEach(() => {
   onlineManager.setOnline(true);
 });
 
-describe('строки таблицы (RC-14)', () => {
-  it('участник, приём открыт: чужие строки — кнопки, своя — нет; нажатие — карточка соперника', async () => {
+describe('строки таблицы (RC-14, P4 Q2)', () => {
+  it('участник: чужие строки и своя — кнопки; нажатие — карточка соперника', async () => {
     const router = await open();
 
     const rival = await screen.findByRole('button', { name: openCard });
     expect(
       screen.getByRole('button', { name: 'Участник, 3 место, 1:46:40. Открыть карточку' }),
     ).toBeOnTheScreen();
-    expect(screen.getByLabelText('2, Вы, 1:42:05')).toBeOnTheScreen();
+    // своя строка — всегда при заявке (RC-P4-11): полученные респекты
+    expect(
+      screen.getByRole('button', { name: 'Вы, 2 место, 1:42:05. Открыть карточку' }),
+    ).toBeOnTheScreen();
     expect(getMyRaceDisputes).toHaveBeenCalledWith(TOKEN, RACE_ID);
 
     await fireEvent.press(rival);
     expect(router.getPathname()).toBe(rivalUrl);
   });
 
-  it('unavailable без моих споров — строки не нажимаемы', async () => {
+  it('unavailable без моих споров — строки всё равно нажимаемы («Респект», Q2)', async () => {
     getMyRaceDisputes.mockResolvedValue(myDisputes({ status: 'unavailable', reason: 'withdrawn' }));
     await open();
 
-    expect(await screen.findByLabelText('1, Участник, 1:30:00')).toBeOnTheScreen();
-    await waitFor(() => expect(getMyRaceDisputes).toHaveBeenCalled());
-    expect(screen.queryByRole('button', { name: openCard })).toBeNull();
+    expect(await screen.findByRole('button', { name: openCard })).toBeOnTheScreen();
   });
 
-  it('без заявки — споры не запрашиваются, строки не нажимаемы', async () => {
+  it('без заявки — споры не запрашиваются, строки нажимаемы (Q2)', async () => {
     getMyRaceEntry.mockResolvedValue(noEntry());
     await open();
 
-    expect(await screen.findByLabelText('1, Участник, 1:30:00')).toBeOnTheScreen();
+    expect(await screen.findByRole('button', { name: openCard })).toBeOnTheScreen();
     expect(getMyRaceDisputes).not.toHaveBeenCalled();
-    expect(screen.queryByRole('button', { name: openCard })).toBeNull();
   });
 });
 
