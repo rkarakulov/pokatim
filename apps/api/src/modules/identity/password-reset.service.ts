@@ -53,7 +53,7 @@ export class PasswordResetService {
     private readonly outbox: MongoOutboxWriter,
     private readonly confirmation: AccountConfirmation,
     private readonly rateLimiter: RateLimiter,
-    @Inject(ENV) private readonly env: Pick<Env, 'EMAIL_TOKEN_SECRET'>,
+    @Inject(ENV) private readonly env: Pick<Env, 'EMAIL_TOKEN_SECRET' | 'RATE_LIMIT_KEY_SECRET'>,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -65,7 +65,7 @@ export class PasswordResetService {
   async requestReset(input: { email: string }, ip: string): Promise<RequestPasswordResetResponse> {
     const now = this.clock.now();
     const email = normalizeEmail(input.email);
-    const keys = passwordResetLimitKeys(this.env.EMAIL_TOKEN_SECRET, email, ip);
+    const keys = passwordResetLimitKeys(this.env.RATE_LIMIT_KEY_SECRET, email, ip);
     const limits = IDENTITY_POLICY.passwordResetLimits;
     for (const [key, rule] of [
       [keys.ip, limits.ip],

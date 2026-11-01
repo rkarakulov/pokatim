@@ -13,7 +13,7 @@
    запуске healthcheck делает `rs.initiate`, команда ждёт PRIMARY), Redis (`:6379`), Mailpit (SMTP `:1025`, веб
    `http://127.0.0.1:8025`). MongoDB в dev — без пользователей и пароля, поэтому порт открыт только на `127.0.0.1`.
 2. Окружение API: `cp apps/api/.env.example apps/api/.env` и заполнить секреты:
-   `JWT_SECRET` и `EMAIL_TOKEN_SECRET` — случайные строки не короче 32 символов
+   `JWT_SECRET`, `EMAIL_TOKEN_SECRET` и `RATE_LIMIT_KEY_SECRET` — случайные строки не короче 32 символов
    (`openssl rand -hex 32`). Файл `.env` в git не попадает.
 3. Миграции (отдельный шаг, при старте API не выполняются): `pnpm --filter @pokatim/api db:migrate`.
 4. Запуск: `pnpm dev --filter=@pokatim/api` (HTTP `:3000`) и `pnpm dev:worker` (outbox → BullMQ, письма).
@@ -32,6 +32,7 @@
 | `SMTP_URL` | `smtp://127.0.0.1:1025` | Mailpit |
 | `JWT_SECRET` | случайная строка ≥ 32 | подпись access JWT |
 | `EMAIL_TOKEN_SECRET` | случайная строка ≥ 32 | HMAC токенов ссылок в письмах (ADR-0002) |
+| `RATE_LIMIT_KEY_SECRET` | случайная строка ≥ 32 | HMAC ключей лимитов в Redis (IP, e-mail, userId 2FA): адресов в Redis нет; смена — только обнуление счётчиков |
 | `MAIL_FROM` | `'Покатим <no-reply@limedolphin.com>'` | отправитель писем (в кавычках) |
 | `APP_LINK_BASE` | `exp://127.0.0.1:8081/--/` | база ссылок в письмах, со слешем в конце |
 | `AGREEMENT_VERSION` | `2026-10-draft` | версия соглашения, записывается в `user_consents` |
@@ -202,7 +203,7 @@ Expo Go не открывает схему `pokatim://`. Для проверки
   нет (проверять в Chromium/Firefox).
 - Смоук: `pnpm --filter @pokatim/api build`, `pnpm --filter @pokatim/api db:migrate`, затем `pnpm e2e:admin` — свой
   API на :3101 (env API из процесса: `MONGO_URL`, `REDIS_URL`, `SMTP_URL`, `MAIL_FROM`, `JWT_SECRET`,
-  `EMAIL_TOKEN_SECRET`, `AGREEMENT_VERSION`; Mailpit — `MAILPIT_URL`) и `vite preview` под `/admin/` с CSP панели
+  `EMAIL_TOKEN_SECRET`, `RATE_LIMIT_KEY_SECRET`, `AGREEMENT_VERSION`; Mailpit — `MAILPIT_URL`) и `vite preview` под `/admin/` с CSP панели
   из `infra/docker/admin-nginx.conf`. Браузер — Chrome (`PW_CHANNEL=chromium` без него).
 
 ## Проверка

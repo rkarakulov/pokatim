@@ -28,6 +28,7 @@ import { RiderProfilesModerationController } from './rider-profiles-moderation.c
 import { RiderReportsController } from './rider-reports.controller';
 import { RiderProfilesService } from './rider-profiles';
 import { RIDER_PROFILES } from './rider-profiles.port';
+import { ReservedRiderLines } from './reserved-rider-lines';
 import { ProfileVerifiedAdminController } from './profile-verified-admin.controller';
 import { ProfileVerifiedAdminService } from './profile-verified-admin.service';
 import { VerifiedProfileController } from './verified-profile.controller';
@@ -41,8 +42,8 @@ import { VERIFIED_PROFILES } from './verified-profiles.port';
  * `RiderNameDirectory` и `VerifiedProfiles` (race-results-07) для `results` (через `index.ts`), `RiderProfileDirectory`
  * (rider-profile) для `riders`, `RiderThemes` (user-theme) для `sharing`, единственный писатель жалоб на профиль
  * (profile-moderation) и порт стирания `ProfileErasure` (`account`), очередь жалоб для «Обзора» панели
- * (`ProfilesOverview`, admin-overview) — без контроллеров и без импортов. Репозитории объявлены только здесь (один
- * экземпляр).
+ * (`ProfilesOverview`, admin-overview), разовая выборка служебных подписей (`ReservedRiderLines`, CLI) — без
+ * контроллеров и без импортов. Репозитории объявлены только здесь (один экземпляр).
  */
 @Module({
   providers: [
@@ -60,6 +61,7 @@ import { VERIFIED_PROFILES } from './verified-profiles.port';
     { provide: VERIFIED_PROFILES, useExisting: VerifiedProfilesService },
     ProfileErasure,
     ProfilesOverview,
+    ReservedRiderLines,
   ],
   exports: [
     ProfileRepository,
@@ -72,6 +74,7 @@ import { VERIFIED_PROFILES } from './verified-profiles.port';
     VERIFIED_PROFILES,
     ProfileErasure,
     ProfilesOverview,
+    ReservedRiderLines,
   ],
 })
 export class ProfileCoreModule {}

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  isReservedRiderLine,
   ProfileView,
   PUBLIC_NAME_CONSENT_VERSION,
   RIDER_CLUB_MAX,
@@ -179,6 +180,14 @@ describe('RiderPublicName', () => {
     }
     expect(RiderPublicName.parse('Райдер из Минска')).toBe('Райдер из Минска');
     expect(RiderPublicName.parse('Райдеры #1')).toBe('Райдеры #1');
+  });
+
+  it('isReservedRiderLine — то же правило для сохранённых до запрета строк (выборка N8)', () => {
+    for (const line of ['Райдер #5', ' райдер №12 ', 'Участник', 'Вы', 'Удалённый участник']) {
+      expect(isReservedRiderLine(line)).toBe(true);
+    }
+    expect(isReservedRiderLine('Райдер из Минска')).toBe(false);
+    expect(isReservedRiderLine('Анна К.')).toBe(false);
   });
 });
 

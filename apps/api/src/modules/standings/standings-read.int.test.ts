@@ -206,6 +206,17 @@ describe('публичные ответы (AC8)', () => {
     ).toBe(400);
   });
 
+  it('метка `_` обхода HTTP-кэша (whatwg-fetch React Native) — тот же ответ, что без неё (iOS NSURLCache)', async () => {
+    const { seasonId } = await season();
+    const plain = await call(h, 'GET', tableUrl(seasonId, 'bikeClass=road&group=m_u40'));
+    const busted = await call(
+      h,
+      'GET',
+      tableUrl(seasonId, 'bikeClass=road&group=m_u40&_=1761990000000'),
+    );
+    expect([busted.status, busted.body]).toEqual([200, plain.body]);
+  });
+
   it('сезон без протоколов — пустая сводка; таблица не из снимка — пустая страница (RC-12)', async () => {
     const empty = await seedSeason(h, 'Пустой');
     expect(SeasonStandingsSummary.parse((await call(h, 'GET', base(empty))).body)).toEqual({

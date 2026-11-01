@@ -119,7 +119,7 @@ api/worker/web/admin с ожиданием healthcheck → smoke (`/v1/health` =
 `~/pokatim/.env` (600) создаёт `bootstrap.sh` по `infra/deploy/env.template`:
 
 - `MONGO_ROOT_PASSWORD` (root MongoDB — только администрирование), `MONGO_PASSWORD` (пользователь приложения
-  `pokatim`, `readWrite` только на БД `pokatim`), `JWT_SECRET`, `EMAIL_TOKEN_SECRET`, `MAILPIT_UI_PASSWORD` —
+  `pokatim`, `readWrite` только на БД `pokatim`), `JWT_SECRET`, `EMAIL_TOKEN_SECRET`, `RATE_LIMIT_KEY_SECRET`, `MAILPIT_UI_PASSWORD` —
   генерируются на сервере (`openssl rand -hex 32`) при первом деплое (новый ключ — при первом деплое после его
   появления в шаблоне); в лог, git и GitHub не попадают; повторные деплои их не меняют.
 - `~/pokatim/mongo-keyfile` (600) — keyfile replica set (`openssl rand -base64 756`), создаёт `bootstrap.sh` один
@@ -575,6 +575,31 @@ dc exec api node dist/cli/panel.js reset-totp --email <e-mail>
 
 Код 0 — 2FA сброшена (или не была подключена), сессии панели сотрудника отозваны, в журнале — `panel.totp_reset` с
 актором `cli`; e-mail не печатается.
+
+**Служебные подписи в профилях (name-consent-prompt N8) — до прода.** Имена и клубы вида «Райдер #N», «Участник», «Вы»,
+сохранённые до запрета (2026-10-31), не проверялись. Выборка — только чтение:
+
+```bash
+dc exec api node dist/cli/panel.js reserved-names
+```
+
+Строка — id пользователя, поля (`имя`, `клуб`) и путь карточки `/admin/rider-profiles/<id>`; значения не печатаются.
+Модератор открывает карточку и сбрасывает поле («Сбросить имя» / «Сбросить клуб», журнал действий). `скрыт` вместо
+пути — профиль не публичен (нет согласия): карточка имя и клуб не показывает, но при включении согласия они станут
+видны. Их сбрасывает модератор (`profiles.moderate`) теми же эндпоинтами из вошедшей панели — консоль браузера на
+странице панели (cookie сессии та же; причина и журнал — как у кнопок):
+
+```js
+const post = (path) => fetch(`/v1/admin/${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ reason: 'Служебная подпись таблицы (N8)' }) });
+await post('profiles/<id>/name-reset'); // имя
+await post('rider-profiles/<id>/club-reset'); // клуб
+```
+
+Пусто — «Служебных подписей в профилях нет.».
+
+**Ключ лимитов `RATE_LIMIT_KEY_SECRET`.** Генерирует `bootstrap.sh` (`@secret`); HMAC ключей лимитов в Redis (IP,
+e-mail, userId 2FA) отдельно от `EMAIL_TOKEN_SECRET`. Смена (и первый деплой с ним) только обнуляет текущие счётчики
+лимитов — ссылки, билеты и маркеры удалённых не затрагиваются.
 
 ## Release-чеклист сторов (приложение)
 

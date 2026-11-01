@@ -41,7 +41,8 @@ paths:
   (`SESSION_COOKIE` из contracts), без `Domain`, в теле ответа web его нет; access — только в памяти (не
   `localStorage`/`sessionStorage`); cookie-эндпоинты защищены CSRF (Fetch Metadata + Origin,
   `enableCsrfProtection`), CORS с credentials — только для `CORS_ORIGINS`. Native — refresh в теле, SecureStore.
-- IP-лимиты — по `rateLimitKeyForIp` (IPv6 — сеть /64). Вход: счётчики IP → e-mail+IP → e-mail по очереди до первого
+- IP-лимиты — по `rateLimitKeyForIp` (IPv6 — сеть /64). Все HMAC-ключи лимитов (IP, e-mail, userId 2FA) — свой ключ
+  `RATE_LIMIT_KEY_SECRET`, не `EMAIL_TOKEN_SECRET`. Вход: счётчики IP → e-mail+IP → e-mail по очереди до первого
   отказа (отказанная попытка дальше не списывается).
 - Вход по паролю (ADR-0005): лимиты попыток (`RateLimiter` базы, ключи — HMAC e-mail/IP) проверяются до argon2;
   неверный пароль, неизвестный и удалённый адрес — один `401 INVALID_CREDENTIALS` с одинаковым телом, для

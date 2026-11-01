@@ -19,6 +19,7 @@ export function testEnv(overrides: Partial<Record<keyof Env, string>> = {}): Env
     SMTP_URL: 'smtp://127.0.0.1:1025',
     JWT_SECRET: 'test-jwt-secret-test-jwt-secret-0000',
     EMAIL_TOKEN_SECRET: 'test-email-secret-test-email-secret-0',
+    RATE_LIMIT_KEY_SECRET: 'test-rate-limit-secret-test-rate-limit-0',
     MAIL_FROM: 'pokatim <no-reply@pokatim.test>',
     APP_LINK_BASE: 'pokatim://',
     AGREEMENT_VERSION: 'test-agreement',

@@ -91,7 +91,7 @@ export class TrackUploadsService {
     const now = this.clock.now();
     await this.consume(`tracks-upload-user:${userId}`, TRACKS_POLICY.uploadUserLimit, now);
     await this.consume(
-      `tracks-upload-ip:${rateLimitKeyForIp(this.env.EMAIL_TOKEN_SECRET, ip)}`,
+      `tracks-upload-ip:${rateLimitKeyForIp(this.env.RATE_LIMIT_KEY_SECRET, ip)}`,
       TRACKS_POLICY.uploadIpLimit,
       now,
     );

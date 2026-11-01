@@ -21,8 +21,6 @@ import {
 } from './standings-fixtures';
 
 jest.mock('@/lib/api');
-// как на web: кэш браузера обходится (`cache: 'no-cache'`); native — см. `http-cache.ts`
-jest.mock('@/features/standings/http-cache', () => ({ BYPASS_HTTP_CACHE: true }));
 
 const getTable = jest.mocked(api.getSeasonStandingsTable);
 const params = { bikeClass: 'road', group: 'm_u40', limit: 50 };

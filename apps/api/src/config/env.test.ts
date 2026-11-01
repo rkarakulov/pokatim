@@ -33,6 +33,11 @@ describe('env', () => {
     expect(() => testEnv({ EMAIL_TOKEN_SECRET: 'short' })).toThrow();
   });
 
+  it('RATE_LIMIT_KEY_SECRET: обязателен, не короче 32 символов', () => {
+    expect(() => testEnv({ RATE_LIMIT_KEY_SECRET: 'short' })).toThrow();
+    expect(() => testEnv({ RATE_LIMIT_KEY_SECRET: undefined })).toThrow();
+  });
+
   it('почта: SMTP_URL — URL, MAIL_FROM — не пустой', () => {
     expect(testEnv().SMTP_URL).toBe('smtp://127.0.0.1:1025');
     expect(() => testEnv({ SMTP_URL: 'not a url' })).toThrow();

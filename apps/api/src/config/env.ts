@@ -186,6 +186,11 @@ const baseEnv = defineCoreEnv({
   JWT_SECRET: Secret,
   /** Ключ HMAC для токенов ссылок в письмах: ссылку можно пересобрать по id строки, сырого токена нет нигде. */
   EMAIL_TOKEN_SECRET: Secret,
+  /**
+   * Ключ HMAC ключей лимитов в Redis (IP, e-mail, пара e-mail+IP, userId 2FA): в Redis нет ни адресов, ни почты.
+   * Отдельно от `EMAIL_TOKEN_SECRET` — утечка одного не раскрывает другой; смена ключа обнуляет счётчики лимитов.
+   */
+  RATE_LIMIT_KEY_SECRET: Secret,
   /** База ссылок приложения: `pokatim://` в сборках, `exp://<host>:8081/--/` в Expo Go. */
   APP_LINK_BASE: z
     .string()

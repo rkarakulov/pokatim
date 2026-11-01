@@ -33,7 +33,11 @@ const RESERVED_RIDER_NAMES = new Set(['вы', 'участник', 'удален�
 /** Заглушка строки без имени «Райдер #N» (name-consent-prompt, N8): и «Райдер», «Райдер №12», «Райдер 7». */
 const RESERVED_RIDER_NUMBER = /^райдер\s*(?:[#№]\s*)?\d*$/u;
 const reservedKey = (value: string) => value.trim().toLowerCase().replaceAll('ё', 'е');
-const isReservedName = (value: string) => {
+/**
+ * Строка повторяет служебную подпись таблицы результатов (RC-8, N8). Экспорт — для разовой выборки имён и клубов,
+ * сохранённых до запрета (`panel reserved-names`).
+ */
+export const isReservedRiderLine = (value: string) => {
   const key = reservedKey(value);
   return RESERVED_RIDER_NAMES.has(key) || RESERVED_RIDER_NUMBER.test(key);
 };
@@ -45,7 +49,7 @@ const isReservedName = (value: string) => {
 const riderLine = (min: number, max: number) =>
   optionalText(max, RIDER_NAME_LINE)
     .refine((value) => value === null || value.length >= min, { error: 'TOO_SHORT' })
-    .refine((value) => value === null || !isReservedName(value), {
+    .refine((value) => value === null || !isReservedRiderLine(value), {
       error: 'INVALID',
     });
 
