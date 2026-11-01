@@ -30,7 +30,8 @@ export const subscriberOutboxRoutes: readonly OutboxRoutes[] = [
   notificationsOutboxRoutes,
   // results.protocol-published / result-revised — вторым подписчиком после notifications (fan-out)
   standingsOutboxRoutes,
-  // identity.account-confirmed — связь по приглашению (P6); маршрут объявляет подписчик (ADR-0027 п. 5)
+  // identity.account-confirmed — связь по приглашению (P6), tracks.activity-ready — автоявка вторым подписчиком после
+  // results (P5, fan-out); маршрут объявляет подписчик (ADR-0027 пп. 4, 5)
   socialOutboxRoutes,
 ];
 
