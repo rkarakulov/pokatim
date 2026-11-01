@@ -78,6 +78,8 @@ describe('AuditAction', () => {
       'achievement.revoked_manually',
       'achievement.override_cleared',
       'ride.photo_reset',
+      'jobs.failed_retried',
+      'jobs.failed_removed',
     ]);
     expect(AUDIT_SUBJECT_KINDS).toEqual([
       'season',

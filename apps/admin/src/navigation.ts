@@ -17,7 +17,8 @@ export interface NavItem {
     | '/audit'
     | '/moderation'
     | '/disputes'
-    | '/appearance';
+    | '/appearance'
+    | '/failed-jobs';
   labelKey: MessageKey;
   /** Без права пункт скрыт (сервер всё равно проверит право на каждом запросе). */
   permission?: Permission;
@@ -65,6 +66,13 @@ export const NAVIGATION: readonly NavItem[] = [
     to: '/appearance',
     labelKey: 'admin.nav.appearance',
     permission: 'appearance.manage',
+    group: 'bottom',
+  },
+  // admin-failed-jobs: служебный раздел админа, последним
+  {
+    to: '/failed-jobs',
+    labelKey: 'admin.nav.failedJobs',
+    permission: 'platform.stats',
     group: 'bottom',
   },
 ];

@@ -693,6 +693,56 @@ describe('createAdminApiClient: сбои удаления аккаунтов (er
   });
 });
 
+describe('createAdminApiClient: упавшие задачи (admin-failed-jobs)', () => {
+  const EVENT = '01890a5d-ac96-774b-bcce-b302099a8057';
+  const view = {
+    queues: [{ queue: 'panel-email', failed: 1 }],
+    items: [
+      {
+        queue: 'panel-email',
+        jobId: EVENT,
+        name: 'panel.invitation-email-requested',
+        attemptsMade: 5,
+        attempts: 5,
+        error: 'SMTP 550 [e-mail]',
+        createdAt: '2026-11-01T10:00:00.000Z',
+        failedAt: '2026-11-01T10:05:00.000Z',
+        outboxEventId: EVENT,
+      },
+    ],
+    outbox: { stuck: 0, oldestAt: null, items: [] },
+  };
+
+  it('listFailedJobs — фильтр очереди и лимит; ответ не по схеме — ошибка', async () => {
+    const { calls, api } = admin(200, view);
+    await expect(api.listFailedJobs({ queue: 'panel-email', limit: 20 })).resolves.toEqual(view);
+    expect(calls[0]).toMatchObject({
+      url: '/v1/admin/failed-jobs?queue=panel-email&limit=20',
+      method: 'GET',
+    });
+    const broken = admin(200, { ...view, outbox: null });
+    await expect(broken.api.listFailedJobs()).rejects.toThrow();
+  });
+
+  it('retryFailedJob и deleteFailedJob — POST с причиной, id в пути экранирован', async () => {
+    const retried = admin(204, undefined);
+    await expect(
+      retried.api.retryFailedJob('panel-email', 'repeat:a:1', { reason: 'Починили SMTP' }),
+    ).resolves.toBeUndefined();
+    expect(retried.calls[0]).toMatchObject({
+      url: '/v1/admin/failed-jobs/panel-email/repeat%3Aa%3A1/retry',
+      method: 'POST',
+      body: { reason: 'Починили SMTP' },
+    });
+    const removed = admin(204, undefined);
+    await removed.api.deleteFailedJob('panel-email', EVENT, { reason: 'Дубль события' });
+    expect(removed.calls[0]).toMatchObject({
+      url: `/v1/admin/failed-jobs/panel-email/${EVENT}/delete`,
+      method: 'POST',
+    });
+  });
+});
+
 describe('createAdminApiClient: оформление приложения (только декор, user-theme)', () => {
   const appearance = {
     decor: 'halloween',

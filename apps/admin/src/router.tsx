@@ -30,6 +30,7 @@ import { NewRaceScreen, RaceScreen } from './features/races/RaceScreen';
 import { RacesScreen, validateRacesSearch } from './features/races/RacesScreen';
 import { RaceResultsScreen } from './features/results/RaceResultsScreen';
 import { AccountErasuresScreen } from './features/account-erasures/AccountErasuresScreen';
+import { FailedJobsScreen } from './features/failed-jobs/FailedJobsScreen';
 import { RiderProfileScreen } from './features/rider-profiles/RiderProfileScreen';
 import { validateRiderProfilesSearch } from './features/rider-profiles/rider-profiles-format';
 import { RiderProfilesScreen } from './features/rider-profiles/RiderProfilesScreen';
@@ -461,6 +462,17 @@ const accountErasuresRoute = createRoute({
   ),
 });
 
+// admin-failed-jobs: упавшие задачи BullMQ и застрявший outbox (только admin); вход — пункт навигации
+const failedJobsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: 'failed-jobs',
+  component: () => (
+    <RequirePermission permission="platform.stats">
+      <FailedJobsScreen />
+    </RequirePermission>
+  ),
+});
+
 // panel-2fa (ADR-0024): 2FA своего аккаунта — любая роль, без права
 const securityRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -505,6 +517,7 @@ const routeTree = rootRoute.addChildren([
     raceTicketsRoute,
     calendarTicketsRoute,
     accountErasuresRoute,
+    failedJobsRoute,
     notFoundRoute,
   ]),
 ]);

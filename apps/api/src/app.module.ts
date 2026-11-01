@@ -13,6 +13,7 @@ import { MongoModule, MongoOutboxModule } from '@rkarakulov/api-kit/mongo';
 import { env } from './config/env';
 import { PROJECT_ERROR_MESSAGES } from './error-messages';
 import { AccountModule } from './modules/account';
+import { JobsModule } from './modules/jobs';
 import { AchievementsModule } from './modules/achievements';
 import { CalendarModule } from './modules/calendar';
 import { AppearanceModule } from './modules/appearance';
@@ -74,6 +75,8 @@ import { TracksModule } from './modules/tracks';
     DevicesModule,
     // удаление аккаунта (оркестратор, ADR-0015)
     AccountModule,
+    // упавшие задачи BullMQ и застрявший outbox в панели (admin-failed-jobs)
+    JobsModule,
     // центр уведомлений (ADR-0017)
     NotificationsModule,
     // «Свои» (ADR-0027): якорь контроллеров P2–P4, P7

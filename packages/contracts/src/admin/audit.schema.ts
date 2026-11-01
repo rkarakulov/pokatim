@@ -104,6 +104,10 @@ export const AUDIT_ACTIONS = [
   'achievement.override_cleared',
   // ride-photo (ADR-0028): модератор удалил фото организатора райда (subject `ride`, label — название, без id фото)
   'ride.photo_reset',
+  // admin-failed-jobs: admin повторил или удалил упавшую задачу BullMQ (subject `platform`, label «<очередь> · <jobId>»,
+  // детали queue/jobName)
+  'jobs.failed_retried',
+  'jobs.failed_removed',
 ] as const;
 export const AuditAction = z.enum(AUDIT_ACTIONS);
 export type AuditAction = z.infer<typeof AuditAction>;
@@ -187,6 +191,9 @@ export const AuditEntry = z.object({
       objectKind: z.enum(ACHIEVEMENT_OBJECT_KINDS).optional(),
       objectId: Uuid.optional(),
       achievementLevel: z.enum(ACHIEVEMENT_LEVELS).optional(),
+      /** admin-failed-jobs: очередь и имя (тип) задачи */
+      queue: z.string().optional(),
+      jobName: z.string().optional(),
     })
     .nullable(),
 });
