@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { haversineMeters } from '../geo.ts';
+import { simplifyTrack } from '../simplify.ts';
 import { at, pointAt, type Xy } from './__testing__/synthetic.ts';
 import { ROUTE_SECTION_POLICY, routeSections, sectionLine } from './sections.ts';
 
@@ -138,6 +139,27 @@ describe('routeSections: разбиение через каждые 10 км', ()
       expectUngatedNone(outback, sections);
     },
   );
+
+  it('«туда-обратно» 2 × 17 км на разреженной линии (3 вершины, как после simplifyTrack) — граница в развороте', () => {
+    const sparse = [at([0, 0]), at([0, 17_000]), at([0, 0])];
+    expect(ranges(sparse)).toEqual([
+      [0, 10_000],
+      [10_000, 17_000],
+      [17_000, 27_000],
+      [27_000, 34_000],
+    ]);
+    const simplified = simplifyTrack(
+      path([
+        [0, 0],
+        [0, 17_000],
+        [0, 0],
+      ]).map(([lon, lat]) => ({ lon, lat })),
+      1,
+      20_000,
+    ).map(({ lon, lat }): [number, number] => [lon, lat]);
+    expect(simplified).toHaveLength(3);
+    expect(ranges(simplified)).toEqual(ranges(sparse));
+  });
 
   it.each([15_070, 15_080, 15_100])(
     '«туда-обратно» по одной дороге до %i м: разворот рядом с шагом 10 км — граница в развороте',

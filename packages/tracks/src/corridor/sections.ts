@@ -160,10 +160,11 @@ export function routeSections(line: readonly LonLat[], widthM: number): RouteSec
   const turnOf = (fromM: number, toM: number): number | null => {
     const sub = sectionLineOn(line, chainage, fromM, toM);
     const toStart = returnIndex(sub, minEndsM);
-    if (toStart >= 0) return fromM + farthestAlong(sub, toStart);
+    // разворот — до отрезка, на котором линия вернулась к воротам: его конец может быть уже за ними
+    if (toStart >= 0) return fromM + farthestAlong(sub, toStart - 1);
     const back = [...sub].reverse();
     const toEnd = returnIndex(back, minEndsM);
-    if (toEnd >= 0) return toM - farthestAlong(back, toEnd);
+    if (toEnd >= 0) return toM - farthestAlong(back, toEnd - 1);
     if (distance(sub[0]!, sub[sub.length - 1]!) <= minEndsM) {
       return fromM + farthestAlong(sub, sub.length - 1);
     }
