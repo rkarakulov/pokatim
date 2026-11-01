@@ -540,3 +540,11 @@ paths:
 - Без `unsafe-eval`: zod в web — `jitless` (`features/web-security/zod-jitless.web.ts`, первый импорт `theme/design-system.ts`);
   новая библиотека с `eval`/`new Function` — нарушение, смоук «строгий CSP … без нарушений» падает.
 - `EXPO_PUBLIC_API_URL` web-контейнера (runtime, CSP) = build-arg сборки (бандл): разойдутся — CSP заблокирует API.
+
+## Упавшие задачи (admin-failed-jobs)
+
+- `/v1/admin/failed-jobs*` — `PanelGuard` + `platform.stats` на классе (только admin); `:queue` — `QueueName` и
+  членство в `QUEUE`, `:jobId` — `FailedJobId` (без `/` и пробелов); тела — `strictObject` с `ActionReason`; лимит
+  мутаций `failed-jobs-panel:<uid>` 120/ч. Наружу — без `data` задачи (там `userId` и id объектов), текст ошибки —
+  первая строка с маской e-mail (ошибки SMTP), ≤ 300 символов. Журнал — очередь, тип и id задачи с причиной; лог —
+  `jobs.failed_<действие> queue job by`, без текста ошибки.

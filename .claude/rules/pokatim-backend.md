@@ -290,6 +290,22 @@ paths:
   `account.erasure_retried` → outbox `account.erasure-retry-requested` → процессор `account-deletion`, проход
   `sweep`. Недавний повтор — `{ queued: false }`; нет удалённого — 404; завершено или не зависло — 409.
 
+## Упавшие задачи (`jobs`, admin-failed-jobs)
+
+- Модуль-композиция `jobs` без коллекций (`jobs → panel` через `index.ts`, импортирует только `AppModule`):
+  `FailedJobsAdminController` (`admin/failed-jobs`, `PanelGuard` + `platform.stats`: `GET`, `POST :queue/:jobId/retry`,
+  `…/delete`) → `FailedJobsAdminService`. Очереди — `FailedJobQueues`: `Queue` на имя из `QUEUE` поверх общего `REDIS`
+  api-kit (переданный клиент BullMQ помечает `shared` и не закрывает; своих соединений нет); незнакомое имя — 404.
+  Новая очередь в `queues.ts` попадает на экран сама.
+- Действие: лимит `failed-jobs-panel:<uid>` 120/ч → задача (нет — 404) → `isFailed` (нет — 409 `CONFLICT`) →
+  транзакция { `PanelAudit.append` `jobs.failed_retried|failed_removed` (subject `platform`, nil UUID, label
+  `jobSubjectLabel`, details `queue`/`jobName`) → `job.retry('failed', { resetAttemptsMade, resetAttemptsStarted })` /
+  `job.remove()` последней }: сбой операции откатывает журнал; задача уже не failed — 409.
+- Наружу — явный список полей (`FailedJobRow`), без `data`; текст — `panelJobError` (первая строка, e-mail маскируются,
+  ≤ 300). Outbox — только чтение коллекции api-kit `OUTBOX_COLLECTION` (`publishedAt: null`, старше
+  `OUTBOX_STUCK_MINUTES`), без действий.
+- Int-тесты — настоящий провал: worker стенда не запущен, задачу берёт ручной `Worker.getNextJob` и `moveToFailed`.
+
 ## Билеты (`tickets`, event-tickets, ADR-0023 Proposed)
 
 - Модуль-потребитель: `tickets → results` (`ResultsCoreModule`: порт `RESULTS_FOR_TICKETS` — `entryOf`,

@@ -68,6 +68,7 @@ describe('каркас панели (AC10)', () => {
         'Журнал действий',
         'Модерация',
         'Оформление приложения',
+        'Упавшие задачи',
       ],
     ],
     // «Модерация» — при любом из прав rides/routes/profiles.moderate; у организатора их нет
@@ -97,6 +98,8 @@ describe('каркас панели (AC10)', () => {
     ['organizer', '/rider-profiles'],
     ['organizer', '/moderation'],
     ['moderator', '/appearance'],
+    ['moderator', '/failed-jobs'],
+    ['organizer', '/failed-jobs'],
     ['moderator', '/calendar'],
     ['moderator', '/races/new'],
   ] as const)(

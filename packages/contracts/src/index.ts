@@ -20,6 +20,7 @@ export * from './admin/members.schema.ts';
 export * from './admin/audit.schema.ts';
 export * from './admin/overview.schema.ts';
 export * from './admin/account-erasures.schema.ts';
+export * from './admin/failed-jobs.schema.ts';
 export * from './admin/totp.schema.ts';
 export * from './admin/invitations.schema.ts';
 export * from './races/season.schema.ts';
