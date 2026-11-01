@@ -554,8 +554,10 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   «Мой маршрут» (routes-07, `my-route-detail.tsx`) — та же раскладка у готового: `RouteLineMap fill bottomInset`, шапка
   шторки — `StatBlock` по `ROUTE_STATS_VARIANT` из `routeDistanceGainItems` (`format.ts`, общие с каталогом), тело —
   `ScrollView` с `keyboardShouldPersistTaps="handled"`; переименование подменяет тело формой; область — в
-  `components/keyboard-avoiding-area(.ios).tsx` (iOS — `behavior="padding"`, Android и web — без поведения). Остальные
-  статусы — прокрутка без карты и шторки.
+  `components/keyboard-avoiding-area(.web).tsx` (iOS и Android — `behavior="padding"`, `keyboardVerticalOffset =
+  -insets.bottom`: Android edge-to-edge окно под клавиатуру не ужимает, нижний inset держит шторка; web — `View`).
+  Правка (`draft` названия, подтверждение удаления) — у экрана: опрос «Обрабатывается → готов» её не теряет; заморожено
+  (A3) — формы нет. Остальные статусы — прокрутка без карты и шторки (готовый без длины — с «Моими заездами»).
 - Главная — раздел `routes` (герой `RouteHero` по теме: у «Классики» текстовый, RC-8; у тем с `contour`/`numeral` —
   контур из `catalogRouteMapOptions`, запрос — только в компоненте варианта; пустой каталог — `EmptyState`).
 - Мои маршруты (routes-02): переключатель «Каталог / Мои» — `SegmentedControl` в шапке обеих лент, состояние —

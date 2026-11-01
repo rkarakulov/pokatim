@@ -43,7 +43,8 @@ export interface RouteRideOrphansResult {
  * насовсем (`RouteRideRoutes.existingIds`; снятый с публикации и скрытый маршрут существует — его заезды остаются,
  * повторная публикация возвращает историю). Основной путь удаления — событие `tracks.activity-removed` и транзакция
  * нового заезда; уборщик добирает пропущенное (POST после события, сироты до выката, удалённые маршруты райдеров).
- * Скан по `_id` пачками, не больше `maxBatches` за прогон — курсор хвоста в Redis (потеря — скан с начала); признак
+ * Скан по `_id` пачками, не больше `maxBatches` за прогон — курсор в Redis после каждой полной пачки (хвост и сбой
+ * посреди прогона продолжаются с него; потеря — скан с начала; конец скана — курсор снят); признак
  * сироты необратим — идемпотентен; лог — только счётчики, без id и ПДн.
  */
 @Processor(QUEUE.routeRidesMaintenance)
@@ -95,12 +96,10 @@ export class RouteRidesMaintenanceProcessor extends WorkerHost {
       result.deletedActivity += await this.repository.deleteRefs(noActivity);
       result.deletedRoute += await this.repository.deleteRefs(noRoute);
       if (refs.length < batchSize) break;
-    }
-    if (result.more && after !== null) {
+      // после каждой пачки: сбой посреди прогона (рестарт worker, ошибка Mongo) продолжит с неё, а не с начала
       await this.redis.set(ROUTE_RIDES_ORPHANS_CURSOR_KEY, after, 'EX', CURSOR_TTL_SEC);
-    } else {
-      await this.redis.del(ROUTE_RIDES_ORPHANS_CURSOR_KEY);
     }
+    if (!result.more) await this.redis.del(ROUTE_RIDES_ORPHANS_CURSOR_KEY);
     this.logger.log(
       `orphans: scanned ${result.scanned} in ${result.batches} batch(es), deleted ${result.deletedActivity}` +
         ` (activity) + ${result.deletedRoute} (route)${result.more ? ', more left' : ''}` +
