@@ -1770,7 +1770,7 @@ export const ru = {
   'admin.ridesModeration.field.photo': 'Фото организатора',
   'admin.ridesModeration.noPhoto': 'Нет фото',
   'admin.ridesModeration.photoAlt': 'Фото организатора «{title}»',
-  'admin.ridesModeration.photoHidden': 'Фото скрыто вместе с райдом',
+  'admin.ridesModeration.photoHidden': 'Райд скрыт — райдеры это фото не видят',
   'admin.ridesModeration.photoUnavailable':
     'Фото недоступно. Возможно, его заменили или удалили — обновите карточку.',
   'admin.ridesModeration.reloadCard': 'Обновить карточку',

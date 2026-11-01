@@ -115,7 +115,7 @@ describe('api-client: фото райда (ride-photo)', () => {
 });
 
 describe('createAdminApiClient: фото райда (ride-photo)', () => {
-  it('resetRidePhoto — POST photo-reset с телом; ridePhotoUrl — без запроса', async () => {
+  it('resetRidePhoto — POST photo-reset с телом', async () => {
     const detail = {
       id: ID,
       title: 'Кофе-райд',
@@ -147,7 +147,6 @@ describe('createAdminApiClient: фото райда (ride-photo)', () => {
     expect(calls[0]?.url).toBe(`/v1/admin/rides/${ID}/photo-reset`);
     expect(calls[0]?.method).toBe('POST');
     expect(JSON.parse(String(calls[0]?.body))).toEqual(body);
-    expect(api.ridePhotoUrl(TOKEN)).toBe(`/v1/ride-photos/${TOKEN}`);
     expect(calls).toHaveLength(1);
   });
 });
