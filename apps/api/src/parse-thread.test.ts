@@ -6,6 +6,7 @@ import type {
   RouteDerived,
   RouteSectionsAnalysis,
 } from '@pokatim/tracks/parse';
+import { ROUTE_SECTIONS_VERSION } from '@pokatim/tracks/parse';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -174,7 +175,7 @@ describe('runParseThread', { timeout: 20_000 }, () => {
         [new Uint8Array([1, 2, 3]), 'gpx', corridor, window, new Date('2026-10-27T00:00:00Z')],
         DEFAULT_PARSE_LIMITS,
       ),
-    ).resolves.toEqual({ ok: true, result: { version: 1, items: [] } });
+    ).resolves.toEqual({ ok: true, result: { version: ROUTE_SECTIONS_VERSION, items: [] } });
   });
 
   it('семафор: одновременно не больше PARSE_THREADS_MAX потоков, остальные ждут (FIFO)', async () => {

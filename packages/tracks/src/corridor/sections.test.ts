@@ -35,6 +35,17 @@ function endsGap(line: [number, number][], fromM: number, toM: number): number {
   return haversineMeters(lonLat(sub[0]!), lonLat(sub[sub.length - 1]!));
 }
 
+/** От каждых ворот участка по линии: после выхода из радиуса 150 м линия к ним не возвращается. */
+function expectUngatedNone(line: [number, number][], sections: { fromM: number; toM: number }[]) {
+  for (const { fromM, toM } of sections) {
+    const sub = sectionLine(line, fromM, toM).map(lonLat);
+    for (const walk of [sub, [...sub].reverse()]) {
+      const far = walk.map((point) => haversineMeters(point, walk[0]!) > 150);
+      expect(far.slice(far.indexOf(true))).not.toContain(false);
+    }
+  }
+}
+
 const ranges = (line: [number, number][], widthM = 50) =>
   routeSections(line, widthM).map(({ fromM, toM }) => [fromM, toM]);
 
@@ -88,24 +99,62 @@ describe('routeSections: разбиение через каждые 10 км', ()
     for (const { fromM, toM } of sections) expect(endsGap(loop, fromM, toM)).toBeGreaterThan(150);
   });
 
-  it('«туда-обратно» 2 × 15 км по одной дороге: слитый участок с разворотом проходит свои ворота — участков нет', () => {
-    const outback = path([
-      [0, 0],
-      [0, 15_000],
-      [0, 0],
-    ]);
-    expect(routeSections(outback, 50)).toEqual([]);
-  });
+  it.each([
+    [
+      17_000,
+      [
+        [0, 10_000],
+        [10_000, 17_000],
+        [17_000, 27_000],
+        [27_000, 34_000],
+      ],
+    ],
+    [
+      15_000,
+      [
+        [0, 10_000],
+        [10_000, 15_000],
+        [15_000, 25_000],
+        [25_000, 30_000],
+      ],
+    ],
+    [
+      12_000,
+      [
+        [0, 12_000],
+        [12_000, 24_000],
+      ],
+    ],
+  ])(
+    '«туда-обратно» по одной дороге до %i м: граница в точке разворота, шаг 10 км — в каждом плече',
+    (turnM, expected) => {
+      const outback = path([
+        [0, 0],
+        [0, turnM],
+        [0, 0],
+      ]);
+      const sections = routeSections(outback, 50);
+      expect(sections.map(({ fromM, toM }) => [fromM, toM])).toEqual(expected);
+      expectUngatedNone(outback, sections);
+    },
+  );
 
   it.each([15_070, 15_080, 15_100])(
-    '«туда-обратно» по одной дороге до %i м: участок с разворотом проходит у своих ворот — участков нет',
+    '«туда-обратно» по одной дороге до %i м: разворот рядом с шагом 10 км — граница в развороте',
     (turnM) => {
       const outback = path([
         [0, 0],
         [0, turnM],
         [0, 0],
       ]);
-      expect(routeSections(outback, 50)).toEqual([]);
+      const sections = routeSections(outback, 50);
+      expect(sections.map(({ fromM, toM }) => [fromM, toM])).toEqual([
+        [0, 10_000],
+        [10_000, turnM],
+        [turnM, turnM + 10_000],
+        [turnM + 10_000, 2 * turnM],
+      ]);
+      expectUngatedNone(outback, sections);
     },
   );
 
@@ -122,14 +171,7 @@ describe('routeSections: разбиение через каждые 10 км', ()
       [20_000, 30_000],
       [30_000, 40_000],
     ]);
-    for (const { fromM, toM } of sections) {
-      const sub = sectionLine(outback, fromM, toM).map(lonLat);
-      // от каждых ворот по линии: после выхода из радиуса 150 м линия к ним не возвращается
-      for (const walk of [sub, [...sub].reverse()]) {
-        const far = walk.map((point) => haversineMeters(point, walk[0]!) > 150);
-        expect(far.slice(far.indexOf(true))).not.toContain(false);
-      }
-    }
+    expectUngatedNone(outback, sections);
   });
 
   it.each([
@@ -155,7 +197,7 @@ describe('routeSections: разбиение через каждые 10 км', ()
     },
   );
 
-  it('«туда-обратно», где всё сливается в один участок — участков нет', () => {
+  it('дважды «туда-обратно» по 5 км — 4 участка по 5 км, граница в каждом развороте', () => {
     const spurs = path([
       [0, 0],
       [0, 5000],
@@ -163,7 +205,25 @@ describe('routeSections: разбиение через каждые 10 км', ()
       [0, 5000],
       [0, 0],
     ]);
-    expect(routeSections(spurs, 50)).toEqual([]);
+    const sections = routeSections(spurs, 50);
+    expect(sections.map(({ fromM, toM }) => [fromM, toM])).toEqual([
+      [0, 5000],
+      [5000, 10_000],
+      [10_000, 15_000],
+      [15_000, 20_000],
+    ]);
+    expectUngatedNone(spurs, sections);
+  });
+
+  it('разворот ближе 5 км к старту — не граница: прежнее слияние, участков нет', () => {
+    // 4 км на север, обратно через старт и на юг 20 км: возврат к воротам старта, разворот на 4 км
+    const hook = path([
+      [0, 0],
+      [0, 4000],
+      [0, 0],
+      [0, -20_000],
+    ]);
+    expect(routeSections(hook, 50)).toEqual([]);
   });
 
   it('детерминизм: два вызова и копия линии дают одно и то же', () => {

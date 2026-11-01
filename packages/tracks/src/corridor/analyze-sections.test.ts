@@ -83,6 +83,29 @@ describe('analyzeSections: неизменённый движок на подли
     expect(result.items.map((item) => item.verdict)).toEqual(['counted', 'rejected', 'counted']);
   });
 
+  it('«туда-обратно» 2 × 17 км по одной дороге: граница в развороте, все 4 участка засчитаны', () => {
+    const there = Array.from({ length: 171 }, (_, i): Xy => [0, i * 100]);
+    const outback = corridorOf([...there, ...there.slice(0, -1).reverse()], { isLoop: true });
+    const bytes = rideBytes([
+      [0, -95],
+      [0, 17_000],
+      [0, -95],
+    ]);
+    const result = analyzeSections(bytes, 'stream', outback, WINDOW, NOW);
+    expect(result.items.map(({ fromM, toM, verdict }) => [fromM, toM, verdict])).toEqual([
+      [0, 10_000, 'counted'],
+      [10_000, 17_000, 'counted'],
+      [17_000, 27_000, 'counted'],
+      [27_000, 34_000, 'counted'],
+    ]);
+    // время каждого участка ≈ (длина − 2 × 50 м) / скорость: попытка с нужного прохода дороги
+    for (const item of result.items) {
+      expect(
+        Math.abs(item.elapsedSec! - (item.toM - item.fromM - 100) / SPEED),
+      ).toBeLessThanOrEqual(10);
+    }
+  });
+
   it('маршрут 8 км — участков нет, файл не разбирается', () => {
     const short = corridorOf(Array.from({ length: 81 }, (_, i): Xy => [0, i * 100]));
     const garbage = new Uint8Array([1, 2, 3]);
