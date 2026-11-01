@@ -315,7 +315,23 @@ OG с фото — PNG до `maxPhotoPngBytes` (600 000) вместо ≤ 300 00
 
 ## 8.2 Deviations from spec
 
-(заполняет coder)
+PR A (coder, 2026-11-01):
+
+- **D1. Разбивка коммитов.** `ride_photo_reset` в `NOTIFICATION_KINDS` — в коммите уведомления, а не в первом
+  коммите contracts: `KIND_GROUPS`/`TITLES` — `Record<NotificationKind, …>`, иначе промежуточный коммит не проходит
+  typecheck API.
+- **D2. Отрицательное доказательство отката сброса.** Сбой подставлен в `RideReportsRepository.latest` (последний шаг
+  транзакции после журнала и события), а не в `PanelAudit.append`: журнал пишется **до** события, и с append outbox вне
+  транзакции тест со сбоем журнала не покраснел бы.
+- **D3. Фикстура шумного фото** `noisyPhoto` перенесена из `ride-invite.png.test.ts` в `test/avatars.ts` (общая для 4a и
+  OG); `encodePhotoCard` без значения предела по умолчанию — предел передаётся явно (4a — `STORY_CARD_POLICY.
+  maxPngBytes`, OG — `OG_CARD_POLICY.maxPhotoPngBytes`).
+- **D4. `story-card.int.test.ts` не менялся.** «Без привязки — 200» покрыт в `ride-invite.int.test.ts` (ключ привязки
+  удалён, райд скрыт — PNG отдаётся) и прежними тестами сторис гонки (зелёные без правок); `rides-for-sharing.int.test.ts`
+  — новый кейс `inviteCardLive`.
+- **D5. OG на шумной фикстуре влезает только палитрой 16** (≈ 296 КБ при пределе 600 КБ; 256 цветов — больше
+  предела). Предел не поднимался (условие задачи соблюдено); реальные фото, как правило, — палитра 256.
+- **D6. `pokatim-web.md`, `pokatim-app.md`** не менялись в PR A — их содержание (панель, шапка) — PR B.
 
 ## 9. Test matrix
 
@@ -465,4 +481,41 @@ ModerationRidePhotoQuery = z.strictObject({ photoId: RidePhotoId })
 
 ## 12. Outcome
 
-(заполняет coder)
+### PR A (coder, 2026-11-01)
+
+Коммиты (ветка `ride-photo-followups`, не запушено): `c24f2f85` contracts + api-client, `27ef939b` админская отдача фото
+(AC5), `181b15c8` уведомление `ride_photo_reset` (AC4), `ba0fe7bf` инвалидация PNG приглашения (AC3) + текст
+последствий, `b5a94e4b` вынос `photo-card.png.ts`, `84b9a174` OG с фото (AC2), `9d84ae3b` доки и правила.
+
+- **AC2** — `photoId` в хэше OG, `renderVersion` 4, `maxPhotoPngBytes` 600 000; `og-card.int` (загрузка/замена/удаление/
+  сброс → новая версия, старая — 302, PNG прежней вытеснен; скрытый — 404; снято между постановкой и рендером —
+  `skipped`), `og-sync.int` (загрузка фото → задача нового хэша), `og-card.png` (шумное фото 296 208 Б, 1200×630; белое
+  фото затемнено; без фото — байт в байт прежний рендер).
+- **AC3** — привязка `story-card:ride:<token>`, `StoryCardImageService`, порт `inviteCardLive` → `isShareable`;
+  `ride-invite.int` (4 триггера `night` с фото, скрытие обоих шаблонов + «Вернуть», незатронутые `line`/`night` без
+  фото, переходное окно без привязки, гонка «рендер ↔ сброс»), unit сервиса, `rides-for-sharing.int`.
+- **AC4** — `rides.photo-reset` в транзакции сброса (`seq` = `noticeSeq` после `$inc`), приём, текст, группа «Райды»;
+  `ride-photos.int` (источник: событие и seq, нет фото/409 — без события, откат), `notifications-intake.int` (организатору,
+  без призыва у прошедшего, замена непрочитанного, меньший seq не заменяет, удалённый — нет, push выключен — skipped),
+  unit intake/texts/policy.
+- **AC5** — `GET /v1/admin/rides/:id/photo?photoId=`; `ride-photos.int` (видимый и скрытый — байты = публичные,
+  `private, no-store`, `nosniff`, `sandbox`; не текущий/чужой/нет фото/нет райда — 404 JSON; кривой/лишний query, кривой
+  id — 400; без права — 403; без сессии — 401; публичный GET скрытого — 404). `admin-routes.test.ts` — без правок, зелёный.
+- **AC6** — PR B. **AC7** — `notification.schema.test.ts` (старый справочник → `unknown`, заголовок/текст/цель целы).
+- **i18n** — `admin.ridesModeration.resetPhotoConsequences` (P7).
+
+**Отрицательные доказательства** (механизм временно убран → красный по результату → код восстановлен, файл совпал с
+копией):
+
+| Механизм убран | Тест | Результат |
+|---|---|---|
+| `buildRideInvite` пишет PNG без привязки | `ride-invite.int` «отзыв выданной картинки» | 7 failed: `expected 200 to be 404`, `expected null to deeply equal {…}`, `expected [] to have a length of 1` |
+| `StoryCardImageService` не зовёт `inviteCardLive` | то же | 6 failed: `expected 200 to be 404` (все триггеры, скрытие, гонка) |
+| `collapse` без `seq` в `ridePhotoReset` | `notifications-intake.int` «более раннее событие» | `expected {…} to match object { sourceEventId: later, collapseSeq: 5 }` |
+| outbox `append(undefined, …)` вне транзакции | `ride-photos.int` «откат транзакции» | `expected [ {…} ] to deeply equal []` — событие осталось |
+| `photoId` убран из канонических фактов OG | `og-card.int` AC2 | `expected 'c795de92c124f5da' not to be 'c795de92c124f5da'` |
+
+**Полный `TURBO_CONCURRENCY=4 pnpm check`** на `9d84ae3b` (`MONGO_URL_TEST=…/ride_photo_fu_test`, `REDIS_URL_TEST=…/10`):
+`Tasks: 15 successful, 15 total` (6 из кэша turbo), api — `Test Files 262 passed`, `Tests 2993 passed`; EXIT=0.
+
+**NOT VERIFIED:** визуальная проверка OG с фото (превью `preview:story-cards` не запускалось); e2e — не нужен (§9).
