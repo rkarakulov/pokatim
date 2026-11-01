@@ -170,6 +170,7 @@ jobs:
       MAIL_FROM: 'pokatim <no-reply@pokatim.test>'
       JWT_SECRET: e2e-jwt-secret-e2e-jwt-secret-00000
       EMAIL_TOKEN_SECRET: e2e-email-secret-e2e-email-secret-0
+      RATE_LIMIT_KEY_SECRET: e2e-rate-limit-secret-e2e-rate-limit-0
       AGREEMENT_VERSION: e2e-agreement
     steps:
       - name: mongodb start

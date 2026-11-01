@@ -110,6 +110,11 @@ describe('рейтинг сезона — контракты (race-results-08)',
     const bad = (query: Record<string, unknown>) =>
       SeasonStandingsTableQuery.safeParse(query).success;
     expect(bad({ bikeClass: 'road', group: 'overall', extra: '1' })).toBe(false);
+    // метка обхода HTTP-кэша whatwg-fetch (RN): принимается и отбрасывается; не число — ошибка
+    expect(
+      SeasonStandingsTableQuery.parse({ bikeClass: 'road', group: 'overall', _: '1761990000000' }),
+    ).toEqual({ bikeClass: 'road', group: 'overall', limit: STANDINGS_PAGE_SIZE });
+    expect(bad({ bikeClass: 'road', group: 'overall', _: 'x' })).toBe(false);
     expect(bad({ bikeClass: 'road' })).toBe(false);
     expect(bad({ bikeClass: 'cx', group: 'overall' })).toBe(false);
     expect(bad({ bikeClass: 'road', group: 'u23' })).toBe(false);

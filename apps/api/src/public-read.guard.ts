@@ -54,7 +54,7 @@ export async function consumeIpLimit(
 export class PublicReadGuard implements CanActivate {
   constructor(
     private readonly rateLimiter: RateLimiter,
-    @Inject(ENV) private readonly env: Pick<Env, 'EMAIL_TOKEN_SECRET'>,
+    @Inject(ENV) private readonly env: Pick<Env, 'RATE_LIMIT_KEY_SECRET'>,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -62,7 +62,7 @@ export class PublicReadGuard implements CanActivate {
     const { ip } = context.switchToHttp().getRequest<{ ip: string }>();
     await consumeIpLimit(
       this.rateLimiter,
-      this.env.EMAIL_TOKEN_SECRET,
+      this.env.RATE_LIMIT_KEY_SECRET,
       this.clock,
       ip,
       'public-read',
@@ -90,7 +90,7 @@ export class IpRateLimitGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
     private readonly rateLimiter: RateLimiter,
-    @Inject(ENV) private readonly env: Pick<Env, 'EMAIL_TOKEN_SECRET'>,
+    @Inject(ENV) private readonly env: Pick<Env, 'RATE_LIMIT_KEY_SECRET'>,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -103,7 +103,7 @@ export class IpRateLimitGuard implements CanActivate {
     const { ip } = context.switchToHttp().getRequest<{ ip: string }>();
     await consumeIpLimit(
       this.rateLimiter,
-      this.env.EMAIL_TOKEN_SECRET,
+      this.env.RATE_LIMIT_KEY_SECRET,
       this.clock,
       ip,
       meta.name,

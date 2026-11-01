@@ -100,7 +100,7 @@ export class MyRoutesService {
     const now = this.clock.now();
     await this.consume(`routes-upload-rider:${userId}`, ROUTE_POLICY.riderUploadUserLimit, now);
     await this.consume(
-      `routes-upload-ip:${rateLimitKeyForIp(this.env.EMAIL_TOKEN_SECRET, ip)}`,
+      `routes-upload-ip:${rateLimitKeyForIp(this.env.RATE_LIMIT_KEY_SECRET, ip)}`,
       ROUTE_POLICY.riderUploadIpLimit,
       now,
     );

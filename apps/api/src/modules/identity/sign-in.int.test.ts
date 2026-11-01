@@ -23,7 +23,7 @@ import {
 } from '../../../test/identity';
 import { IDENTITY_POLICY } from './identity.policy';
 import { PasswordHasher } from './password-hasher';
-import { sha256 } from './tokens';
+import { sha256, signInLimitKeys } from './tokens';
 
 let h: Harness;
 beforeAll(async () => {
@@ -301,6 +301,16 @@ describe('лимиты попыток (AC3, Q1/Q2)', () => {
       expect(key).not.toContain('rider');
       expect(key).not.toContain('198.51.100');
     }
+  });
+
+  it('ключи лимитов — от RATE_LIMIT_KEY_SECRET, не от EMAIL_TOKEN_SECRET', async () => {
+    await signIn({ email: EMAIL, password: 'x' }, '198.51.100.77');
+
+    const keys = new Set(await h.redis.keys('rl:signin-*'));
+    const own = signInLimitKeys(h.env.RATE_LIMIT_KEY_SECRET, EMAIL, '198.51.100.77');
+    const foreign = signInLimitKeys(h.env.EMAIL_TOKEN_SECRET, EMAIL, '198.51.100.77');
+    for (const key of Object.values(own)) expect(keys.has(`rl:${key}`)).toBe(true);
+    for (const key of Object.values(foreign)) expect(keys.has(`rl:${key}`)).toBe(false);
   });
 });
 

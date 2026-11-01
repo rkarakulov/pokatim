@@ -7,6 +7,7 @@ import { DisplayName, Email } from '@pokatim/contracts';
 
 import type { CliEnv } from '../config/env';
 import { PanelMembersService } from '../modules/panel';
+import { ReservedRiderLines } from '../modules/profile';
 import { PanelCliModule } from './panel-cli.module';
 
 export const CLI_USAGE = `Панель «Протокол» — команды сервера.
@@ -18,6 +19,11 @@ export const CLI_USAGE = `Панель «Протокол» — команды �
   reset-totp --email <e-mail>
       Аварийный сброс 2FA сотрудника (потерян телефон и коды восстановления): 2FA, доверенные устройства
       и сессии панели удаляются. Запись журнала — с актором cli.
+
+  reserved-names
+      Профили, где имя или клуб совпадает со служебной подписью таблицы («Райдер #N», «Участник», «Вы»;
+      сохранены до запрета, name-consent-prompt N8): id пользователя и карточка в панели. Только чтение —
+      сбросьте имя или клуб в карточке «Профили райдеров» (журнал действий).
 
 Коды выхода: 0 — готово (уже администратор; 2FA не подключена), 2 — неверные аргументы или пользователь не подходит, 1 — сбой.
 `;
@@ -44,9 +50,19 @@ export async function runPanelCli(argv: string[], env: () => CliEnv, io: CliIo):
     io.stdout(CLI_USAGE);
     return command === undefined && !parsed.values.help ? 2 : 0;
   }
-  if (!['grant-admin', 'reset-totp'].includes(command) || parsed.positionals.length > 1) {
+  if (
+    !['grant-admin', 'reset-totp', 'reserved-names'].includes(command) ||
+    parsed.positionals.length > 1
+  ) {
     io.stderr(`Неизвестная команда.\n\n${CLI_USAGE}`);
     return 2;
+  }
+  if (command === 'reserved-names') {
+    if (parsed.values.email !== undefined || parsed.values.name !== undefined) {
+      io.stderr('У reserved-names нет аргументов.\n');
+      return 2;
+    }
+    return withContext(env, ReservedRiderLines, (lines) => reservedNames(lines, io));
   }
   const email = Email.safeParse(parsed.values.email);
   if (command === 'reset-totp') {
@@ -65,18 +81,39 @@ export async function runPanelCli(argv: string[], env: () => CliEnv, io: CliIo):
 }
 
 /** Контекст без HTTP на время одной команды. */
-async function withMembers(
+async function withContext<T>(
   env: () => CliEnv,
-  run: (members: PanelMembersService) => Promise<number>,
+  service: new (...args: never[]) => T,
+  run: (instance: T) => Promise<number>,
 ): Promise<number> {
   const app = await NestFactory.createApplicationContext(PanelCliModule.forRoot(env()), {
     logger: ['error'],
   });
   try {
-    return await run(app.get(PanelMembersService));
+    return await run(app.get(service));
   } finally {
     await app.close();
   }
+}
+
+const withMembers = (env: () => CliEnv, run: (members: PanelMembersService) => Promise<number>) =>
+  withContext(env, PanelMembersService, run);
+
+const FIELD_LABEL = { name: 'имя', club: 'клуб' } as const;
+
+async function reservedNames(lines: ReservedRiderLines, io: CliIo): Promise<number> {
+  const found = await lines.find();
+  for (const { userId, fields } of found) {
+    io.stdout(
+      `${userId}\t${fields.map((field) => FIELD_LABEL[field]).join(', ')}\t/admin/rider-profiles/${userId}\n`,
+    );
+  }
+  io.stdout(
+    found.length === 0
+      ? 'Служебных подписей в профилях нет.\n'
+      : `Профилей со служебной подписью: ${found.length}. Сбросьте поле в карточке профиля в панели.\n`,
+  );
+  return 0;
 }
 
 async function grantAdmin(

@@ -24,7 +24,7 @@ export class SessionService {
 
   constructor(
     private readonly repository: IdentityRepository,
-    @Inject(ENV) private readonly env: Pick<Env, 'JWT_SECRET' | 'EMAIL_TOKEN_SECRET'>,
+    @Inject(ENV) private readonly env: Pick<Env, 'JWT_SECRET' | 'RATE_LIMIT_KEY_SECRET'>,
     @Inject(CLOCK) private readonly clock: Clock,
     private readonly rateLimiter: RateLimiter,
   ) {
@@ -56,7 +56,7 @@ export class SessionService {
   async rotate(refreshToken: string, ip: string): Promise<Session> {
     const now = this.clock.now();
     const limit = await this.rateLimiter.consume(
-      `refresh-ip:${rateLimitKeyForIp(this.env.EMAIL_TOKEN_SECRET, ip)}`,
+      `refresh-ip:${rateLimitKeyForIp(this.env.RATE_LIMIT_KEY_SECRET, ip)}`,
       IDENTITY_POLICY.refreshPerIpLimit,
       now,
     );

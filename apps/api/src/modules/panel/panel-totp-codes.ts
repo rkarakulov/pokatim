@@ -31,7 +31,7 @@ export class PanelTotpCodes {
     private readonly rateLimiter: RateLimiter,
     private readonly accounts: IdentityAccounts,
     @Inject(ENV)
-    private readonly env: Pick<Env, 'EMAIL_TOKEN_SECRET' | 'PANEL_TOTP_ENFORCED'>,
+    private readonly env: Pick<Env, 'RATE_LIMIT_KEY_SECRET' | 'PANEL_TOTP_ENFORCED'>,
   ) {}
 
   /** Без ключа — `503 TOTP_UNAVAILABLE` (fail closed). */
@@ -49,7 +49,7 @@ export class PanelTotpCodes {
    * `RATE_LIMITED`). Ключи — HMAC (в Redis нет ни IP, ни userId).
    */
   async takeAttempt(userId: string, ip: string, now: Date): Promise<void> {
-    const secret = this.env.EMAIL_TOKEN_SECRET;
+    const secret = this.env.RATE_LIMIT_KEY_SECRET;
     const userKey = createHmac('sha256', secret)
       .update(`panel-totp-user:${userId}`)
       .digest('base64url');

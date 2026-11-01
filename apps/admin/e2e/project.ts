@@ -2,7 +2,7 @@ import type { PlaywrightTestConfig } from '@playwright/test';
 
 // Смоук панели «Протокол» (AC15): API и worker из apps/api/dist (`pnpm --filter @pokatim/api build`, миграции —
 // `db:migrate`), панель — `vite preview` под /admin/ с прокси /v1 на этот API (тот же origin, как на стенде).
-// Окружение API (MONGO_URL, REDIS_URL, SMTP_URL, MAIL_FROM, JWT_SECRET, EMAIL_TOKEN_SECRET, AGREEMENT_VERSION) —
+// Окружение API (MONGO_URL, REDIS_URL, SMTP_URL, MAIL_FROM, JWT_SECRET, EMAIL_TOKEN_SECRET, RATE_LIMIT_KEY_SECRET, AGREEMENT_VERSION) —
 // из процесса: переменные CI или явно в команде (docs/runbooks/local-dev.md, «Панель»).
 
 type WebServer = Extract<

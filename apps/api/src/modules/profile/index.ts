@@ -29,5 +29,6 @@ export {
 export { RIDER_THEMES, type RiderThemes } from './rider-themes.port';
 /** Порт «Обзора» панели (admin-overview): профили с открытыми жалобами. */
 export { ProfilesOverview } from './profiles-overview';
+export { ReservedRiderLines } from './reserved-rider-lines';
 /** Событие для `notifications` (profile-moderation-followups): модератор сбросил поле профиля. */
 export { PROFILE_FIELD_RESET, ProfileFieldReset } from './profile.events';

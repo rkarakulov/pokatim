@@ -588,6 +588,22 @@ export class ProfileRepository {
   }
 
   /** Размер очереди жалоб (admin-overview, «Обзор» панели) — то же условие и индекс, что у `reportQueue`. */
+  /**
+   * Страница профилей с именем или клубом по `_id` ↑ (разовая выборка служебных подписей, `ReservedRiderLines`): только
+   * `_id`, `publicName`, `club`. Скан коллекции по `_id` — команда сервера, не HTTP.
+   */
+  linesPage(afterId: string | null, limit: number) {
+    return this.profiles
+      .find(
+        {
+          ...(afterId === null ? {} : { _id: { $gt: afterId } }),
+          $or: [{ publicName: { $type: 'string' } }, { club: { $type: 'string' } }],
+        },
+        { projection: { _id: 1, publicName: 1, club: 1 }, sort: { _id: 1 }, limit },
+      )
+      .toArray();
+  }
+
   countReportQueue(): Promise<number> {
     return this.profiles.countDocuments(
       { openReportCount: { $gt: 0 } },

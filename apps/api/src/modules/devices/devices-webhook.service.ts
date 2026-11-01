@@ -37,7 +37,7 @@ export class DevicesWebhookService {
     if (!this.env.DEVICES_ENABLED || !this.env.OW_WEBHOOK_SECRET)
       throw domainError('NOT_FOUND', 404);
     const limit = await this.rateLimiter.consume(
-      `devices-webhook:${rateLimitKeyForIp(this.env.EMAIL_TOKEN_SECRET, ip)}`,
+      `devices-webhook:${rateLimitKeyForIp(this.env.RATE_LIMIT_KEY_SECRET, ip)}`,
       DEVICES_POLICY.webhookIpLimit,
       this.clock.now(),
     );

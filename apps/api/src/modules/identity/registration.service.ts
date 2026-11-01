@@ -40,7 +40,7 @@ export class RegistrationService {
     const email = normalizeEmail(input.email);
     // ключ — HMAC от IP (псевдонимизация, TTL окна 1 ч): сам адрес в Redis не храним
     const ipLimit = await this.rateLimiter.consume(
-      `register-ip:${rateLimitKeyForIp(this.env.EMAIL_TOKEN_SECRET, ip)}`,
+      `register-ip:${rateLimitKeyForIp(this.env.RATE_LIMIT_KEY_SECRET, ip)}`,
       IDENTITY_POLICY.registerPerIpLimit,
       now,
     );

@@ -603,8 +603,8 @@ export function createApiClient({
       getPublic(`/v1/seasons/${encodeURIComponent(id)}/standings`, SeasonStandingsSummary),
     /**
      * Таблица сезона (без `userId`); таблицы нет в снимке — пустая страница. `fresh` — в обход HTTP-кэша
-     * (`public, max-age=60`): перезапрос после расхождения снимков (08c, RC-11). Не для React Native: `whatwg-fetch`
-     * дописывает `_=` в URL, а query таблицы строгий (400).
+     * (`public, max-age=60`): перезапрос после расхождения снимков (08c, RC-11). React Native: `whatwg-fetch`
+     * дописывает `_=<время>` в URL — query таблицы его принимает и отбрасывает.
      */
     getSeasonStandingsTable: (
       id: string,

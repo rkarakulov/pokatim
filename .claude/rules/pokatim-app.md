@@ -332,10 +332,9 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   показывается). «Вы» — по `order` из `/me` только при равном `computedAt` (RC-11; иначе один перезапрос более
   старого ответа); страница другого снимка — подгруженное сбрасывается (`resetQueries`), таблица — с первой страницы.
   Очки, места, N из M и «в зачёте» — только с сервера. Перезапрос после расхождения снимков (RC-11 и сброс) —
-  `refetchFresh` / `getSeasonStandingsTable(…, { fresh: true })` только при `BYPASS_HTTP_CACHE`
-  (`features/standings/http-cache(.web).ts`: web — да, native — нет). На native `cache: 'no-cache'` нельзя:
-  `fetch` RN — `whatwg-fetch`, он дописывает `_=` в URL, и строгий query (`strictObject`) отвечает 400 — только на
-  iOS/Android, jest (замоканный `api`) этого не поймает. Ошибка `/me` — свой `TabFailure` над таблицей (публичная
+  `refetchFresh` / `getSeasonStandingsTable(…, { fresh: true })` (`cache: 'no-cache'`) на всех платформах: на
+  native `fetch` RN — `whatwg-fetch`, он дописывает `_=<время>` в URL (обход `NSURLCache` iOS), и query таблицы
+  принимает и отбрасывает `_` (`SeasonStandingsTableQuery`). Другой строгий query с `fresh` — тоже нужен `_`. Ошибка `/me` — свой `TabFailure` над таблицей (публичная
   таблица остаётся). Блок «Профиля» — `useHeaderSeasonState` (тот же кэш, что `useHeaderSeason`, с состояниями):
   ошибки определения сезона и `/me` — баннеры с повтором, данные при ошибке обновления остаются; скрыт только без
   ошибок (сезона нет или своих строк нет).

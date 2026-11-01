@@ -41,12 +41,25 @@ export const SeasonStandingsSummary = z.object({
 export type SeasonStandingsSummary = z.infer<typeof SeasonStandingsSummary>;
 
 /** `GET /v1/seasons/:id/standings/table` и панель: выбор таблицы и страница. Лишние ключи — 400. */
-export const SeasonStandingsTableQuery = z.strictObject({
-  bikeClass: BikeClass,
-  group: z.enum(RESULT_GROUP_KEYS),
-  limit: z.coerce.number().int().min(1).max(STANDINGS_PAGE_MAX).default(STANDINGS_PAGE_SIZE),
-  cursor: PageCursor.optional(),
-});
+/**
+ * Строгий query таблицы. `_` — метка обхода HTTP-кэша: `whatwg-fetch` (React Native) при `cache: 'no-cache'` дописывает
+ * `_=<время>` в URL; сервер её принимает и отбрасывает (перезапрос после расхождения снимков, 08c RC-11).
+ */
+export const SeasonStandingsTableQuery = z
+  .strictObject({
+    bikeClass: BikeClass,
+    group: z.enum(RESULT_GROUP_KEYS),
+    limit: z.coerce.number().int().min(1).max(STANDINGS_PAGE_MAX).default(STANDINGS_PAGE_SIZE),
+    cursor: PageCursor.optional(),
+    _: z
+      .string()
+      .regex(/^\d{1,20}$/)
+      .optional(),
+  })
+  .transform((query) => {
+    const { bikeClass, group, limit, cursor } = query;
+    return cursor === undefined ? { bikeClass, group, limit } : { bikeClass, group, limit, cursor };
+  });
 export type SeasonStandingsTableQuery = z.infer<typeof SeasonStandingsTableQuery>;
 
 export const SeasonStandingsRace = z.object({

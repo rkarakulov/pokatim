@@ -11,6 +11,7 @@ import {
 import { PANEL_ROLE_EMAIL_REQUESTED } from '../modules/panel/panel.events';
 import { panelCollections } from '../modules/panel/panel.collection';
 import { seedMember, seedTotp } from '../../test/panel';
+import { profilesCollection } from '../../test/standings';
 import { runPanelCli } from './panel-cli';
 
 /** CLI `grant-admin` на тестовой БД (AC1): тот же код, что `node dist/cli/panel.js`, с явным окружением. */
@@ -199,5 +200,41 @@ describe('CLI reset-totp (ADR-0024, D10)', () => {
     expect((await cli('reset-totp', '--email', EMAIL)).code).toBe(2);
     expect((await cli('reset-totp')).code).toBe(2);
     expect((await cli('reset-totp', '--email', EMAIL, '--name', 'X')).code).toBe(2);
+  });
+});
+
+describe('CLI reserved-names (name-consent-prompt N8)', () => {
+  it('только профили со служебной подписью в имени или клубе: id, поля, карточка; значений в выводе нет', async () => {
+    const now = h.clock.now();
+    const base = { rideReasons: [], surveyCompletedAt: null, updatedAt: now };
+    await profilesCollection(h).insertMany([
+      { _id: 'u-number', ...base, publicName: 'Райдер #12', showNameInResults: true },
+      { _id: 'u-club', ...base, publicName: 'Анна К.', club: 'участник' },
+      { _id: 'u-both', ...base, publicName: 'вы', club: 'Райдер № 3' },
+      { _id: 'u-clean', ...base, publicName: 'Райдер из Минска', club: 'Велоклуб' },
+      { _id: 'u-empty', ...base },
+    ]);
+
+    const result = await cli('reserved-names');
+
+    expect(result.code).toBe(0);
+    const rows = result.stdout.trim().split('\n');
+    expect(rows.slice(0, -1)).toEqual([
+      'u-both\tимя, клуб\t/admin/rider-profiles/u-both',
+      'u-club\tклуб\t/admin/rider-profiles/u-club',
+      'u-number\tимя\t/admin/rider-profiles/u-number',
+    ]);
+    expect(rows.at(-1)).toContain('3');
+    expect(result.stdout).not.toMatch(/Райдер|Анна/);
+    // только чтение: профили не тронуты
+    expect((await profilesCollection(h).findOne({ _id: 'u-number' }))?.publicName).toBe(
+      'Райдер #12',
+    );
+  });
+
+  it('нет служебных подписей — сообщение и код 0; лишние аргументы — 2', async () => {
+    const result = await cli('reserved-names');
+    expect([result.code, result.stdout]).toEqual([0, 'Служебных подписей в профилях нет.\n']);
+    expect((await cli('reserved-names', '--email', EMAIL)).code).toBe(2);
   });
 });

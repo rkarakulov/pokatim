@@ -23,7 +23,7 @@ export class CredentialsCheck implements OnModuleInit {
     private readonly repository: IdentityRepository,
     private readonly hasher: PasswordHasher,
     private readonly rateLimiter: RateLimiter,
-    @Inject(ENV) private readonly env: Pick<Env, 'EMAIL_TOKEN_SECRET'>,
+    @Inject(ENV) private readonly env: Pick<Env, 'RATE_LIMIT_KEY_SECRET'>,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -64,7 +64,7 @@ export class CredentialsCheck implements OnModuleInit {
    * несуществующих адресов; пароль не проверяется.
    */
   private async takeAttempt(email: string, ip: string, now: Date): Promise<void> {
-    const keys = signInLimitKeys(this.env.EMAIL_TOKEN_SECRET, email, ip);
+    const keys = signInLimitKeys(this.env.RATE_LIMIT_KEY_SECRET, email, ip);
     const limits = IDENTITY_POLICY.signInLimits;
     const rules = [
       [keys.ip, limits.ip],

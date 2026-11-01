@@ -118,6 +118,65 @@ describe('заявка (AC1)', () => {
     expect(await resultsDb(h).entries.countDocuments()).toBe(1);
   });
 
+  /**
+   * Номер заявки «Райдер #N» (name-consent-prompt, N7) при одновременных заявках разных райдеров: счётчик гонки
+   * пишется первой операцией транзакции (`admitEntry`), вторая транзакция конфликтует по документу гонки и
+   * повторяется на свежем снимке — номера уникальны.
+   */
+  describe('номера одновременных заявок разных райдеров (N7)', () => {
+    const numbers = async (raceId: string) =>
+      (await resultsDb(h).entries.find({ raceId }).toArray()).map((doc) => doc.entryNo).sort();
+
+    it('пять параллельных заявок — номера 1…5, счётчик гонки 5', async () => {
+      const { raceId } = await corridorRace(h);
+      const riders = await Promise.all(
+        [1, 2, 3, 4, 5].map((i) => rider(h, `rider${i}@example.com`)),
+      );
+      const results = await Promise.all(riders.map(({ auth }) => enterRace(h, auth, raceId)));
+      expect(results.map((res) => res.status)).toEqual([201, 201, 201, 201, 201]);
+      expect(await numbers(raceId)).toEqual([1, 2, 3, 4, 5]);
+      expect((await racesDb(h).races.findOne({ _id: raceId }))?.entryAdmissions).toBe(5);
+    });
+
+    /** Ворота: первая заявка записала счётчик и не закоммитила, вторая упирается в документ гонки. */
+    async function racedEntries({ readOnly = false } = {}) {
+      const { raceId } = await corridorRace(h);
+      const [a, b] = [await rider(h, 'a@example.com'), await rider(h, 'b@example.com')];
+      const races = racesRepository(h);
+      const original = races.admitEntry.bind(races);
+      const g = gate();
+      let calls = 0;
+      vi.spyOn(races, 'admitEntry').mockImplementation(async (session, id, now) => {
+        calls += 1;
+        // отрицательное доказательство: счётчик только читается (номер = прочитанный + 1), записи нет
+        const doc = readOnly
+          ? ((await races.findRace(id, session)) ?? null)
+          : await original(session, id, now);
+        if (calls === 1) await g.wait();
+        return readOnly && doc ? { ...doc, entryAdmissions: (doc.entryAdmissions ?? 0) + 1 } : doc;
+      });
+      const first = enterRace(h, a.auth, raceId);
+      await g.reached;
+      const second = enterRace(h, b.auth, raceId);
+      await untilBlocked(second, () => Promise.resolve(calls >= 3));
+      g.open();
+      const statuses = (await Promise.all([first, second])).map((res) => res.status);
+      return { raceId, statuses };
+    }
+
+    it('вторая заявка ждёт коммита первой и получает следующий номер', async () => {
+      const { raceId, statuses } = await racedEntries();
+      expect(statuses).toEqual([201, 201]);
+      expect(await numbers(raceId)).toEqual([1, 2]);
+    });
+
+    it('отрицательное доказательство: admitEntry без записи счётчика — номера совпадают', async () => {
+      const { raceId, statuses } = await racedEntries({ readOnly: true });
+      expect(statuses).toEqual([201, 201]);
+      expect(await numbers(raceId)).toEqual([1, 1]);
+    });
+  });
+
   it('без заявки: GET entry — entry null, canEnter, uploadClosesAt = закрытие окна + 24 ч', async () => {
     const { raceId } = await corridorRace(h);
     const { auth } = await rider(h);

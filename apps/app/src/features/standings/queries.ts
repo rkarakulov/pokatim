@@ -12,8 +12,6 @@ import { PUBLIC_STALE_MS } from '@/features/races/queries';
 import { api } from '@/lib/api';
 import { DEFAULT_STALE_MS } from '@/lib/query-client';
 
-import { BYPASS_HTTP_CACHE } from './http-cache';
-
 /*
  * Рейтинг сезона (race-results-08c): сводка и таблица — публичные (`public, max-age=60`), «моё» — только вошедшему
  * (`no-store`, `withAccessToken`; при выходе кэш стирается целиком — `queryClient.clear()` корневого layout).
@@ -45,8 +43,8 @@ const nextCursor = (page: SeasonStandingsTable) => page.nextCursor ?? undefined;
 /**
  * Таблица «класс × группа» по курсору («Показать ещё»). Курсор не привязан к снимку (ревью 08a LOW-2): страница
  * другого пересчёта (`computedAt` отличается от первой) — подгруженное сбрасывается, таблица грузится с первой
- * страницы. Этот сброс и `refetchFresh` (RC-11) идут в обход HTTP-кэша там, где это возможно (`http-cache.ts`):
- * иначе повтор вернул бы тот же ответ `max-age=60`.
+ * страницы. Этот сброс и `refetchFresh` (RC-11) идут в обход HTTP-кэша (`fresh`) на
+ * всех платформах: иначе повтор вернул бы тот же ответ `max-age=60` (web — кэш браузера, iOS — `NSURLCache`).
  */
 export function useSeasonStandingsTable(
   seasonId: string,
@@ -70,7 +68,7 @@ export function useSeasonStandingsTable(
         limit: STANDINGS_PAGE_LIMIT,
         ...(pageParam ? { cursor: pageParam } : {}),
       };
-      return BYPASS_HTTP_CACHE && fresh.current
+      return fresh.current
         ? api.getSeasonStandingsTable(seasonId, params, { fresh: true })
         : api.getSeasonStandingsTable(seasonId, params);
     },
