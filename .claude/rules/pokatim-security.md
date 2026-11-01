@@ -346,13 +346,18 @@ paths:
   default-src 'none'; sandbox`. Во view — только `photo: { id }`, у скрытого — `null`.
 - Сброс модератором — `POST /v1/admin/rides/:id/photo-reset` (`PanelGuard` + `rides.moderate` на классе), тело
   `strictObject { photoId, reason }`; журнал `ride.photo_reset` в транзакции (subject `ride` + название, `details:
-  null` — без id фото). Загрузка и удаление организатором не журналируются.
-- Рендер 4a — worker перепроверяет фото через `RIDES_FOR_SHARING.invitePhoto` (скрытый или заменённое — `skipped`).
+  null` — без id фото). Загрузка и удаление организатором не журналируются. Сброс пишет в транзакции outbox
+  `rides.photo-reset` — только `{ rideId, seq }` (без id фото и причины); уведомление организатору — без причины.
+- Фото для модерации (ride-photo-followups) — `GET /v1/admin/rides/:id/photo?photoId=` (`PanelGuard` +
+  `rides.moderate` с класса, `Uuid` pipe, `ModerationRidePhotoQuery` strict — лишний/кривой query 400): только текущее
+  фото **этого** райда по паре `(rideId, photoId)` любого статуса, иначе 404 JSON; `private, no-store`, заголовки
+  `replyJpeg` после чтения. Публичная отдача скрытого — по-прежнему 404. Просмотр не журналируется.
+- Рендер 4a и OG райда с фото — worker перепроверяет фото через `RIDES_FOR_SHARING.invitePhoto` (скрытый или заменённое — `skipped`).
   Логи — `ride`, `uid`, размер, формат, исход (`rides.photo_replaced|photo_rejected|photo_removed`); без названий,
   байтов, id фото и сообщений libvips. Стирание аккаунта удаляет все фото организатора. Кэш браузеров держит снятое
-  фото до 24 ч — принятый риск. Уже выданный PNG приглашения `night` со снятым, скрытым или стёртым фото живёт в Redis
-  до 24 ч по капабилити-ссылке (`story-cards/<token>.png`) — принятый риск; follow-up — инвалидация карточек райда при
-  сбросе фото.
+  фото до 24 ч — принятый риск. PNG приглашения отзывается при отдаче (ride-photo-followups, «Карточки для сторис»);
+  принятые риски — кэш устройства, уже скачавшего PNG (`private, max-age=86400, immutable`, до суток), сохранённые и
+  отправленные файлы, токены приглашений до выката привязок (до 24 ч), публичный HTTP-кэш OG и кэши превью соцсетей.
 
 ## Заезд по маршруту (route-rides-01)
 
@@ -490,6 +495,10 @@ paths:
   будущий — 409; на картинке — только публичные поля райда (как `GET /v1/rides/:id`, без описания, подписи
   организатора, участников); линия — только маршрута в каталоге (`RideRoutes.catalogLine`), `private` — никогда.
   Лимиты — общие с карточками сторис; логи — id райда, шаблон, итог (без `userId`, названия, места, токена).
+  Отдача PNG приглашения (ride-photo-followups): привязка `story-card:ride:<token>` `{ rideId, photoId }` из Redis
+  разбирается zod (мусор — отказ, fail closed), на каждом запросе — порт `inviteCardLive` (+1 чтение Mongo по `_id` под
+  тем же IP-лимитом); скрытый райд или фото не текущее — PNG и привязка удаляются, 404 JSON; лог `story-card revoked
+  ride=<id>` без токена и id фото. Без привязки (сторис, достижение, маршрут) — как раньше.
 - Карточка достижения (`GET /v1/achievements/:code/story-card`): `AuthGuard`, в пути код, в query — `seasonId`
   сезонного (`AchievementStoryCardQuery`, `strictObject`; сезонный без него / несезонный с ним — 400 до лимита); выдача
   ищется по `(userId, code)` / `(userId, code, seasonId)` — чужое недостижимо, чужой и незнакомый сезон — тот же 409,

@@ -463,7 +463,10 @@ paths:
   карточки райда и маршрута стали личными (RC-P6-5, `renderVersion` 5). Рендер — `brandRow` (`story-card.render.ts`):
   бренд слева, адрес справа (токен `storyCard.text.address`, высота строки — бренда); без адреса — прежний узел.
 - Входы — `StoryCardInputs.resolve` (одна реализация для HTTP и worker), ключ — `storyCardHash`; кэш — Redis
-  (`StoryCardCache`: `token:<hash>`, `png:<token>`, `pending:<hash>` NX, `failed:<hash>` `GETDEL`). Worker сверяет
+  (`StoryCardCache`: `token:<hash>`, `png:<token>`, `pending:<hash>` NX, `failed:<hash>` `GETDEL`; приглашение — ещё
+  `ride:<token>` = `{ rideId, photoId нарисованного }` той же `MULTI`, ride-photo-followups). Отдача
+  `StoryCardImageController` → `StoryCardImageService.png` (привязка → `RIDES_FOR_SHARING.inviteCardLive`; неактуальна —
+  `revoke`, 404); `buildRideInvite` пишет PNG своим `OutcomeSink` с привязкой. Worker сверяет
   хэш (не совпал — `skipped`). Рендер — чистые `storyCardTree` (satori-узлы, только flex) → `renderStoryCardSvg`
   (шрифты темы по ролям) → `renderStoryCardPng` (resvg). Изменил разметку, тексты или токены карточки — подними
   `STORY_CARD_POLICY.renderVersion`. Превью — `pnpm --filter @pokatim/api preview:story-cards <каталог>`.
@@ -508,7 +511,11 @@ paths:
   самолечение. Сбой строки `og.sync` — лог и пропуск. Тема — «Классика» (`OG_THEME_ID`); схема по виду —
   `OG_CARD_POLICY.scheme` (гонка, сезон, райдер — `dark`, остальные — `light`), входит в хэш; смена таблицы без подъёма
   `renderVersion` полный проход не запускает. **Изменил разметку, тексты или токены `ogCard`
-  — подними `OG_CARD_POLICY.renderVersion`** (новые URL, полный проход `og.sync`).
+  — подними `OG_CARD_POLICY.renderVersion`** (новые URL, полный проход `og.sync`; сейчас 4 — фото райда).
+- OG райда с фото (ride-photo-followups): `photoId` — в канонических фактах `ride`; `buildOgCard` берёт байты
+  `invitePhoto` (снято — `skipped`), `renderOgCard(input, line, photo)` → `composeWithPhoto` (`sharing/photo-card.png.ts`
+  — общая с 4a композиция: `onPhotoColors`, `scrimSvg`, `encodePhotoCard`, `PHOTO_CARD_PALETTES`; вторых скрима и
+  энкодера нет), скрим `photoScrimHero` цвета `overlay.scrim` схемы вида, предел `OG_CARD_POLICY.maxPhotoPngBytes`.
 - Общий код карточки — пакеты: форматтеры `@pokatim/i18n` (`format.ts`), геометрия линии `@pokatim/route-view`
   (`line-geometry.ts`), таблица начертаний `appFontFaces` и токены `storyCard` — `@pokatim/design-tokens`.
 
@@ -645,7 +652,14 @@ RC-A1, ADR-0019).
   `RidePhotosPublicController` (`ride-photos/:id`, `PublicReadGuard`) → `RidePhotosService` (гейт `ImageProcessing`,
   `processCover`, транзакции «райд первым»); проверки «свой будущий райд» — методы `RidesService`, без копий. Сброс —
   `RidesModerationService.resetPhoto`; стирание — шаг `RideErasure`; порт `RIDES_FOR_SHARING` — `photoId` в фактах и
-  `invitePhoto` (байты только текущего фото нескрытого райда).
+  `invitePhoto` (байты только текущего фото нескрытого райда; 4a и OG райда).
+- ride-photo-followups: `RidesModerationController` `GET :id/photo` → `RidePhotosService.moderationBytes` (`findBytes` +
+  `RidesRepository.hasPhoto` — любой статус; `RIDE_PHOTO_MODERATION_CACHE_CONTROL`, `replyJpeg`). Сброс
+  (`RidesRepository.resetPhoto` — `$inc noticeSeq`) пишет outbox `rides.photo-reset` (`RidesPhotoReset { rideId, seq }`)
+  → `notificationsOutboxRoutes` → `NotificationIntake.ridePhotoReset` (порт `RIDE_NOTICES`, организатору, любой
+  статус, `canReplace` = `published` и старт впереди, `collapse` `ride:<id>:photo-reset` по `seq`). Условие «райд не
+  скрыт и фото текущее» — один `RidesRepository.isShareable(rideId, photoId | null)` (`isCurrentPhoto` — через него);
+  порт `RIDES_FOR_SHARING.inviteCardLive` — для отдачи PNG приглашения.
 
 ## Заезд по маршруту (`route-rides`, route-rides-01)
 
@@ -726,7 +740,7 @@ RC-A1, ADR-0019).
   `profile` — источник без порта: `PROFILE_FIELD_RESET` и схема `ProfileFieldReset` из `profile/index.ts`, payload
   самодостаточен, живость получателя — `liveUserIds`; Nest-импорт `ProfileCoreModule` — в `NotificationsModule` и
   `NotificationsWorkerModule` (не в `NotificationsCoreModule`) ради порта `RIDER_NAMES` для имён «Своих» (social-p1); схлопывание `profile:<uid>:<field>` по `seq`, событие без `seq` — `invalid_payload`.
-- Маршруты объявляет подписчик: `notificationsOutboxRoutes` (15 типов → `notifications-intake`; `achievements.grant-noticed`
+- Маршруты объявляет подписчик: `notificationsOutboxRoutes` (16 типов → `notifications-intake`, последний — `rides.photo-reset`; `achievements.grant-noticed`
   — порт `ACHIEVEMENT_NOTICES`, черновик с `inApp` при `origin: 'read'` → push `skipped`/`in_app`
   (`initialDelivery(…, { inApp })`, флаг идёт и в пачку `FanoutJobData.inApp`), схлопывание `achievement:<grantId>` по
   рангу; `tickets.reminder-due` — получателю своя цель `ticket` через `NoticeDraft.targets`). Очереди:

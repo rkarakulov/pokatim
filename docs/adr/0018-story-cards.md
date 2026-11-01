@@ -166,9 +166,24 @@
   `photoScrim`, цвет `overlay.scrim`; контраст `onPhoto` к скриму поверх белого фото в зонах текста ≥ 4.5:1) → тот же
   `nightCard` с прозрачным фоном, текст и линии — `text.onPhoto`. Без фото — прежний 4a; `line` фото не рисует.
 - `RideInviteFacts.photoId`; в ключе приглашения — только у `night` (смена фото — новая картинка, `line` не
-  перерисовывается); OG райда фото не использует (ключ OG от него не зависит). `STORY_CARD_POLICY.renderVersion` — 4.
+  перерисовывается); OG райда — с фото с ride-photo-followups (ниже). `STORY_CARD_POLICY.renderVersion` — 4.
 - Байты фото worker берёт через порт `RIDES_FOR_SHARING.invitePhoto(rideId, photoId)` — только текущее фото нескрытого
   райда, иначе `null` → задача `skipped` без ретрая. Композиция — в sharp (настройки процесса — `media/image-pipeline.ts`),
   итог — `png({ palette: true, quality: 80, effort: 7, dither: 1 })`: фотографический truecolor PNG превысил бы
   `maxPngBytes`; предел 2 МБ прежний (шумная фикстура ≈ 1,73 МБ, тест `ride-invite.png.test.ts`); не влез — одна
   попытка палитрой 16 цветов, затем ошибка.
+
+## Дополнение: OG райда с фото и отзыв картинок приглашения (`docs/tasks/2026-11-01-ride-photo-followups`, ADR-0028 п. 7)
+
+- OG райда с фото организатора: `photoId` — в канонических фактах вида `ride` (загрузка, замена, снятие — новая версия,
+  старая — `302`; PNG прежней версии удаляет `STORE_READY`), `OG_CARD_POLICY.renderVersion` → 4 (полный проход
+  `og.sync`). Тот же макет `ogCardTree`, прозрачный фон, цвета `text.onPhoto` схемы вида; фото `cover` 1200×630 → скрим
+  `overlay.scrim` с профилем `photoScrimHero` (контраст по всей высоте) → PNG с палитрой (`sharing/photo-card.png.ts`,
+  общий с 4a) ≤ `OG_CARD_POLICY.maxPhotoPngBytes` 600 КБ. Байты — `RIDES_FOR_SHARING.invitePhoto`; снято между
+  постановкой и рендером — `skipped`. Скрытый — 404, отменённый — бренд, как раньше.
+- Капабилити-ссылка карточки сохраняется, но у приглашения — с проверкой актуальности: worker пишет рядом с PNG
+  `story-card:ride:<token>` = `{ rideId, photoId нарисованного | null }` (та же `MULTI`, тот же TTL); отдача
+  `GET /v1/story-cards/:file` (`StoryCardImageService`) сверяет её с портом `inviteCardLive` (райд не скрыт, фото
+  текущее) на каждом запросе; неактуальна — PNG и привязка удаляются, `404` JSON; привязка не разбирается — отказ.
+  Сторис гонки, достижения, маршрута и токены приглашений до выката (24 ч) — без привязки, как раньше. Отменённые и
+  прошедшие райды, правки текста — не отзываются (снимок публичных полей).
