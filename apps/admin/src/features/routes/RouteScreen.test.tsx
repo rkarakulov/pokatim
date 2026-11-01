@@ -115,6 +115,10 @@ describe('страница маршрута панели (routes-05, AC1–AC3)'
     expect(stats.compareDocumentPosition(slider) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(view.querySelector('.stat-tile')).toBeNull();
     expect(stats.closest('.route-stats')).not.toBeNull();
+    // заголовок «Цифры» — для скринридера, уровень страницы
+    expect(screen.getByRole('heading', { name: 'Цифры', level: 2 }).className).toContain(
+      'visually-hidden',
+    );
   });
 
   it('без профиля высоты — «Нет данных о высоте», слайдера нет; цифры высот — «—»', async () => {

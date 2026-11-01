@@ -47,77 +47,75 @@ export function RouteReadyView({
   const block = useRef<HTMLDivElement>(null);
   const fullscreen = useFullscreen(block);
   return (
-    <>
-      <div
-        ref={block}
-        className={`route-view${fullscreen.active ? ' route-view--fullscreen' : ''}`}
-        data-testid="route-view"
-      >
-        <section className="section route-view__map" aria-labelledby="route-map-title">
-          <Heading id="route-map-title" className="section__title t-label">
-            {t('admin.routes.detail.map')}
-          </Heading>
-          <RouteLine
-            route={route}
-            variant="page"
+    <div
+      ref={block}
+      className={`route-view${fullscreen.active ? ' route-view--fullscreen' : ''}`}
+      data-testid="route-view"
+    >
+      <section className="section route-view__map" aria-labelledby="route-map-title">
+        <Heading id="route-map-title" className="section__title t-label">
+          {t('admin.routes.detail.map')}
+        </Heading>
+        <RouteLine
+          route={route}
+          variant="page"
+          scrub={scrub}
+          {...(corridorWidthM !== undefined ? { corridorWidthM } : {})}
+          {...(fullscreen.supported
+            ? { fullscreen: { active: fullscreen.active, onToggle: fullscreen.toggle } }
+            : {})}
+        />
+      </section>
+      <section className="route-view__stats" aria-labelledby="route-stats-title">
+        <Heading id="route-stats-title" className="visually-hidden">
+          {t('admin.routes.detail.stats')}
+        </Heading>
+        <RouteStats
+          items={[
+            {
+              label: t('admin.routes.detail.stats.distance'),
+              value: formatKmFromMeters(distanceM),
+            },
+            {
+              label: t('admin.routes.detail.stats.gain'),
+              value: route.elevationGainM === null ? '—' : metersText(route.elevationGainM),
+            },
+            {
+              label: t('admin.routes.detail.stats.max'),
+              value: elevation ? metersText(elevation.maxM) : '—',
+            },
+            {
+              label: t('admin.routes.detail.stats.min'),
+              value: elevation ? metersText(elevation.minM) : '—',
+            },
+            {
+              label: t('admin.routes.detail.stats.shape'),
+              value: t(route.isLoop ? 'routes.detail.chip.loop' : 'routes.detail.chip.oneWay'),
+            },
+            {
+              label: t('admin.routes.detail.stats.time'),
+              value: durationText(routeDurationMin(distanceM, pace)),
+              hint: t('routes.detail.stats.pace', { pace }),
+            },
+          ]}
+        />
+      </section>
+      <section className="section route-view__profile" aria-labelledby="route-profile-title">
+        <Heading id="route-profile-title" className="section__title t-label">
+          {t('admin.routes.detail.profile')}
+        </Heading>
+        {elevation ? (
+          <ElevationProfile
+            elevation={elevation}
+            distanceM={distanceM}
+            gainM={route.elevationGainM}
             scrub={scrub}
-            {...(corridorWidthM !== undefined ? { corridorWidthM } : {})}
-            {...(fullscreen.supported
-              ? { fullscreen: { active: fullscreen.active, onToggle: fullscreen.toggle } }
-              : {})}
+            label={profileSummary(elevation, route.elevationGainM)}
           />
-        </section>
-        <section className="route-view__stats" aria-labelledby="route-stats-title">
-          <Heading id="route-stats-title" className="visually-hidden">
-            {t('admin.routes.detail.stats')}
-          </Heading>
-          <RouteStats
-            items={[
-              {
-                label: t('admin.routes.detail.stats.distance'),
-                value: formatKmFromMeters(distanceM),
-              },
-              {
-                label: t('admin.routes.detail.stats.gain'),
-                value: route.elevationGainM === null ? '—' : metersText(route.elevationGainM),
-              },
-              {
-                label: t('admin.routes.detail.stats.max'),
-                value: elevation ? metersText(elevation.maxM) : '—',
-              },
-              {
-                label: t('admin.routes.detail.stats.min'),
-                value: elevation ? metersText(elevation.minM) : '—',
-              },
-              {
-                label: t('admin.routes.detail.stats.shape'),
-                value: t(route.isLoop ? 'routes.detail.chip.loop' : 'routes.detail.chip.oneWay'),
-              },
-              {
-                label: t('admin.routes.detail.stats.time'),
-                value: durationText(routeDurationMin(distanceM, pace)),
-                hint: t('routes.detail.stats.pace', { pace }),
-              },
-            ]}
-          />
-        </section>
-        <section className="section route-view__profile" aria-labelledby="route-profile-title">
-          <Heading id="route-profile-title" className="section__title t-label">
-            {t('admin.routes.detail.profile')}
-          </Heading>
-          {elevation ? (
-            <ElevationProfile
-              elevation={elevation}
-              distanceM={distanceM}
-              gainM={route.elevationGainM}
-              scrub={scrub}
-              label={profileSummary(elevation, route.elevationGainM)}
-            />
-          ) : (
-            <p className="muted t-meta">{t('admin.routes.detail.noElevation')}</p>
-          )}
-        </section>
-      </div>
-    </>
+        ) : (
+          <p className="muted t-meta">{t('admin.routes.detail.noElevation')}</p>
+        )}
+      </section>
+    </div>
   );
 }

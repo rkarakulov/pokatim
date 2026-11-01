@@ -1265,7 +1265,8 @@ select.field__control option:disabled {
   background: var(--color-surface-default);
 }
 
-.route-view--fullscreen > .section {
+.route-view--fullscreen > .section,
+.route-view--fullscreen .route-stats {
   margin-top: 0;
 }
 
