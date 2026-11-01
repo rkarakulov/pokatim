@@ -5,6 +5,7 @@ import { QUEUE } from '../../queues';
 
 import { IdentityModule } from '../identity';
 import { PanelModule } from '../panel';
+import { ProfileCoreModule } from '../profile';
 import { RACE_CANCEL_GATE } from '../races';
 import { RESULT_DISPUTE_GATE, ResultsCoreModule } from '../results';
 import { TracksCoreModule } from '../tracks';
@@ -50,12 +51,14 @@ export class DisputesCoreModule {}
 
 /**
  * Споры по результатам гонки (race-results-06): приложение — `AuthGuard` identity; панель — `/v1/admin/disputes` под
- * `PanelGuard`. `results` и `races` — только порты через их `index.ts` (`ResultsForDisputes`, `RaceRegistry`).
+ * `PanelGuard`. `results` и `races` — только порты через их `index.ts` (`ResultsForDisputes`, `RaceRegistry`);
+ * `ProfileCoreModule` — порт `RIDER_NAMES` для имён сторон в панели (Q2 profile.md).
  */
 @Module({
   imports: [
     IdentityModule,
     PanelModule,
+    ProfileCoreModule,
     ResultsCoreModule,
     BullModule.registerQueue({ name: QUEUE.disputeSeries }),
   ],

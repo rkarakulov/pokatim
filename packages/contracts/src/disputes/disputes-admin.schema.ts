@@ -15,8 +15,12 @@ import {
 
 /*
  * Споры в панели «Протокол» (race-results-06, права `disputes.read` / `disputes.decide`). Панель деплоится вместе с
- * API — строгие `z.enum`. Заявитель и участник — по `userId`/`entryId` (A12).
+ * API — строгие `z.enum`. Заявитель и участник — по `userId`/`entryId` (A12); публичное имя (Q2 profile.md) — только
+ * при имени и согласии райдера, как видит публика, иначе `null` («Участник ·id»).
  */
+
+/** Публичное имя райдера (порт `RIDER_NAMES`); старый сервер без поля — `null`. */
+const RiderName = z.string().nullable().default(null);
 
 /** Почему решение недоступно (`PanelDispute.decideBlockedBy`). */
 export const DISPUTE_DECIDE_BLOCKS = [
@@ -60,7 +64,9 @@ export const PanelDisputeListItem = z.object({
   status: z.enum(DISPUTE_STATUSES),
   category: z.enum(DISPUTE_CATEGORIES),
   targetEntryId: Uuid,
+  targetRiderName: RiderName,
   complainantEntryId: Uuid,
+  complainantRiderName: RiderName,
   filedAt: z.iso.datetime(),
   decidableAt: z.iso.datetime(),
   responded: z.boolean(),
@@ -80,6 +86,7 @@ export const PanelDispute = PanelDisputeListItem.extend({
   target: z.object({
     entryId: Uuid,
     userId: Uuid,
+    riderName: RiderName,
     resultStatus: z.enum(RACE_RESULT_STATUSES),
     place: z.number().int().nullable(),
     tied: z.boolean(),
@@ -89,7 +96,7 @@ export const PanelDispute = PanelDisputeListItem.extend({
     groupKey: z.enum(RESULT_GROUP_KEYS),
     flags: z.array(PanelAttemptFlag),
   }),
-  complainant: z.object({ entryId: Uuid, userId: Uuid }),
+  complainant: z.object({ entryId: Uuid, userId: Uuid, riderName: RiderName }),
   decision: z
     .object({
       outcome: z.enum(DISPUTE_OUTCOMES),

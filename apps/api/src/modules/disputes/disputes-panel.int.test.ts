@@ -313,6 +313,69 @@ describe('список и разбор', () => {
   });
 });
 
+describe('имя райдера в панели (Q2 profile.md)', () => {
+  it('цель и заявитель: имя только при имени и согласии, без согласия и без профиля — null; ключи; в спор не пишется', async () => {
+    const race = await disputeRace(h, [3600, 3700, 3800]);
+    const [named, hidden, bare] = race.riders;
+    for (const [who, body] of [
+      [named!, { publicName: 'Анна К.', showNameInResults: true }],
+      [hidden!, { publicName: 'Скрытый', showNameInResults: false }],
+    ] as const) {
+      expect((await call(h, 'PATCH', '/v1/profile', body, who.auth)).status).toBe(200);
+    }
+    const toHidden = filedId(
+      await fileDispute(h, named!.auth, race.raceId, {
+        targetEntryId: hidden!.entryId,
+        category: 'other',
+      }),
+    );
+    h.clock.advance(60_000);
+    const toNamed = filedId(
+      await fileDispute(h, bare!.auth, race.raceId, {
+        targetEntryId: named!.entryId,
+        category: 'other',
+      }),
+    );
+    const res = await panelCall(h, race.token, 'GET', ADMIN_DISPUTES);
+    expect(res.status).toBe(200);
+    const page = PanelDisputePage.parse(res.body);
+    expect(
+      page.items.map((item) => [item.id, item.targetRiderName, item.complainantRiderName]),
+    ).toEqual([
+      [toNamed, 'Анна К.', null],
+      [toHidden, null, 'Анна К.'],
+    ]);
+    expect(Object.keys((res.body as { items: object[] }).items[0]!).sort()).toEqual(
+      [
+        'category',
+        'complainantEntryId',
+        'complainantRiderName',
+        'decidableAt',
+        'filedAt',
+        'id',
+        'race',
+        'responded',
+        'status',
+        'targetEntryId',
+        'targetRiderName',
+      ].sort(),
+    );
+
+    expect(await panelDispute(h, race.token, toHidden)).toMatchObject({
+      targetRiderName: null,
+      complainantRiderName: 'Анна К.',
+      target: { entryId: hidden!.entryId, userId: hidden!.userId, riderName: null },
+      complainant: { entryId: named!.entryId, userId: named!.userId, riderName: 'Анна К.' },
+    });
+    expect(await panelDispute(h, race.token, toNamed)).toMatchObject({
+      target: { entryId: named!.entryId, riderName: 'Анна К.' },
+      complainant: { entryId: bare!.entryId, riderName: null },
+    });
+    const docs = await disputesDb(h).disputes.find({}).toArray();
+    expect(docs.every((doc) => !JSON.stringify(doc).includes('Анна К.'))).toBe(true);
+  });
+});
+
 describe('чек-лист и протокол (AC8, RC-2, RC-3)', () => {
   it('открытый спор блокирует публикацию; после upheld — снимок со строкой dq без места; «Отменить DQ» — revised с местом', async () => {
     const race = await decidable();

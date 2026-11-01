@@ -29,7 +29,9 @@ const dispute = (overrides: Partial<PanelDispute> = {}): PanelDispute => ({
   status: 'open',
   category: 'vehicle_assistance',
   targetEntryId: TARGET,
+  targetRiderName: null,
   complainantEntryId: COMPLAINANT,
+  complainantRiderName: null,
   filedAt: '2026-10-26T07:00:00.000Z',
   decidableAt: '2026-10-26T19:00:00.000Z',
   responded: true,
@@ -38,6 +40,7 @@ const dispute = (overrides: Partial<PanelDispute> = {}): PanelDispute => ({
   target: {
     entryId: TARGET,
     userId: RIDER,
+    riderName: null,
     resultStatus: 'provisional',
     place: 2,
     tied: false,
@@ -46,7 +49,7 @@ const dispute = (overrides: Partial<PanelDispute> = {}): PanelDispute => ({
     groupKey: 'overall',
     flags: [],
   },
-  complainant: { entryId: COMPLAINANT, userId: RIDER },
+  complainant: { entryId: COMPLAINANT, userId: RIDER, riderName: null },
   decision: null,
   events: [
     { kind: 'filed', actorKind: 'rider', at: '2026-10-26T07:00:00.000Z' },
@@ -112,6 +115,20 @@ describe('«Споры» — разбор (06, AC13)', () => {
     ]) {
       expect(screen.getAllByText(text).length, text).toBeGreaterThan(0);
     }
+  });
+
+  it('имя при согласии — «Анна К. ·id» у цели и заявителя, иначе «Участник ·id» (Q2 profile.md)', async () => {
+    mocked.getDispute.mockResolvedValue(
+      dispute({
+        target: { ...dispute().target, riderName: 'Анна К.' },
+        complainant: { ...dispute().complainant, riderName: 'Борис' },
+      }),
+    );
+    await open();
+    const result = await screen.findByRole('region', { name: 'Оспоренный результат' });
+    expect(within(result).getByText('Анна К. ·9a0a01')).toBeTruthy();
+    expect(screen.getByText('Борис ·9a0b02')).toBeTruthy();
+    expect(screen.queryByText('Участник ·9a0a01')).toBeNull();
   });
 
   it('флаги цели (race-results-07): группа, уровень, «Требует внимания» с метрикой; без флагов — «—»', async () => {
