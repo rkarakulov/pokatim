@@ -5,7 +5,7 @@ import type {
   SocialHomeRouteRow,
 } from '@pokatim/contracts';
 import { size, space, stroke } from '@pokatim/design-tokens';
-import { formatPlace, t } from '@pokatim/i18n';
+import { formatElapsed, formatPlace, t } from '@pokatim/i18n';
 import { SectionHeader, TextAction, textStyle, useTheme } from '@rkarakulov/ui';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter, type Href } from 'expo-router';
@@ -75,7 +75,7 @@ export function SocialResultRow({ row }: { row: SocialHomeResultRow }) {
           name: row.rider.name,
           race: row.race.title,
           place,
-          time: title,
+          time: formatElapsed(row.elapsedSec),
         }),
         delta,
       ]

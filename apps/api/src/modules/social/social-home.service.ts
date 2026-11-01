@@ -48,7 +48,7 @@ export class SocialHomeService {
     const since = new Date(now.getTime() - SOCIAL_POLICY.homeWindowMs);
     const until = new Date(now.getTime() + SOCIAL_POLICY.homeWindowMs);
     // райды — только «свои», у которых зритель тоже в «своих» (RC-P7-1a)
-    const owners = new Set(await this.repository.ownerIdsOf(viewerId));
+    const owners = await this.repository.ownersAmong(viewerId, ids);
     const mutual = new Map([...friends].filter(([userId]) => owners.has(userId)));
     const [rides, results, routes] = await Promise.all([
       mutual.size === 0

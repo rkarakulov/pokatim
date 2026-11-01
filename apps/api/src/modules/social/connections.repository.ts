@@ -250,12 +250,28 @@ export class ConnectionsRepository {
     return (await this.connections.countDocuments({ ...pair, removedAt: null }, { limit: 1 })) > 0;
   }
 
-  /** Владельцы не убранных связей к `otherId` (`rider_connections_other_idx`, P7: «Свои идут», Главная). */
+  /** Владельцы не убранных связей к `otherId` (`rider_connections_other_idx`, P7: «Свои идут»). */
   async ownerIdsOf(otherId: string): Promise<string[]> {
     const docs = await this.connections
       .find({ otherId, removedAt: null }, { projection: { _id: 0, ownerId: 1 } })
       .toArray();
     return docs.map((doc) => doc.ownerId);
+  }
+
+  /** Кто из `ownerIds` держит не убранную связь к `otherId` (`owner_other_unique`, P7: взаимность Главной). */
+  async ownersAmong(otherId: string, ownerIds: readonly string[]): Promise<Set<string>> {
+    const found = new Set<string>();
+    for (let start = 0; start < ownerIds.length; start += SOCIAL_POLICY.bulkBatch) {
+      const chunk = ownerIds.slice(start, start + SOCIAL_POLICY.bulkBatch);
+      const docs = await this.connections
+        .find(
+          { ownerId: { $in: [...chunk] }, otherId, removedAt: null },
+          { projection: { _id: 0, ownerId: 1 } },
+        )
+        .toArray();
+      for (const doc of docs) found.add(doc.ownerId);
+    }
+    return found;
   }
 
   /** Кто из `otherIds` у владельца в не убранных связях (`owner_other_unique`, P7: взаимность RC-P7-1a). */

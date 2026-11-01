@@ -64,12 +64,12 @@ export type EntryResult = Omit<MyRaceEntry['result'], 'group' | 'status' | 'unra
 const groupOfEntry = (entry: Pick<RaceEntryDoc, 'groupKey'> | null): ResultGroupKey =>
   entry?.groupKey ?? 'overall';
 
-/**
- * Группа публичной таблицы по умолчанию (RC-10): `overall` в схеме `overall`, иначе первая непустая, иначе `m_u40`.
- */
 /** Гонок с протоколом за окно Главной «Свои» — не больше (social-p7, RC-P7-16). */
 const RECENT_PROTOCOL_RACES = 20;
 
+/**
+ * Группа публичной таблицы по умолчанию (RC-10): `overall` в схеме `overall`, иначе первая непустая, иначе `m_u40`.
+ */
 const defaultGroup = (race: RaceForResults, groups: readonly GroupCount[]): ResultGroupKey =>
   race.groupScheme === 'overall' ? 'overall' : (groups[0]?.key ?? 'm_u40');
 const invalidCursor = () =>

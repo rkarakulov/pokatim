@@ -226,7 +226,6 @@ export class RacesRepository {
     return (await this.c.races.findOne({ _id: id }, { session })) ?? undefined;
   }
 
-  /** Гонки по id (`_id` — индекс); незнакомые id — без документа. */
   /**
    * Опубликованные гонки с протоколом, опубликованным не раньше `since` (Главная «Свои», social-p7):
    * `protocolPublishedAt ↓, _id ↓`, ≤ `limit`; индекс `races_protocol_published_idx`.
@@ -240,6 +239,7 @@ export class RacesRepository {
       .toArray();
   }
 
+  /** Гонки по id (`_id` — индекс); незнакомые id — без документа. */
   findRaces(ids: readonly string[]): Promise<RaceDoc[]> {
     if (ids.length === 0) return Promise.resolve([]);
     return this.c.races.find({ _id: { $in: [...new Set(ids)] } }).toArray();

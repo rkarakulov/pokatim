@@ -197,6 +197,12 @@ describe('Главная: секция «Свои» (K7, social-p7)', () => {
     expect(screen.getByText('Гран-при · 2')).toBeOnTheScreen();
     expect(screen.getByText('на 1:20 быстрее вас')).toBeOnTheScreen();
     expect(screen.getByText('Новый маршрут от Сергей К.')).toBeOnTheScreen();
+    // подпись диктора — время, а не вся строка с именем
+    expect(
+      screen.getByRole('link', {
+        name: 'Андрей К., Гран-при: место 2, время 1:59:40. на 1:20 быстрее вас',
+      }),
+    ).toBeOnTheScreen();
   });
 
   it.each([
