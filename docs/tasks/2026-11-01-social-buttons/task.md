@@ -26,6 +26,36 @@
 1. Тексты — `social.*` в `@pokatim/i18n`; `social.connected` удалён.
 2. Тесты: `social-screen.test.tsx` — смена подписи кнопки, вида строки (цвет имени, прозрачность аватара, имя ссылки),
    тёмная тема; `rider-profile.test.tsx` — «Убрать из своих» вместо «В своих», a11y-имена с именем.
-3. `docs/product/social.md`, `profile.md`, `.claude/rules/pokatim-app.md` — новые тексты.
+3. См. §10.
 4. Web — скриншоты до/после (Playwright с подменой API), светлая и тёмная темы. iOS/Android — NOT VERIFIED на
    устройстве; разметка общая (RN), `reserveLabels` проверен тестами `@rkarakulov/ui` (native и web).
+
+## Placement & Reuse
+
+- Ширина и a11y-имя кнопки — общие возможности `Button` в базе (`@rkarakulov/ui` 0.8.0, app-foundation #27), не стиль
+  по месту.
+- Прозрачность приглушённой строки — токен `layout.mutedOpacity` в `@pokatim/design-tokens` (с тестом).
+- Тексты — `social.*` в `@pokatim/i18n`. Код — в `features/social/` (`ConnectButton` используется и в `rival-card`).
+
+## 10. Documentation Impact
+
+- `docs/product/social.md` (K6) и `docs/product/profile.md` (P3) — новые подписи и вид убранной строки.
+- `.claude/rules/pokatim-app.md` («Свои», P3) — кнопки-действия, `reserveLabels`, приглушение.
+
+## Зависимости
+
+Каталог `@rkarakulov/*` 0.7.1 → 0.8.0 (`pnpm-workspace.yaml`). Пакеты базы версионируются вместе (fixed-группа
+changesets), поэтому поднимается весь каталог. По коду 0.8.0 отличается от 0.7.1 только `packages/ui` (`Button`:
+`accessibilityLabel`, `reserveLabels`, тесты; `git diff v0.7.1 v0.8.0 -- packages` в app-foundation). Остальные пакеты
+изменились только в CHANGELOG и версии. Реестр тот же: GitHub Packages, scope `@rkarakulov`, исключение
+`minimumReleaseAge` для `@rkarakulov/*` уже действует. Новых сторонних зависимостей нет.
+
+## Security checklist
+
+1. **AuthN/AuthZ:** не применимо — эндпоинты и проверки сервера не меняются (`PUT …/social/connection` под `AuthGuard`).
+2. **Входные данные:** не применимо — запросы и контракты те же.
+3. **Данные наружу:** имя райдера уходит только в a11y-метку на клиенте, оно уже видно на экране. Карточка результата
+   имени не получает (A12).
+4. **Злоупотребления:** не применимо — лимит K11 (30 ручных «В свои» за 24 ч) на сервере не меняется.
+5. **Секреты и логи:** токен реестра только в env при `pnpm install`, в файлы не записан. Логов не добавлено.
+6. **Аудит:** не применимо — чувствительных действий нет.

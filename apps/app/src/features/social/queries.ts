@@ -30,7 +30,7 @@ export function useNameMissing(enabled: boolean): boolean | undefined {
   return enabled ? query.data : undefined;
 }
 
-/** «Вместе ехали», «Идёт», «В своих» на чужом профиле — после найденного профиля (как `useRiderViewer`). */
+/** «Вместе ехали», «Идёт», состояние связи («В свои» / «Убрать из своих») на чужом профиле — после найденного профиля (как `useRiderViewer`). */
 export function useRiderSocial(publicId: string, enabled: boolean) {
   return useQuery({
     queryKey: riderSocialKey(publicId),
