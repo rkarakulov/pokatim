@@ -4,9 +4,35 @@ import type { RideCard } from '@pokatim/contracts';
 import { RIDE_ROUTES, type RideRoutes } from '../routes';
 import { RideReportsRepository } from './ride-reports.repository';
 import { lookupRoutes, rideCardOf } from './rides-feed.service';
-import type { RidesForSocial, SocialRideFacts } from './rides-for-social.port';
+import type { ChangedCursor } from '../../changed-since';
+import {
+  type RidesForSocial,
+  SOCIAL_PARTICIPANT_RIDES_MAX,
+  type SocialRideFacts,
+  type SocialStartedRide,
+} from './rides-for-social.port';
+import type { RideDoc } from './rides.collection';
 import { ridePhase } from './rides.policy';
 import { RidesRepository } from './rides.repository';
+
+type SocialFactsDoc = Pick<
+  RideDoc,
+  '_id' | 'status' | 'startsAt' | 'organizerUserId' | 'participants' | 'geo' | 'startPrecise'
+>;
+
+/** Факты райда для `social`: фаза — `ridePhase`, участники — `userId` по порядку, точка — при `startPrecise`. */
+function socialFactsOf(doc: SocialFactsDoc, now: Date): SocialRideFacts {
+  const [lon, lat] = doc.geo?.coordinates ?? [];
+  return {
+    rideId: doc._id,
+    phase: ridePhase(doc, now),
+    startsAt: doc.startsAt,
+    organizerUserId: doc.organizerUserId,
+    participantIds: doc.participants.map((participant) => participant.userId),
+    preciseStart:
+      doc.startPrecise === true && lon !== undefined && lat !== undefined ? [lon, lat] : null,
+  };
+}
 
 /**
  * Реализация порта `RidesForSocial` («Свои»): фаза — `ridePhase`, участники — только `userId` в порядке записи;
@@ -22,16 +48,38 @@ export class RidesForSocialService implements RidesForSocial {
 
   async rideFacts(rideId: string, now: Date): Promise<SocialRideFacts | null> {
     const doc = await this.repository.findForSocial(rideId);
-    if (!doc) return null;
-    const [lon, lat] = doc.geo?.coordinates ?? [];
+    return doc ? socialFactsOf(doc, now) : null;
+  }
+
+  async ridesOfParticipant(
+    userId: string,
+    from: Date,
+    to: Date,
+    now: Date,
+  ): Promise<SocialRideFacts[]> {
+    const docs = await this.repository.participantRidesBetween(
+      userId,
+      from,
+      to,
+      SOCIAL_PARTICIPANT_RIDES_MAX,
+    );
+    return docs.map((doc) => socialFactsOf(doc, now));
+  }
+
+  async startedRidesWithin(
+    after: ChangedCursor,
+    until: Date,
+    limit: number,
+  ): Promise<{ rides: SocialStartedRide[]; next: ChangedCursor | null }> {
+    const docs = await this.repository.startedWithin(after, until, limit);
+    const last = docs.at(-1);
     return {
-      rideId: doc._id,
-      phase: ridePhase(doc, now),
-      startsAt: doc.startsAt,
-      organizerUserId: doc.organizerUserId,
-      participantIds: doc.participants.map((participant) => participant.userId),
-      preciseStart:
-        doc.startPrecise === true && lon !== undefined && lat !== undefined ? [lon, lat] : null,
+      rides: docs.map((doc) => ({
+        rideId: doc._id,
+        startsAt: doc.startsAt,
+        participantIds: doc.participants.map((participant) => participant.userId),
+      })),
+      next: last ? { at: last.startsAt, id: last._id } : null,
     };
   }
 
