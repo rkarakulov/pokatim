@@ -1,7 +1,7 @@
 import { uuidv7 } from '@rkarakulov/api-kit/mongo';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { createHarness, DAY, type Harness } from '../../../test/harness';
+import { createHarness, DAY, type Harness, HOUR } from '../../../test/harness';
 import {
   appendEvent,
   eventsOfType,
@@ -16,6 +16,7 @@ import { createRide, join, type Rider, rider } from '../../../test/rides';
 import { pastRide, socialDb, socialServices } from '../../../test/social';
 import { seedProtocolRace, seedSeason } from '../../../test/standings';
 import { RIDES_PARTICIPANT_JOINED } from '../rides';
+import { RideAskSweep } from './ride-ask-sweep';
 import {
   SOCIAL_CONNECTION_ADDED,
   SOCIAL_INVITE_REGISTERED,
@@ -303,5 +304,29 @@ describe('«Вас добавили» и K11 (AC4)', () => {
     await socialServices(h).connections.remove(owner.userId, other.userId);
     expect(await notificationsIntake(h).drain()).toEqual(['skipped']);
     expect(await notificationsOf(h, other.userId)).toEqual([]);
+  });
+});
+
+describe('«Как прошёл райд?» (AC6)', () => {
+  it('регламент P5 пишет outbox в транзакции захвата → адресаты получают social_ride_ask', async () => {
+    const org = await rider(h, 'org@example.by');
+    const [p1, p2] = [await rider(h, 'p1@example.by'), await rider(h, 'p2@example.by')];
+    const ride = await pastRide(h, org, [p1, p2]);
+    await socialServices(h).attendance.markManual(p1.userId, ride.id);
+    h.clock.advance(3 * HOUR);
+    expect(await h.worker.get(RideAskSweep).run()).toMatchObject({ asked: 1, recipients: 2 });
+    await notificationsIntake(h).drain();
+    for (const who of [org, p2]) {
+      const docs = await notificationsOf(h, who.userId);
+      expect(docs.filter((doc) => doc.group === 'social')).toMatchObject([
+        {
+          kind: 'social_ride_ask',
+          group: 'social',
+          target: { type: 'ride', rideId: ride.id },
+          collapseKey: `social:ask:${ride.id}`,
+        },
+      ]);
+    }
+    expect(await kindsOf(p1)).toEqual([]);
   });
 });
