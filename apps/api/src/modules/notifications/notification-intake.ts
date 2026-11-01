@@ -28,9 +28,11 @@ import {
   type RideNotice,
   type RideNotices,
   RIDES_PARTICIPANT_JOINED,
+  RIDES_PHOTO_RESET,
   RIDES_REPORTS_RESOLVED,
   RIDES_RIDE_CANCELLED,
   RIDES_RIDE_RESCHEDULED,
+  RidesPhotoReset,
   RidesReportsResolved,
 } from '../rides';
 import {
@@ -45,15 +47,33 @@ import {
   TICKETS_REMINDER_DUE,
   TicketsReminderDue,
 } from '../tickets';
-import { PROFILE_FIELD_RESET, ProfileFieldReset } from '../profile';
+import {
+  PROFILE_FIELD_RESET,
+  ProfileFieldReset,
+  RIDER_NAMES,
+  type RiderNameDirectory,
+} from '../profile';
 import {
   ACHIEVEMENT_NOTICES,
   type AchievementNotices,
   ACHIEVEMENTS_GRANT_NOTICED,
   AchievementsGrantNoticed,
 } from '../achievements';
+import {
+  SOCIAL_CONNECTION_ADDED,
+  SOCIAL_INVITE_REGISTERED,
+  SOCIAL_NOTICES,
+  SOCIAL_REACTION_CREATED,
+  SOCIAL_RIDE_ASK_DUE,
+  SocialConnectionAdded,
+  SocialInviteRegistered,
+  type SocialNotices,
+  SocialReactionCreated,
+  SocialRideAskDue,
+} from '../social';
 import type { NoticeText } from './notification-texts';
 import type { NotificationSourceEvent } from './notifications.events';
+import { socialNoticeDraft } from './social-notices';
 
 /** Уведомление события для группы получателей: текст ещё не отрисован, цель — из белого списка. */
 export interface NoticeDraft {
@@ -87,9 +107,11 @@ const REVISION_KINDS = {
 
 /**
  * Разбор события источника → черновики уведомлений через порты модулей (`ResultsNotices`, `DisputeNotices`,
- * `RideNotices`, `RouteNotices`, `RaceRegistry`, `TicketNotices`): получатели и поля текста считает сервер, payload — только id и коды (RC-1).
- * Правила получателей — task §7: споры — стороны, райды — участники «Иду» без организатора, «Новый участник» —
- * организатору; райд не в ожидаемом статусе (`cancelled` для отмены, `published` для переноса и участника) — skip.
+ * `RideNotices`, `RouteNotices`, `RaceRegistry`, `TicketNotices`, `SocialNotices`): получатели и поля текста считает
+ * сервер, payload — только id и коды (RC-1). Правила получателей — task §7: споры — стороны, райды — участники «Иду»
+ * без организатора, «Новый участник» — организатору; райд не в ожидаемом статусе (`cancelled` для отмены, `published`
+ * для переноса и участника) — skip. «Свои» (K10, social-p7) — черновики `socialNoticeDraft` по id события (`eventId`:
+ * окно схлопывания по времени события).
  */
 @Injectable()
 export class NotificationIntake {
@@ -101,12 +123,15 @@ export class NotificationIntake {
     @Inject(RACE_REGISTRY) private readonly races: RaceRegistry,
     @Inject(TICKET_NOTICES) private readonly tickets: TicketNotices,
     @Inject(ACHIEVEMENT_NOTICES) private readonly achievements: AchievementNotices,
+    @Inject(SOCIAL_NOTICES) private readonly social: SocialNotices,
+    @Inject(RIDER_NAMES) private readonly names: RiderNameDirectory,
   ) {}
 
   async drafts(
     type: NotificationSourceEvent,
     payload: unknown,
     now: Date,
+    eventId: string,
   ): Promise<NoticeDraft[] | IntakeSkip> {
     switch (type) {
       case RESULTS_ATTEMPT_VERDICT_CHANGED:
@@ -123,9 +148,11 @@ export class NotificationIntake {
       case RIDES_RIDE_CANCELLED:
       case RIDES_RIDE_RESCHEDULED:
       case RIDES_PARTICIPANT_JOINED:
-        return this.ride(type, payload);
+        return this.ride(type, payload, eventId);
       case RIDES_REPORTS_RESOLVED:
         return this.reportsResolved(payload);
+      case RIDES_PHOTO_RESET:
+        return this.ridePhotoReset(payload, now);
       case ROUTE_PUBLICATION_DECIDED:
         return this.routePublication(payload);
       case TICKETS_REMINDER_DUE:
@@ -134,7 +161,141 @@ export class NotificationIntake {
         return this.profileFieldReset(payload);
       case ACHIEVEMENTS_GRANT_NOTICED:
         return this.achievementGranted(payload, now);
+      case SOCIAL_REACTION_CREATED:
+        return this.socialReaction(payload, eventId);
+      case SOCIAL_CONNECTION_ADDED:
+        return this.socialAdded(payload, eventId);
+      case SOCIAL_INVITE_REGISTERED:
+        return this.socialInvite(payload, eventId);
+      case SOCIAL_RIDE_ASK_DUE:
+        return this.socialRideAsk(payload, eventId);
     }
+  }
+
+  /**
+   * Новая реакция (K10, social-p7): реакция снята или стёрта к приёму — `gone`. «Спасибо» — получателю, окно — райд
+   * (райда нет — `gone`, не опубликован — `state`); «Респект» — владельцу результата или автору маршрута, окно — цель в
+   * сутки, название — гонка заявки (`RESULTS_NOTICES.entryRace` + `RACE_REGISTRY`) или маршрут (`ROUTE_NOTICES`).
+   */
+  private async socialReaction(
+    payload: unknown,
+    eventId: string,
+  ): Promise<NoticeDraft[] | IntakeSkip> {
+    const event = SocialReactionCreated.safeParse(payload);
+    if (!event.success) return 'invalid_payload';
+    const reaction = await this.social.reaction(event.data.reactionId);
+    if (!reaction) return 'gone';
+    const base = { eventId, actor: reaction.actorId, recipients: [reaction.recipientId] };
+    if (reaction.kind === 'thanks') {
+      if (reaction.targetType !== 'ride_rider') return 'invalid_payload';
+      const ride = await this.rides.ride(reaction.targetId);
+      if (!ride) return 'gone';
+      if (ride.status !== 'published') return 'state';
+      const object = { type: 'ride' as const, id: ride.id, title: ride.title };
+      return [socialNoticeDraft({ ...base, kind: 'social_thanks', object })];
+    }
+    if (reaction.targetType === 'race_entry') {
+      const raceId = await this.results.entryRace(reaction.targetId);
+      const title = raceId && (await this.raceTitle(raceId));
+      if (!raceId || !title) return 'gone';
+      const object = { type: 'race' as const, id: raceId, title };
+      return [socialNoticeDraft({ ...base, kind: 'social_respect', object })];
+    }
+    if (reaction.targetType === 'route') {
+      const route = await this.routes.publication(reaction.targetId);
+      if (!route) return 'gone';
+      const object = { type: 'route' as const, id: route.id, title: route.title };
+      return [socialNoticeDraft({ ...base, kind: 'social_respect', object })];
+    }
+    return 'invalid_payload';
+  }
+
+  /** «Вас добавили в свои» (K10, K11 — отбор в `addManual`): связь убрана к приёму — `state`. */
+  private async socialAdded(
+    payload: unknown,
+    eventId: string,
+  ): Promise<NoticeDraft[] | IntakeSkip> {
+    const event = SocialConnectionAdded.safeParse(payload);
+    if (!event.success) return 'invalid_payload';
+    const { ownerId, otherId } = event.data;
+    if (!(await this.social.connected(ownerId, otherId))) return 'state';
+    return [
+      socialNoticeDraft({
+        kind: 'social_added',
+        eventId,
+        actor: ownerId,
+        recipients: [otherId],
+        object: null,
+      }),
+    ];
+  }
+
+  /** «По вашей ссылке зарегистрировались» (K10, K9) — пригласившему, лицо — приглашённый. */
+  private socialInvite(payload: unknown, eventId: string): NoticeDraft[] | IntakeSkip {
+    const event = SocialInviteRegistered.safeParse(payload);
+    if (!event.success) return 'invalid_payload';
+    return [
+      socialNoticeDraft({
+        kind: 'social_invite_registered',
+        eventId,
+        actor: event.data.inviteeId,
+        recipients: [event.data.inviterId],
+        object: null,
+      }),
+    ];
+  }
+
+  /** «Как прошёл райд?» (K10, P5): адресаты — из payload (отобраны регламентом); райд не опубликован — `state`. */
+  private async socialRideAsk(
+    payload: unknown,
+    eventId: string,
+  ): Promise<NoticeDraft[] | IntakeSkip> {
+    const event = SocialRideAskDue.safeParse(payload);
+    if (!event.success) return 'invalid_payload';
+    const ride = await this.rides.ride(event.data.rideId);
+    if (!ride) return 'gone';
+    if (ride.status !== 'published') return 'state';
+    return [
+      socialNoticeDraft({
+        kind: 'social_ride_ask',
+        eventId,
+        actor: null,
+        recipients: event.data.userIds,
+        object: { type: 'ride', id: ride.id, title: ride.title },
+      }),
+    ];
+  }
+
+  /**
+   * «Свои идут» (K10, social-p7, RC-P7-2/3): записавшийся — участник с номером входа = `seq` события (нет `seq` или
+   * участник вышел — без черновика); непубличный (K3) — без; аудитория — взаимные «свои» записавшегося
+   * (`SOCIAL_NOTICES.goingAudience`) без организатора и текущих участников. Окно — райд.
+   */
+  private async ridersGoing(
+    ride: RideNotice,
+    seq: number | undefined,
+    eventId: string,
+  ): Promise<NoticeDraft[]> {
+    if (seq === undefined) return [];
+    const joiner = ride.participants.find((participant) => participant.seq === seq)?.userId;
+    if (!joiner) return [];
+    if (!(await this.names.publicRiders([joiner])).has(joiner)) return [];
+    const going = new Set([
+      ride.organizerUserId,
+      joiner,
+      ...ride.participants.map((participant) => participant.userId),
+    ]);
+    const audience = (await this.social.goingAudience(joiner)).filter((id) => !going.has(id));
+    if (audience.length === 0) return [];
+    return [
+      socialNoticeDraft({
+        kind: 'social_riders_going',
+        eventId,
+        actor: joiner,
+        recipients: audience,
+        object: { type: 'ride', id: ride.id, title: ride.title },
+      }),
+    ];
   }
 
   /**
@@ -319,6 +480,7 @@ export class NotificationIntake {
     type:
       typeof RIDES_RIDE_CANCELLED | typeof RIDES_RIDE_RESCHEDULED | typeof RIDES_PARTICIPANT_JOINED,
     payload: unknown,
+    eventId: string,
   ): Promise<NoticeDraft[] | IntakeSkip> {
     const event = RideEventPayload.safeParse(payload);
     if (!event.success) return 'invalid_payload';
@@ -345,6 +507,7 @@ export class NotificationIntake {
         collapse: { key: `ride:${ride.id}:joined`, seq: event.data.seq },
         recipients: [ride.organizerUserId],
       },
+      ...(await this.ridersGoing(ride, event.data.seq, eventId)),
     ];
   }
 
@@ -381,6 +544,27 @@ export class NotificationIntake {
         // скрытый модерацией райд авторам не виден — без перехода («Не найдено» не показываем)
         target: ride.status === 'hidden' ? null : { type: 'ride', rideId: ride.id },
         recipients: reporters,
+      },
+    ];
+  }
+
+  /**
+   * Фото райда удалено модератором (ride-photo-followups R10) — организатору, любой статус райда (скрытый организатору
+   * виден, цель работает). Призыв загрузить другое — только если загрузка ещё возможна (`published`, старт впереди).
+   * Повторный сброс заменяет непрочитанное (N7): `seq` — `noticeSeq` райда после записи сброса.
+   */
+  private async ridePhotoReset(payload: unknown, now: Date): Promise<NoticeDraft[] | IntakeSkip> {
+    const event = RidesPhotoReset.safeParse(payload);
+    if (!event.success) return 'invalid_payload';
+    const ride = await this.rides.ride(event.data.rideId);
+    if (!ride) return 'gone';
+    const canReplace = ride.status === 'published' && ride.startsAt.getTime() > now.getTime();
+    return [
+      {
+        text: { kind: 'ride_photo_reset', ride: ride.title, canReplace },
+        target: { type: 'ride', rideId: ride.id },
+        collapse: { key: `ride:${ride.id}:photo-reset`, seq: event.data.seq },
+        recipients: [ride.organizerUserId],
       },
     ];
   }

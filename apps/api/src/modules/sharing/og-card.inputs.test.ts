@@ -25,8 +25,6 @@ describe('ogCardHash (og-images, D4)', () => {
       const hash = ogCardHash(input);
       expect(ogCardHash({ ...input, themeId: 'chrono' } as OgCardInput)).not.toBe(hash);
       for (const [field, value] of Object.entries(input.facts)) {
-        // фото организатора райда OG не рисует (ride-photo, P4) — ключ от него не зависит (кейс ниже)
-        if (input.kind === 'ride' && field === 'photoId') continue;
         const changed =
           value instanceof Date
             ? new Date(value.getTime() + 60_000)
@@ -83,9 +81,13 @@ describe('ogCardHash (og-images, D4)', () => {
       facts: { ...OG_FIXTURES.ride.facts, organizerName: 'Иван' },
     } as OgCardInput;
     expect(ogCardHash(extra)).toBe(ogCardHash(OG_FIXTURES.ride));
-    // ride-photo: OG без фото — смена фото OG не перерисовывает
-    const withPhoto = ogFixture('ride', { photoId: 'photo' });
-    expect(ogCardHash(withPhoto)).toBe(ogCardHash(OG_FIXTURES.ride));
+  });
+
+  it('фото райда меняет ключ OG (ride-photo-followups): загрузка, замена и снятие — новая версия', () => {
+    const plain = ogCardHash(ogFixture('ride', { photoId: null }));
+    const first = ogCardHash(ogFixture('ride', { photoId: 'photo-a' }));
+    const second = ogCardHash(ogFixture('ride', { photoId: 'photo-b' }));
+    expect(new Set([plain, first, second]).size).toBe(3);
   });
 
   it('разные виды с одинаковыми полями — разные хэши; бренд — свой', () => {

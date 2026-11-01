@@ -41,7 +41,7 @@ export type OgScheme = 'light' | 'dark';
  * запускает полный проход `og.sync` (смена `scheme` без версии меняет хэши, но полного прохода не даёт).
  */
 export const OG_CARD_POLICY = {
-  renderVersion: 3,
+  renderVersion: 4,
   /** схема темы по виду: соревновательные (гонка, сезон, райдер) — тёмная, остальные и бренд — светлая */
   scheme: {
     race: 'dark',
@@ -61,6 +61,11 @@ export const OG_CARD_POLICY = {
   /** удержание ключа постановки после финального провала рендера — троттлинг самолечения, с */
   failedHoldSec: 600,
   maxPngBytes: 300_000,
+  /**
+   * PNG OG райда с фото организатора (ride-photo-followups R3): фото 1200×630 палитрой 256 — ≈ 300–600 КБ; не влезло —
+   * палитра 16 (`PHOTO_CARD_PALETTES`); замер шумной фикстуры — `og-card.png.test.ts`
+   */
+  maxPhotoPngBytes: 600_000,
   /** версия картинки для SSR — свой бакет: web-сервер ходит с одного IP */
   cardsIpLimit: { limit: 300, windowSec: 60 },
   /** выдача PNG по IP */

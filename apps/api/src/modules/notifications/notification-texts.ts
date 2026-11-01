@@ -47,6 +47,8 @@ export type NoticeText =
   | { kind: 'event_reminder'; event: string; startsAt: Date; place: string | null; text: string }
   | { kind: 'profile_name_reset' | 'profile_club_reset' }
   | { kind: 'profile_avatar_reset'; blockedUntil: Date | null }
+  /** фото своего райда удалено модератором; `canReplace` — райд при приёме опубликован и ещё не начался */
+  | { kind: 'ride_photo_reset'; ride: string; canReplace: boolean }
   /** новое достижение, уровень (ранг 2–3 — «Новый уровень») или сезонное; объект — свой (гонка, маршрут, райд, сезон) */
   | {
       kind: 'achievement_granted';
@@ -133,6 +135,7 @@ const TITLES: Record<
   profile_name_reset: 'Имя в профиле сброшено',
   profile_avatar_reset: 'Фото профиля удалено',
   profile_club_reset: 'Клуб в профиле сброшен',
+  ride_photo_reset: 'Фото райда удалено',
 };
 
 function bodyOf(input: Exclude<NoticeText, SocialNoticeText>): string {
@@ -181,6 +184,10 @@ function bodyOf(input: Exclude<NoticeText, SocialNoticeText>): string {
         : 'Модератор удалил фото после жалоб. Загрузите другое фото.';
     case 'profile_club_reset':
       return 'Модератор сбросил клуб после жалоб. Укажите другой клуб в профиле.';
+    case 'ride_photo_reset':
+      return input.canReplace
+        ? `Модератор удалил фото райда ${quoted(input.ride)}. Можно загрузить другое, пока райд не начался.`
+        : `Модератор удалил фото райда ${quoted(input.ride)}.`;
     case 'achievement_granted':
       return t(`achievements.object.${input.objectKind}` as MessageKey, {
         title: oneLine(input.objectTitle),

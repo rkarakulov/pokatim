@@ -1,10 +1,22 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Param,
+  Post,
+  Query,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
+import { HttpAdapterHost } from '@nestjs/core';
 import {
   DismissRideReportsRequest,
   FieldErrorCode,
   HideRideRequest,
   type ModerationRideDetail,
   type ModerationRidePage,
+  ModerationRidePhotoQuery,
   ModerationRideQuery,
   ResetRidePhotoRequest,
   RestoreRideRequest,
@@ -12,7 +24,10 @@ import {
 } from '@pokatim/contracts';
 import { ZodValidationPipe } from '@rkarakulov/api-kit/core';
 
+import { replyJpeg } from '../media';
 import { CurrentPanelUser, PanelGuard, type PanelPrincipal, RequirePermission } from '../panel';
+import { RIDE_PHOTO_MODERATION_CACHE_CONTROL } from './ride-photos-public.controller';
+import { RidePhotosService } from './ride-photos.service';
 import { RidesModerationService } from './rides-moderation.service';
 
 const idPipe = new ZodValidationPipe(Uuid, FieldErrorCode);
@@ -22,7 +37,11 @@ const idPipe = new ZodValidationPipe(Uuid, FieldErrorCode);
 @UseGuards(PanelGuard)
 @RequirePermission('rides.moderate')
 export class RidesModerationController {
-  constructor(private readonly moderation: RidesModerationService) {}
+  constructor(
+    private readonly moderation: RidesModerationService,
+    private readonly photos: RidePhotosService,
+    private readonly adapterHost: HttpAdapterHost,
+  ) {}
 
   @Get()
   list(
@@ -34,6 +53,26 @@ export class RidesModerationController {
   @Get(':id')
   get(@Param('id', idPipe) id: string): Promise<ModerationRideDetail> {
     return this.moderation.get(id);
+  }
+
+  /**
+   * Фото райда для карточки модерации (ride-photo-followups, R11 b): текущее фото у любого статуса, `photoId` — из
+   * карточки (не текущее — 404). Заголовки — `replyJpeg` после чтения; просмотр не журналируется.
+   */
+  @Get(':id/photo')
+  async photo(
+    @Param('id', idPipe) id: string,
+    @Query(new ZodValidationPipe(ModerationRidePhotoQuery, FieldErrorCode))
+    query: ModerationRidePhotoQuery,
+    @Res({ passthrough: true }) reply: unknown,
+  ): Promise<Buffer> {
+    const bytes = await this.photos.moderationBytes(id, query.photoId);
+    return replyJpeg(
+      this.adapterHost.httpAdapter,
+      reply,
+      bytes,
+      RIDE_PHOTO_MODERATION_CACHE_CONTROL,
+    );
   }
 
   @Post(':id/hide')

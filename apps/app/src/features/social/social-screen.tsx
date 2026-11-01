@@ -29,13 +29,13 @@ import {
   useSetRiderConnection,
   useSocialConnections,
 } from './queries';
-import { connectionRowText } from './social-format';
+import { CONNECT_LABELS, connectionRowText } from './social-format';
 
 const DOCUMENT_TITLE = `${t('social.title')} — ${t('app.name')}`;
 const SKELETON_ROWS = 3;
 
 /**
- * Строка «Свои»: аватар, имя, подпись по полям сервера; нажатие — профиль райдера. Кнопка «В своих» убирает без
+ * Строка «Свои»: аватар, имя, подпись по полям сервера; нажатие — профиль райдера. «Убрать из своих» — без
  * подтверждения, строка остаётся с «В свои» (можно вернуть) — локальное состояние экрана до ухода.
  */
 function ConnectionRow({
@@ -78,6 +78,7 @@ function ConnectionRow({
         </Pressable>
         <Button
           label={t(connected ? 'social.connected' : 'social.connect')}
+          reserveLabels={CONNECT_LABELS}
           variant={connected ? 'secondary' : 'primary'}
           loading={mutation.isPending}
           onPress={() =>
@@ -138,7 +139,7 @@ export function SocialScreen() {
   const theme = useTheme();
   const queryClient = useQueryClient();
   const connections = useSocialConnections();
-  // версия ответа сервера: новый ответ сбрасывает «убранные на экране» (вернули из профиля — снова «В своих»)
+  // версия ответа сервера: новый ответ сбрасывает «убранные на экране» (вернули из профиля — снова в «своих»)
   const listVersion = connections.dataUpdatedAt;
   useFocusEffect(
     useCallback(

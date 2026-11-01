@@ -90,8 +90,10 @@ paths:
   `src/csp.test.ts` (origin стиля из `deploy-dev.yml`). Превью (`RoutePreview`): компактная карта и «Открыть
   маршрут» — из поля коридора новая вкладка (`openLink="new-tab"`), из окна публикации — та же, на странице маршрута —
   без ссылки (`openLink={false}`).
-  Раскладка `RouteReadyView` (admin-maps-desktop): карта и профиль — блок `.route-view` (`useFullscreen`, кнопка
-  «На весь экран» в `MapControls`), «Цифры» — после; от 900 px карта ≤ 55vh, профиль 10:1 — оба в одном экране.
+  Раскладка `RouteReadyView` (admin-maps-desktop, admin-route-stats-compact): блок `.route-view` (`useFullscreen`,
+  кнопка «На весь экран» в `MapControls`) — карта, цифры строкой `RouteStats` (не `StatTile`; каждая цифра —
+  `role="group"` с подписью, заголовок «Цифры» — `visually-hidden`), профиль; от 900 px карта ≤ 55vh, профиль —
+  `clamp` от 2 до 3 `--size-touch-min` — всё в одном экране.
 - Карта гонки (panel-race-map) — `features/races/RaceCorridorMap.tsx`: секция «Карта гонки» под формой `RaceEditor` у
   сохранённой гонки с коридором (любой статус; несохранённый выбор — только превью поля). Тот же `RouteReadyView`
   (`corridorWidthM`, подзаголовки `headingLevel={3}`): `RouteMap corridorWidthM` добавляет слой коридора
@@ -137,7 +139,11 @@ paths:
 - «Модерация райдов» (05b) — `features/rides-moderation/*`, маршруты `/rides-moderation` (`?state=hidden` — в URL) и
   `/rides-moderation/$rideId` под `RequirePermission permission="rides.moderate"`, вкладка «Кофе-райды» раздела
   «Модерация». Действия — `ReasonDialog`; 409 `CONFLICT` и `RIDE_INVALID_STATE` — `ConflictBanner` с перечитыванием
-  карточки; «Отклонить жалобы» отправляет `lastReportAt` карточки.
+  карточки; «Отклонить жалобы» отправляет `lastReportAt` карточки. Фото организатора (ride-photo-followups R11 b) —
+  `RidePhoto`: у любого статуса `<img>` по `api.moderationRidePhotoUrl(ride.id, photo.id)` (админская отдача, тот же
+  origin — `img-src 'self'`, сторож `csp.test.ts`; публичного `ridePhotoUrl` в админском клиенте нет), `PhotoImage`
+  по ключу `photo.id`: скелетон до `load`, ошибка — «Фото недоступно» с «Повторить» / «Обновить карточку»; у
+  `status === 'hidden'` — пометка `photoHidden` под картинкой (`t-meta`).
 - «Маршруты райдеров» (routes-06) — `features/rider-routes/*`, маршруты `/rider-routes` (`?tab=reported|hidden` — в
   URL, по умолчанию «На проверке») и `/rider-routes/$routeId` под `RequirePermission permission="routes.moderate"`,
   вкладка «Маршруты райдеров» раздела «Модерация». Автор — только `Райдер ·<хвост id>` (`riderRouteAuthor`), имени нет (N8);

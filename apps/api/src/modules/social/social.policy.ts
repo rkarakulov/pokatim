@@ -24,7 +24,8 @@ const DAY_MS = 24 * HOUR_MS;
  * Правила «Свои» (`docs/product/social.md`): лимит ручного «В свои» (K11, `consumeUserLimit` `social-manual:<uid>`),
  * лимит ручных отметок явки (`social-attendance:<uid>`), лимиты «спасибо» и «респекта» (P4), окно ручной явки (K2), пороги автоявки (K2 `[ASSUMPTION]`, P5), «Как прошёл райд?» и повтор уведомления о ручном
  * добавлении (K10, K11 — P7), пачка `bulkWrite` пересчёта связей. P5: окно догона регламента «Как прошёл райд?»
- * (`askCatchUpMs`, RC-P5-10 — старше не спрашиваются) и страница райдов регламента (`askPageRows`).
+ * (`askCatchUpMs`, RC-P5-10 — старше не спрашиваются) и страница райдов регламента (`askPageRows`). P7: лимит, окно и
+ * предел «своих» Главной (`home*`).
  */
 export const SOCIAL_POLICY = {
   manualLimit: { limit: 30, windowSec: 86_400 },
@@ -43,6 +44,12 @@ export const SOCIAL_POLICY = {
   bulkBatch: 1000,
   askCatchUpMs: 24 * HOUR_MS,
   askPageRows: 500,
+  /** Главная «Свои» (P7, K7): лимит `social-home:<uid>` на каждый `GET social/home` */
+  homeLimit: { limit: 60, windowSec: 60 },
+  /** окно строк Главной: райды — старт в ближайшие 7 дн, протоколы и маршруты — за последние 7 дн */
+  homeWindowMs: 7 * DAY_MS,
+  /** «своих» зрителя для запросов Главной — не больше (порядок `listOf`: недавние совместные райды первыми) */
+  homeConnectionsMax: 500,
 } as const;
 
 /** Источники связи из полей документа (K1) в порядке справочника `CONNECTION_SOURCES`. */

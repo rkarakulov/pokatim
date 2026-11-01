@@ -226,6 +226,19 @@ export class RacesRepository {
     return (await this.c.races.findOne({ _id: id }, { session })) ?? undefined;
   }
 
+  /**
+   * Опубликованные гонки с протоколом, опубликованным не раньше `since` (Главная «Свои», social-p7):
+   * `protocolPublishedAt ↓, _id ↓`, ≤ `limit`; индекс `races_protocol_published_idx`.
+   */
+  protocolsPublishedSince(since: Date, limit: number): Promise<RaceDoc[]> {
+    return this.c.races
+      .find({ status: 'published', protocolPublishedAt: { $gte: since } })
+      .sort({ protocolPublishedAt: -1, _id: -1 })
+      .hint('races_protocol_published_idx')
+      .limit(limit)
+      .toArray();
+  }
+
   /** Гонки по id (`_id` — индекс); незнакомые id — без документа. */
   findRaces(ids: readonly string[]): Promise<RaceDoc[]> {
     if (ids.length === 0) return Promise.resolve([]);

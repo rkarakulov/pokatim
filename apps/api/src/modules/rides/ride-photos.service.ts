@@ -29,6 +29,12 @@ const invalid = (reason: ImageInvalidDetails['reason']) => {
   return domainError('IMAGE_INVALID', 422, details);
 };
 
+/** Байты BSON `Binary` без копии. */
+const bufferOf = (binary: Binary): Buffer => {
+  const { buffer } = binary;
+  return Buffer.from(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+};
+
 /**
  * Фото организатора кофе-райда (ride-photo, ADR-0028). Приём: свой райд (иначе 404) → будущий опубликованный (409) →
  * общий слот приёма `ImageUploadSlots` (429) → лимит `ride-photo:<uid>` 20/ч (429) — всё до тела; после тела — общее с
@@ -138,8 +144,19 @@ export class RidePhotosService {
     if (!doc || !(await this.repository.isCurrentPhoto(doc.rideId, id))) {
       throw domainError('NOT_FOUND', 404);
     }
-    const { buffer } = doc.bytes;
-    return Buffer.from(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+    return bufferOf(doc.bytes);
+  }
+
+  /**
+   * Байты фото для карточки модерации (ride-photo-followups, R11 b): текущее фото этого райда **любого** статуса (и
+   * скрытого); фото другого райда, не текущее, нет фото или райда — 404.
+   */
+  async moderationBytes(rideId: string, photoId: string): Promise<Buffer> {
+    const doc = await this.photos.findBytes(photoId);
+    if (!doc || doc.rideId !== rideId || !(await this.repository.hasPhoto(rideId, photoId))) {
+      throw domainError('NOT_FOUND', 404);
+    }
+    return bufferOf(doc.bytes);
   }
 
   /** Вид организатора после записи (свежее чтение; чужой и неизвестный — 404). */

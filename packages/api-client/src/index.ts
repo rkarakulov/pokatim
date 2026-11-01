@@ -12,6 +12,7 @@ import {
   RiderSocial,
   type SetRiderConnectionRequest,
   SocialConnections,
+  SocialHome,
   CatalogRoutePage,
   type CatalogRouteQuery,
   type RouteExportFormat,
@@ -1290,6 +1291,13 @@ export function createApiClient({
       request(
         '/v1/social/connections',
         SocialConnections,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /** Секция «Свои» на Главной (K7, P7): ≤ 3 строки; незнакомый вид строки отбрасывается. */
+    getSocialHome: (accessToken: string) =>
+      request(
+        '/v1/social/home',
+        SocialHome,
         authorized(accessToken, { method: 'GET', ...withCredentials }),
       ),
     // --- «Свои»: реакции (P4, K5, K8) ---

@@ -76,7 +76,8 @@ const isStale = (error: unknown) =>
   (httpStatus(error) === 409 && apiErrorOf(error)?.code === 'RIDE_INVALID_STATE');
 
 /**
- * Картинка фото отдельным запросом: до `load` — скелетон превью, `error` (сеть, или фото сменилось/удалено/райд скрыт,
+ * Картинка фото отдельным запросом по админскому адресу (`GET /v1/admin/rides/:id/photo?photoId=`, тот же origin —
+ * `img-src 'self'`, сессия панели в cookie): до `load` — скелетон превью, `error` (сеть, или фото сменилось/удалено,
  * пока карточка открыта) — «Фото недоступно» с «Повторить» (перемонтирует `<img>`) и «Обновить карточку». Состояние
  * сбрасывается при смене фото: родитель монтирует по ключу `photo.id`.
  */
@@ -128,25 +129,26 @@ function PhotoImage({ src, alt, onReload }: { src: string; alt: string; onReload
 }
 
 /**
- * Фото организатора (ride-photo): у скрытого райда публичная отдача — 404 (P6), поэтому вместо картинки плашка (R11);
- * id фото в карточке есть, «Удалить фото» доступна.
+ * Фото организатора (ride-photo; followups R11 b): одна ветка у любого статуса — картинка по админскому адресу,
+ * привязанная к `photo.id` карточки (публичная отдача скрытого — 404, админская — нет). У скрытого райда под картинкой
+ * пометка «Райд скрыт — райдеры это фото не видят»; «Удалить фото» доступна.
  */
 function RidePhoto({ ride, onReload }: { ride: ModerationRideDetail; onReload: () => void }) {
   if (!ride.photo) return t('admin.ridesModeration.noPhoto');
-  if (ride.status === 'hidden') {
-    return (
-      <span className="ride-photo-preview ride-photo-preview--hidden t-meta">
-        {t('admin.ridesModeration.photoHidden')}
-      </span>
-    );
-  }
   return (
-    <PhotoImage
-      key={ride.photo.id}
-      src={api.ridePhotoUrl(ride.photo.id)}
-      alt={t('admin.ridesModeration.photoAlt', { title: ride.title })}
-      onReload={onReload}
-    />
+    <>
+      <PhotoImage
+        key={ride.photo.id}
+        src={api.moderationRidePhotoUrl(ride.id, ride.photo.id)}
+        alt={t('admin.ridesModeration.photoAlt', { title: ride.title })}
+        onReload={onReload}
+      />
+      {ride.status === 'hidden' ? (
+        <span className="ride-photo-preview__note t-meta">
+          {t('admin.ridesModeration.photoHidden')}
+        </span>
+      ) : null}
+    </>
   );
 }
 

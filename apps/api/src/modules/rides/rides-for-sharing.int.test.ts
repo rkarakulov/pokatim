@@ -104,3 +104,27 @@ describe('ogChanged', () => {
     ]);
   });
 });
+
+describe('inviteCardLive (ride-photo-followups AC3)', () => {
+  const PHOTO = 'P'.repeat(43);
+  it('нескрытый и фото текущее — true; фото другое или скрыт — false; отменённый и прошедший — true', async () => {
+    const ride = await createRide(h, organizer);
+    expect(await port().inviteCardLive(ride.id, null)).toBe(true);
+    expect(await port().inviteCardLive(ride.id, PHOTO)).toBe(false);
+    await ridesDb(h).updateOne({ _id: ride.id }, { $set: { photoId: PHOTO } });
+    expect(await port().inviteCardLive(ride.id, PHOTO)).toBe(true);
+    expect(await port().inviteCardLive(ride.id, 'Q'.repeat(43))).toBe(false);
+    const restore = await hideInDb(h, ride.id);
+    expect(await port().inviteCardLive(ride.id, null)).toBe(false);
+    expect(await port().inviteCardLive(ride.id, PHOTO)).toBe(false);
+    await restore();
+    const cancel = await authed(h, organizer, 'POST', `${RIDES}/${ride.id}/cancel`, {
+      reason: 'weather',
+    });
+    expect(cancel.status).toBe(200);
+    expect(await port().inviteCardLive(ride.id, PHOTO)).toBe(true);
+    h.clock.advance(3 * DAY);
+    expect(await port().inviteCardLive(ride.id, PHOTO)).toBe(true);
+    expect(await port().inviteCardLive(uuidv7(), null)).toBe(false);
+  });
+});

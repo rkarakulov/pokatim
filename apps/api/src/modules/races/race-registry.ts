@@ -57,6 +57,10 @@ export class RaceRegistryService implements RaceRegistry {
     );
   }
 
+  async protocolsPublishedSince(since: Date, limit: number): Promise<RaceForResults[]> {
+    return (await this.repository.protocolsPublishedSince(since, limit)).map(toRace);
+  }
+
   async findForPanel(principal: PanelPrincipal, raceId: string): Promise<RaceForResults | null> {
     const doc = await this.repository.findRace(raceId);
     if (!doc || !raceVisible(principal, doc)) return null;
