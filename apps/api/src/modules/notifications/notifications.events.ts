@@ -15,6 +15,7 @@ import {
 } from '../results';
 import {
   RIDES_PARTICIPANT_JOINED,
+  RIDES_PHOTO_RESET,
   RIDES_REPORTS_RESOLVED,
   RIDES_RIDE_CANCELLED,
   RIDES_RIDE_RESCHEDULED,
@@ -54,6 +55,8 @@ export const notificationsOutboxRoutes = {
   [PROFILE_FIELD_RESET]: QUEUE.notificationsIntake,
   // achievements-push: новое достижение или уровень (порт `ACHIEVEMENT_NOTICES`)
   [ACHIEVEMENTS_GRANT_NOTICED]: QUEUE.notificationsIntake,
+  // ride-photo-followups: модератор удалил фото райда (организатору)
+  [RIDES_PHOTO_RESET]: QUEUE.notificationsIntake,
   // social-p7: уведомления «Свои» K10 (порт `SOCIAL_NOTICES`); «Свои идут» — из `rides.participant-joined`
   [SOCIAL_REACTION_CREATED]: QUEUE.notificationsIntake,
   [SOCIAL_CONNECTION_ADDED]: QUEUE.notificationsIntake,

@@ -42,17 +42,32 @@
    - View (`RideCard`/`RideDetail`/`RideView`): `photo: { id } | null`; скрытый — `null` всем.
    - Модерация: `POST /v1/admin/rides/:id/photo-reset` (`rides.moderate`, `{ photoId, reason }`) — условная запись
      по `photoId` карточки первой → документ удалён → журнал `ride.photo_reset` (`details: null`, без id фото); фото
-     уже другое — 409 `CONFLICT`; фото нет — 200 без журнала. Жалобы, `version` и уведомления не трогаются (R10).
+     уже другое — 409 `CONFLICT`; фото нет — 200 без журнала. Жалобы и `version` не трогаются (R10). Дополнение
+     (ride-photo-followups): сброс пишет в той же транзакции outbox `rides.photo-reset { rideId, seq }` (`seq` —
+     `noticeSeq` после записи) → уведомление организатору `ride_photo_reset` (группа «Райды», схлопывание по райду).
+   - Просмотр модерацией (ride-photo-followups, R11 b): `GET /v1/admin/rides/:id/photo?photoId=` — `PanelGuard` +
+     `rides.moderate`; текущее фото райда **любого** статуса (и скрытого) по паре `(rideId, photoId)`, не текущее —
+     404; `private, no-store`, заголовки `replyJpeg`; просмотр не журналируется.
    - Стирание (ADR-0015, шаг `rides`): ссылки на всех райдах организатора → `null`, все его `ride_photos` удалены.
 5. **Коды ошибок для новых потребителей — общие `IMAGE_*`** (R9): `IMAGE_FORMAT_UNSUPPORTED` (415), `IMAGE_TOO_LARGE`
    (413), `IMAGE_INVALID` (422, `details.reason: 'too_small' | 'unreadable'`, `tolerantEnum`). Аватар — на `AVATAR_*`
    навсегда (установленные клиенты).
-6. **Рендер 4a с фото — worker `sharing`.** `RideInviteFacts.photoId` (OG его не использует), в ключе приглашения — только
+6. **Рендер 4a с фото — worker `sharing`.** `RideInviteFacts.photoId` (OG — с ride-photo-followups, ниже), в ключе приглашения — только
    у `night`, `STORY_CARD_POLICY.renderVersion` 4. Байты — порт `RIDES_FOR_SHARING.invitePhoto(rideId, photoId)` (только
    текущее фото нескрытого райда, иначе `null` → задача `skipped`). Композиция в sharp: фото `cover` 1080×1920 → слой
    скрима (токен `photoScrim` из `@pokatim/design-tokens`, цвет `overlay.scrim`) → текстовый слой (тот же `nightCard`,
    прозрачный фон, текст — роль `onPhoto`) → `png({ palette: true, quality: 80, effort: 7, dither: 1 })`; не влез в
    `maxPngBytes` (2 МБ, прежний, R5; шумная фикстура ≈ 1,73 МБ) — одна попытка палитрой 16 цветов (4 бита), затем ошибка. Байты фото не идут через SVG/base64.
+7. **Дополнение (ride-photo-followups, `docs/tasks/2026-11-01-ride-photo-followups/task.md`).**
+   - Композиция «фото → скрим → текст → палитра» — общая `sharing/photo-card.png.ts` (`composeWithPhoto`,
+     `encodePhotoCard`, `PHOTO_CARD_PALETTES`, `onPhotoColors`) для 4a и OG.
+   - OG райда с фото: `photoId` в хэше OG, `OG_CARD_POLICY.renderVersion` 4; тот же макет, цвета `onPhoto` схемы вида,
+     скрим `overlay.scrim` с профилем `photoScrimHero`; PNG с палитрой ≤ `OG_CARD_POLICY.maxPhotoPngBytes` (600 КБ;
+     шумная фикстура влезает только палитрой 16 цветов ≈ 0,3 МБ). Байты — тот же `invitePhoto` (снято — `skipped`).
+   - Картинка приглашения отзывается при отдаче: `story-card:ride:<token>` = `{ rideId, photoId нарисованного }` (той же
+     `MULTI`, что PNG, тот же TTL) → `StoryCardImageService` сверяет порт `RIDES_FOR_SHARING.inviteCardLive` (райд не
+     скрыт и фото текущее — `RidesRepository.isShareable`); нет — PNG и привязка удаляются, 404. Без событий и без
+     ребра `rides → sharing`; гонка «рендер ↔ сброс» закрыта (PNG несёт старый `photoId`).
 
 ## Альтернативы
 
@@ -72,12 +87,15 @@
 
 - Второе исключение из «файлы пользователей наружу не выдаются» (ADR-0011) после аватара: только перекодированный JPEG,
   только текущее фото нескрытого райда, доступ — по случайному id.
-- Следующие виды фото (обложки гонок, галерея, OG и шапка детали райда с фото) берут `media` и коды `IMAGE_*`; хранение
+- Следующие виды фото (обложки гонок, галерея) берут `media` и коды `IMAGE_*`; OG райда с фото сделан
+  (ride-photo-followups), шапка детали райда — PR B той же задачи; хранение
   и права — в модуле-владельце. Новый вид фото — проверить бюджет памяти: гейт по-прежнему один на процесс.
 - Кандидат в app-foundation — только если второй проект попросит: конвейер привязан к sharp, политике памяти и
   контрактам pokatim.
-- Принятые риски: кэш браузеров держит снятое фото до 24 ч; уже выданный PNG приглашения `night` со снятым, скрытым
-  или стёртым фото живёт в Redis до 24 ч по капабилити-ссылке (follow-up — инвалидация карточек райда при сбросе фото); фото прошедших и отменённых райдов хранятся до удаления
+- Принятые риски: кэш браузеров держит снятое фото до 24 ч; PNG приглашения (`private, max-age=86400, immutable`), уже
+  скачанный устройством, держится в его кэше до суток, а сохранённые/отправленные файлы не отзываются (R2
+  ride-photo-followups); токены приглашений, выданные до выката привязок, — без проверки до 24 ч; публичный HTTP-кэш OG
+  (`public, max-age=86400`) и кэши превью соцсетей не отзываются; фото прошедших и отменённых райдов хранятся до удаления
   организатором или стирания аккаунта (≤ 1 на райд, ≈ 0,2–0,5 МБ; очистка по сроку — follow-up, R12); смена
   `renderVersion` перерисовывает все карточки сторис по запросу (кэш 24 ч).
 - S3/CDN (ADR-0019): при переезде меняются репозитории и отдача, не конвейер.

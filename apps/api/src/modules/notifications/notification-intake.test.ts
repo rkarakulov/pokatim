@@ -328,6 +328,88 @@ describe('NotificationIntake: новое достижение (achievements-push
   });
 });
 
+describe('NotificationIntake: фото райда удалено модератором (ride-photo-followups AC4)', () => {
+  const RESET = 'rides.photo-reset';
+  const RIDE_ID = '0190a6f4-0000-7000-8000-000000000010';
+  const ORGANIZER = '0190a6f4-0000-7000-8000-000000000011';
+  const PARTICIPANT = '0190a6f4-0000-7000-8000-000000000012';
+  const notice = (overrides: Partial<RideNotice> = {}): RideNotice => ({
+    id: RIDE_ID,
+    title: 'Кофе-райд',
+    startsAt: new Date(NOW.getTime() + 86_400_000),
+    status: 'published',
+    organizerUserId: ORGANIZER,
+    goingCount: 2,
+    participants: [{ userId: PARTICIPANT, seq: 1 }],
+    ...overrides,
+  });
+  function intakeWithRide(ride: RideNotice | null) {
+    const rides: RideNotices = {
+      ride: async (id) => (id === RIDE_ID ? ride : null),
+      resolvedReporters: async () => [],
+    };
+    const unused = {} as never;
+    return new NotificationIntake(
+      unused,
+      unused,
+      rides,
+      unused,
+      unused,
+      unused,
+      unused,
+      unused,
+      unused,
+    );
+  }
+
+  it('организатору (не участникам): цель — райд, схлопывание по райду и seq; будущий опубликованный — canReplace', async () => {
+    expect(
+      await intakeWithRide(notice()).drafts(RESET, { rideId: RIDE_ID, seq: 5 }, NOW, EVENT_ID),
+    ).toEqual([
+      {
+        text: { kind: 'ride_photo_reset', ride: 'Кофе-райд', canReplace: true },
+        target: { type: 'ride', rideId: RIDE_ID },
+        collapse: { key: `ride:${RIDE_ID}:photo-reset`, seq: 5 },
+        recipients: [ORGANIZER],
+      },
+    ]);
+  });
+
+  it.each([
+    ['начался', notice({ startsAt: NOW })],
+    ['прошёл', notice({ startsAt: new Date(NOW.getTime() - 3_600_000) })],
+    ['отменён', notice({ status: 'cancelled' })],
+    ['скрыт', notice({ status: 'hidden' })],
+  ])('%s — без призыва (canReplace false), статус не фильтрует', async (_name, ride) => {
+    expect(
+      await intakeWithRide(ride).drafts(RESET, { rideId: RIDE_ID, seq: 2 }, NOW, EVENT_ID),
+    ).toMatchObject([
+      {
+        text: { kind: 'ride_photo_reset', canReplace: false },
+        target: { type: 'ride', rideId: RIDE_ID },
+        recipients: [ORGANIZER],
+      },
+    ]);
+  });
+
+  it('райда нет — gone', async () => {
+    expect(
+      await intakeWithRide(null).drafts(RESET, { rideId: RIDE_ID, seq: 1 }, NOW, EVENT_ID),
+    ).toBe('gone');
+  });
+
+  it.each([
+    ['нет seq', { rideId: RIDE_ID }],
+    ['seq 0', { rideId: RIDE_ID, seq: 0 }],
+    ['битый rideId', { rideId: 'x', seq: 1 }],
+    ['лишний ключ', { rideId: RIDE_ID, seq: 1, photoId: 'a'.repeat(43) }],
+  ])('%s — invalid_payload', async (_name, bad) => {
+    expect(await intakeWithRide(notice()).drafts(RESET, bad, NOW, EVENT_ID)).toBe(
+      'invalid_payload',
+    );
+  });
+});
+
 describe('NotificationIntake: «Свои» K10 (social-p7)', () => {
   const RIDE = '0190a6f4-0000-7000-8000-000000000021';
   const ORG = '0190a6f4-0000-7000-8000-000000000022';

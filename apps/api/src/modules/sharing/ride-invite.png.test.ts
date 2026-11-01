@@ -2,7 +2,9 @@ import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
 
 import type { RideInviteInput } from './ride-invite.inputs';
-import { encodePhotoCard, renderRideInvite } from './ride-invite.png';
+import { noisyPhoto } from '../../../test/avatars';
+import { encodePhotoCard } from './photo-card.png';
+import { renderRideInvite } from './ride-invite.png';
 import { STORY_CARD_POLICY } from './sharing.policy';
 
 const input = (template: 'line' | 'night'): RideInviteInput => ({
@@ -21,19 +23,6 @@ const input = (template: 'line' | 'night'): RideInviteInput => ({
     photoId: 'photo',
   },
 });
-
-/** Шумное фото 1600×1200 (детерминированный ГПСЧ) — худший случай для сжатия PNG (R5); под нагрузкой — до ~15 с. */
-async function noisyPhoto(width = 1600, height = 1200): Promise<Buffer> {
-  const pixels = Buffer.alloc(width * height * 3);
-  let seed = 0x2f6b_1d35;
-  for (let i = 0; i < pixels.length; i++) {
-    seed = (Math.imul(seed, 1_103_515_245) + 12_345) >>> 0;
-    pixels[i] = seed >>> 24;
-  }
-  return sharp(pixels, { raw: { width, height, channels: 3 } })
-    .jpeg({ quality: 82 })
-    .toBuffer();
-}
 
 describe('renderRideInvite — 4a с фото под затемнением (ride-photo, AC5)', () => {
   it('шумное фото: PNG 1080×1920 не больше maxPngBytes', async () => {

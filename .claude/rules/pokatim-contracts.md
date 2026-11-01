@@ -300,4 +300,7 @@ paths:
   reason: ActionReason }`). Коды `IMAGE_FORMAT_UNSUPPORTED` (415), `IMAGE_TOO_LARGE` (413), `IMAGE_INVALID` (422) — в
   конце `ErrorCode`, для всех новых видов фото (аватар — `AVATAR_*`); действие журнала `ride.photo_reset` — в конце
   `AUDIT_ACTIONS`. api-client — `uploadRidePhoto(token, id, body)`, `ridePhotoUploadRequest`, `deleteRidePhoto`,
-  `ridePhotoUrl`; admin — `resetRidePhoto(id, body)`, `ridePhotoUrl`.
+  `ridePhotoUrl`; admin — `resetRidePhoto(id, body)`, `ridePhotoUrl`. ride-photo-followups: `ModerationRidePhotoQuery`
+  (`strictObject { photoId: RidePhotoId }`, `GET /v1/admin/rides/:id/photo`), admin — `moderationRidePhotoUrl(rideId,
+  photoId)` (без запроса); вид уведомления `ride_photo_reset` — в конце `NOTIFICATION_KINDS` (старые сборки —
+  `unknown`, текст с сервера).

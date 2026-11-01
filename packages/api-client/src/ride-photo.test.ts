@@ -151,3 +151,19 @@ describe('createAdminApiClient: фото райда (ride-photo)', () => {
     expect(calls).toHaveLength(1);
   });
 });
+
+describe('createAdminApiClient: фото райда модерации (ride-photo-followups)', () => {
+  it('moderationRidePhotoUrl — админский адрес с photoId, кодирование, без запроса', () => {
+    const { calls, fetchImpl } = capture(200, {});
+    expect(createAdminApiClient({ baseUrl: '', fetchImpl }).moderationRidePhotoUrl(ID, TOKEN)).toBe(
+      `/v1/admin/rides/${ID}/photo?photoId=${TOKEN}`,
+    );
+    expect(
+      createAdminApiClient({ baseUrl: 'https://panel.test', fetchImpl }).moderationRidePhotoUrl(
+        'a/b c',
+        'x?y&z=1',
+      ),
+    ).toBe('https://panel.test/v1/admin/rides/a%2Fb%20c/photo?photoId=x%3Fy%26z%3D1');
+    expect(calls).toHaveLength(0);
+  });
+});

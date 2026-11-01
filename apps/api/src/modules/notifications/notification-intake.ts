@@ -28,9 +28,11 @@ import {
   type RideNotice,
   type RideNotices,
   RIDES_PARTICIPANT_JOINED,
+  RIDES_PHOTO_RESET,
   RIDES_REPORTS_RESOLVED,
   RIDES_RIDE_CANCELLED,
   RIDES_RIDE_RESCHEDULED,
+  RidesPhotoReset,
   RidesReportsResolved,
 } from '../rides';
 import {
@@ -149,6 +151,8 @@ export class NotificationIntake {
         return this.ride(type, payload, eventId);
       case RIDES_REPORTS_RESOLVED:
         return this.reportsResolved(payload);
+      case RIDES_PHOTO_RESET:
+        return this.ridePhotoReset(payload, now);
       case ROUTE_PUBLICATION_DECIDED:
         return this.routePublication(payload);
       case TICKETS_REMINDER_DUE:
@@ -540,6 +544,27 @@ export class NotificationIntake {
         // скрытый модерацией райд авторам не виден — без перехода («Не найдено» не показываем)
         target: ride.status === 'hidden' ? null : { type: 'ride', rideId: ride.id },
         recipients: reporters,
+      },
+    ];
+  }
+
+  /**
+   * Фото райда удалено модератором (ride-photo-followups R10) — организатору, любой статус райда (скрытый организатору
+   * виден, цель работает). Призыв загрузить другое — только если загрузка ещё возможна (`published`, старт впереди).
+   * Повторный сброс заменяет непрочитанное (N7): `seq` — `noticeSeq` райда после записи сброса.
+   */
+  private async ridePhotoReset(payload: unknown, now: Date): Promise<NoticeDraft[] | IntakeSkip> {
+    const event = RidesPhotoReset.safeParse(payload);
+    if (!event.success) return 'invalid_payload';
+    const ride = await this.rides.ride(event.data.rideId);
+    if (!ride) return 'gone';
+    const canReplace = ride.status === 'published' && ride.startsAt.getTime() > now.getTime();
+    return [
+      {
+        text: { kind: 'ride_photo_reset', ride: ride.title, canReplace },
+        target: { type: 'ride', rideId: ride.id },
+        collapse: { key: `ride:${ride.id}:photo-reset`, seq: event.data.seq },
+        recipients: [ride.organizerUserId],
       },
     ];
   }
