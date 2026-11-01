@@ -192,13 +192,14 @@ paths:
 - «Споры» (race-results-06) — `features/disputes/*`, маршруты `/disputes` (`?status=`, `?raceId=` — в URL) и
   `/disputes/$disputeId` под `RequirePermission permission="disputes.read"`; пункт навигации — группа `main` после
   «Гонок». Список: `ChipGroup` статуса (по умолчанию «На рассмотрении»), фильтр гонки — текст «Гонка: {название}» и
-  «Все гонки» (выбора гонки нет), курсор. Разбор: категория в заголовке, статус справа; результат, заявление
+  «Все гонки» (выбора гонки нет), курсор. Цель и заявитель — `riderLabel(entryId, riderName)` из `results-format`
+  (имя — только с согласием, Q2 profile.md). Разбор: категория в заголовке, статус справа; результат, заявление
   («Скрыт от участника»), ответ, история — только с сервера. `DecisionPanel` (`disputes.decide`) — форма на
   `useState` (исход, шаблон из карты исхода — обязателен, заметка), кнопка `aria-disabled` + `DisabledReason` по
   `decideBlockedBy` (D-25 — с датой `availableAt`), подтверждение — `Dialog`; `ReasonDialog` не используется. После
   решения — инвалидация `['admin','disputes']`, ключа гонки и журнала. Чек-лист «Результатов»: строка
   `open_disputes` — ссылка «Открыть споры» (`/disputes?raceId=`) при `count > 0` и `disputes.read`;
-  `RecalculationsList` — запись `dispute:<id>` ссылкой на спор; `RaceEditor` — причина `disputes_open` (D-19).
+  `RecalculationsList` — запись `dispute:<id>` ссылкой на спор, участник — `riderLabel(entryId, riderName)`; `RaceEditor` — причина `disputes_open` (D-19).
 - «Оформление приложения» (app-themes D1; user-theme — только декор) — `features/appearance/*`, маршрут
   `/appearance` под `RequirePermission permission="appearance.manage"`, пункт навигации — группа `bottom` в конце.
   Выбора тем нет: тему каждый райдер выбирает сам в приложении (ADR-0021). Сезонный декор (halloween-decor) — блок

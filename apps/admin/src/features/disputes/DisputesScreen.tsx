@@ -9,10 +9,10 @@ import { formatDateTimeLong } from '../../format';
 import { isForbidden } from '../../session/errors';
 import { Button, DataTable, EmptyState, PageHeader, StatusTag, ToggleChip } from '../../ui';
 import { NoAccessScreen } from '../no-access/NoAccessScreen';
+import { riderLabel } from '../results/results-format';
 import {
   ALL_STATUSES,
   DISPUTE_STATUS_TONE,
-  disputeRiderLabel,
   type DisputesSearch,
   type DisputesStatusFilter,
 } from './disputes-format';
@@ -38,7 +38,7 @@ const columns = [
     header: t('admin.disputes.column.target'),
     cell: (info) => (
       <Link className="link" to="/disputes/$disputeId" params={{ disputeId: info.row.original.id }}>
-        {disputeRiderLabel(info.getValue())}
+        {riderLabel(info.getValue(), info.row.original.targetRiderName)}
       </Link>
     ),
     enableSorting: false,

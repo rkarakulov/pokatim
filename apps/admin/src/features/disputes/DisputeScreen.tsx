@@ -12,10 +12,10 @@ import { EmptyState, ErrorState, PageHeader, ReadonlyField, StatusTag } from '..
 import { NoAccessScreen } from '../no-access/NoAccessScreen';
 import { raceItemKey } from '../results/results-query';
 import { FlagList } from '../results/FlagList';
-import { placeLabel, RESULT_TONE } from '../results/results-format';
+import { placeLabel, RESULT_TONE, riderLabel } from '../results/results-format';
 import { DecisionPanel } from './DecisionPanel';
 import { DisputeSeries } from './DisputeSeries';
-import { DISPUTE_STATUS_TONE, disputeRiderLabel } from './disputes-format';
+import { DISPUTE_STATUS_TONE } from './disputes-format';
 import { DISPUTES_QUERY_KEY, disputeQuery } from './disputes-query';
 
 const SKELETON_FIELDS = 8;
@@ -43,7 +43,7 @@ function Review({ dispute }: { dispute: PanelDispute }) {
       <Section title={t('admin.disputes.result.title')}>
         <ReadonlyField
           label={t('admin.disputes.column.target')}
-          value={disputeRiderLabel(target.entryId)}
+          value={riderLabel(target.entryId, target.riderName)}
         />
         <ReadonlyField
           label={t('admin.disputes.result.place')}
@@ -78,7 +78,7 @@ function Review({ dispute }: { dispute: PanelDispute }) {
       <Section title={t('admin.disputes.claim.title')}>
         <ReadonlyField
           label={t('admin.disputes.claim.complainant')}
-          value={disputeRiderLabel(dispute.complainant.entryId)}
+          value={riderLabel(dispute.complainant.entryId, dispute.complainant.riderName)}
           help={t('admin.disputes.claim.hidden')}
         />
         <ReadonlyField

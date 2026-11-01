@@ -38,7 +38,7 @@ function recalculationColumns(canReadDisputes: boolean) {
       header: t('admin.results.recalc.column.rider'),
       cell: (info) => {
         const entryId = info.getValue();
-        return entryId ? riderLabel(entryId) : '—';
+        return entryId ? riderLabel(entryId, info.row.original.riderName) : '—';
       },
       enableSorting: false,
     }),

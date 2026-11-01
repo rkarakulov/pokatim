@@ -31,6 +31,9 @@ const api = {
   CORS_ORIGINS: '',
   // ссылки писем панели (приглашение, ADR-0026) — на `vite preview` смоука под `/admin/`
   PANEL_LINK_BASE: PANEL_URL,
+  // 2FA панели (ADR-0024, сценарий totp.spec.ts): фиктивный несекретный ключ смоука (hex 64). `PANEL_TOTP_ENFORCED` не
+  // задан — без подключённой 2FA вход прочих сценариев прежний (вызов кода — только у сотрудника с активной 2FA)
+  PANEL_TOTP_KEY: 'e2e0'.repeat(16),
 };
 
 /** Окружение процесса API — для CLI `grant-admin` из теста. */

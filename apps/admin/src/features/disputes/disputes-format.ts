@@ -40,10 +40,6 @@ export const DISPUTE_STATUS_TONE: Record<DisputeStatus, 'success' | 'neutral' | 
   rejected: 'success',
 };
 
-/** «Участник ·a1b2c3» — имён в панели нет (A12), короткий id заявки. */
-export const disputeRiderLabel = (entryId: string) =>
-  t('admin.disputes.rider', { id: entryId.slice(-6) });
-
 /** Почему решение недоступно (`decideBlockedBy`; `too_early` — с моментом D-25). */
 export function decideBlockText(block: DisputeDecideBlock, availableAt: string): string {
   return t(`admin.disputes.decideBlock.${block}`, { date: formatDateTimeLong(availableAt) });

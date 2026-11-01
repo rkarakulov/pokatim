@@ -1917,7 +1917,6 @@ export const ru = {
   'admin.disputes.column.status': 'Статус',
   'admin.disputes.responded.yes': 'Есть',
   'admin.disputes.responded.no': 'Нет',
-  'admin.disputes.rider': 'Участник ·{id}',
   'admin.disputes.empty': 'Споров нет',
   'admin.disputes.notFound': 'Спор не найден',
   'admin.disputes.crumbs': 'Споры › {race}',
