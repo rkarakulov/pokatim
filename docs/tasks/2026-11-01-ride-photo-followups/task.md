@@ -556,3 +556,11 @@ ModerationRidePhotoQuery = z.strictObject({ photoId: RidePhotoId })
 
 **NOT VERIFIED:** визуальная проверка шапки с фото на iOS/Android/web (и SSR-HTML в браузере) и карточки панели —
 симулятор и превью не запускались; e2e — не нужен (§9).
+
+**Фиксы ревью PR B** (`findings-b.md`, `findings-b-codex.md`; ветка слита с develop — `07531566`): HIGH (Codex) — в
+серверном HTML не было фото героя (`expo-image` web вставляет `<img>` в эффекте): подтверждено тестом `renderToString`
+(`Received: undefined`), `a489b196` — `components/hero-photo(.web).tsx` (web — `<img alt="">` в SSR, ошибка до гидрации
+по `complete && naturalWidth === 0`; закрывает и героя ленты/Главной); отр. доказательства — без web-файла 3 failed, без
+проверки `complete` 1 failed. LOW — `6eeb8b99`, `ridePhotoUrl` убран из админского перечня `pokatim-contracts.md`.
+Полный `TURBO_CONCURRENCY=4 pnpm check` на `6eeb8b99` (те же env): `Tasks: 15 successful, 15 total` (13 из кэша turbo);
+app — `Test Suites 288 passed`, `Tests 2822 passed`; admin — `Tests 527 passed`; api — `Tests 2994 passed`; EXIT=0.
