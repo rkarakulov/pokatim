@@ -1178,7 +1178,10 @@ select.field__control option:disabled {
   aspect-ratio: 2 / 1;
 }
 
-.route-map__canvas,
+/* `.route-map .route-map__canvas` — специфичнее `.maplibregl-map { position: relative }` из CSS MapLibre: тот грузится
+   лениво (`loadMaplibre`) и встаёт в каскад позже — с одним классом контейнер холста становился relative с высотой 0
+   (серый квадрат без подложки и линии) */
+.route-map .route-map__canvas,
 .route-map__label,
 .route-map__overlay,
 .route-map__hint,
@@ -1211,6 +1214,55 @@ select.field__control option:disabled {
   color: var(--color-text-primary);
   background: var(--color-surface-raised);
   border: var(--stroke-hairline) solid var(--color-border-subtle);
+}
+
+/* блок «карта + профиль» (admin-maps-desktop): на широком экране карта не выше доли окна, профиль низкий — оба в
+   одном экране, скраббинг по профилю виден на карте; узкое окно — прежние пропорции (карта 2:1, профиль 4:1) */
+@media (min-width: 900px) {
+  .route-view .route-map--page {
+    max-height: 55vh;
+  }
+
+  .route-view .elevation-profile__plot {
+    aspect-ratio: 10 / 1;
+    max-height: 18vh;
+  }
+}
+
+/* «На весь экран» (Fullscreen API разворачивает весь блок): карта — остаток высоты, профиль — компактно снизу */
+.route-view--fullscreen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-s4);
+  box-sizing: border-box;
+  height: 100%;
+  padding: var(--space-s4);
+  overflow: auto;
+  background: var(--color-surface-default);
+}
+
+.route-view--fullscreen > .section {
+  margin-top: 0;
+}
+
+.route-view--fullscreen .route-view__map {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.route-view--fullscreen .route-map--page {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  aspect-ratio: auto;
+}
+
+.route-view--fullscreen .elevation-profile__plot {
+  height: 15vh;
+  max-height: none;
+  aspect-ratio: auto;
 }
 
 /* маркер скраббинга: область касания touch-min, точка — icon с обводкой фона карты; позиция — transform (данные) */

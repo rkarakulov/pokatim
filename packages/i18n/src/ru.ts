@@ -151,6 +151,9 @@ export const ru = {
   'maps.controls.zoomIn': 'Приблизить',
   'maps.controls.zoomOut': 'Отдалить',
   'maps.controls.fit': 'Показать маршрут целиком',
+  // admin-maps-desktop: блок «карта + профиль» панели на весь экран (Fullscreen API) [ASSUMPTION copy]
+  'maps.controls.fullscreen': 'На весь экран',
+  'maps.controls.exitFullscreen': 'Свернуть карту',
   // routes-04d: «Моё местоположение» — одно чтение позиции по нажатию; отказ и ошибка — сообщение над картой
   'maps.controls.locate': 'Моё местоположение',
   // кнопка «i» атрибуции карты (OSM, тайлы) — свой значок вместо кнопки MapLibre [ASSUMPTION copy]
