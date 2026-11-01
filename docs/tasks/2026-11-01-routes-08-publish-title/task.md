@@ -35,6 +35,14 @@ routes-01 RC-14 оставил v1: название каталога = назв�
 - **T4 Видимость.** Публичный каталог кэшируется до 60 с (RC-13 routes-01) — новое название видно в течение минуты.
   Имя файла экспорта — название маршрута, меняется вместе с ним. Уведомлений о публикации маршрута команды нет.
 
+## 5.1 Placement & Reuse Gate
+
+- API: `RoutesCatalogAdminService.publish` (та же транзакция и журнал), `RoutesRepository.setCatalog` (тот же
+  `updateOne` с условием `ready` + `origin: 'platform'`). Новых эндпоинтов, коллекций, миграций, очередей нет.
+- Контракт: `RouteTitle` (как загрузка и «Переименовать» райдера) — без новой схемы.
+- Панель: `RouteCatalogDialog` + `TextField` из `ui`; подпись — существующий `admin.routes.field.title`; журнал —
+  префикс `admin.riderRoutes.field.` (+ `title`).
+
 ## 8. Acceptance Criteria
 
 1. `POST /v1/admin/routes/:id/publish` с `title` у неопубликованного → 200, `title` в `PanelRoute`, в каталоге; журнал
@@ -44,6 +52,12 @@ routes-01 RC-14 оставил v1: название каталога = назв�
 3. Без `title` — поведение прежнее; невалидное (`'ab'`, перевод строки, > 120) → 400 с полем `title`.
 4. Панель: поле предзаполнено, отправляется с городом и покрытием; ошибка сервера `title` — под полем.
 
+## 8.3 Security
+
+- Авторизация не менялась: `races.manage`, видимость `visible()` (только `origin: 'platform'`).
+- `title` — строка после zod (trim, одна строка, ≤ 120) — в `$set` как значение, без операторов.
+- Журнал — только имена полей, без значений; в логах названия нет.
+
 ## 9. Test matrix
 
 | Что | Где |
@@ -51,3 +65,15 @@ routes-01 RC-14 оставил v1: название каталога = назв�
 | схема `title` (необязателен, trim, длины, одна строка) | `packages/contracts/src/routes/route.schema.test.ts` |
 | AC1–AC3, откат транзакции | `apps/api/src/modules/routes/routes-catalog-admin.int.test.ts` |
 | AC4 | `apps/admin/src/features/routes/RouteCatalogDialog.test.tsx` (новый) или существующие тесты окна |
+
+## 10. Documentation Impact
+
+- `docs/product/routes.md` — публикация с названием, «Что не входит» без RC-14 (скраббинг остаётся).
+- `docs/product/admin-panel.md` — без правок (окно публикации описано в `routes.md`).
+
+## 12. Outcome
+
+- Ревью pass 1: Claude independent-reviewer — APPROVE (MEDIUM: разделы task.md; 2 LOW — исправлено), Codex —
+  APPROVE без находок.
+- Скраббинг в компактной карте панели — не сделан: нужно продуктовое решение (у компактной карты нет профиля, A1
+  routes-05; скраббинга с карты в панели нет).

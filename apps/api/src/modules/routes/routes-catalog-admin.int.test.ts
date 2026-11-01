@@ -300,6 +300,11 @@ describe('отказы (AC1)', () => {
       const res = await publish(org.token, id, body);
       expect(res.status, JSON.stringify(body)).toBe(400);
       expect(res.body).toMatchObject({ code: 'VALIDATION_FAILED' });
+      if ('title' in body) {
+        expect(res.body).toMatchObject({
+          details: { fields: [expect.objectContaining({ path: 'title' })] },
+        });
+      }
     }
 
     expect((await publish(mod.token, id, { city: 'minsk', surfaces: ['asphalt'] })).status).toBe(
