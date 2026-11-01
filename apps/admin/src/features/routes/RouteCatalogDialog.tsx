@@ -5,6 +5,7 @@ import {
   type PanelRoute,
   type PanelRouteSummary,
   PublishRouteInput,
+  RouteTitle,
   SURFACES,
 } from '@pokatim/contracts';
 import { t } from '@pokatim/i18n';
@@ -15,14 +16,18 @@ import { z } from 'zod';
 
 import { api } from '../../api';
 import { fieldErrorText, serverFieldErrors } from '../../field-errors';
-import { Banner, Button, ChipGroup, Dialog, SelectField } from '../../ui';
+import { Banner, Button, ChipGroup, Dialog, SelectField, TextField } from '../../ui';
 import { RoutePreview, type RouteOpenLink } from './RoutePreview';
 import { ROUTES_QUERY_KEY, routeQuery } from './routes-query';
 
-type Path = 'city' | 'surfaces';
+type Path = 'title' | 'city' | 'surfaces';
 
-/** Значения окна: город — строка выбора (`''` — не выбран → «Заполните поле.»), проверка — схема контракта. */
+/**
+ * Значения окна: название — всегда (routes-08, RC-14), город — строка выбора (`''` — не выбран → «Заполните поле.»),
+ * проверка — схема контракта.
+ */
 const CatalogFormSchema = z.object({
+  title: RouteTitle,
   city: z.string().pipe(PublishRouteInput.shape.city),
   surfaces: PublishRouteInput.shape.surfaces,
 });
@@ -57,8 +62,9 @@ function failureText(error: unknown): string {
 
 /**
  * Окно «Опубликовать в каталоге» / «Изменить» (routes-01, D2): превью линии и предупреждение, что линия, старт и
- * финиш станут публичными (RC-11); город старта — справочник, покрытие — чипы (мультивыбор). Название маршрута здесь не
- * меняется (RC-14). Ошибки схемы и сервера — под полями, 409 `ROUTE_INVALID_STATE` и прочее — баннер в окне.
+ * финиш станут публичными (RC-11); название (по умолчанию текущее, routes-08, RC-14); город старта — справочник,
+ * покрытие — чипы (мультивыбор). Ошибки схемы и сервера — под полями, 409 `ROUTE_INVALID_STATE` и прочее — баннер.
+ * Заголовок окна — название до правки.
  */
 export function RouteCatalogDialog({
   route,
@@ -75,7 +81,11 @@ export function RouteCatalogDialog({
   const editing = route.catalog !== null;
   const form = useForm<CatalogFormValues, unknown, PublishRouteInput>({
     resolver: zodResolver(CatalogFormSchema),
-    defaultValues: { city: route.catalog?.city ?? '', surfaces: route.catalog?.surfaces ?? [] },
+    defaultValues: {
+      title: route.title,
+      city: route.catalog?.city ?? '',
+      surfaces: route.catalog?.surfaces ?? [],
+    },
   });
   const publish = useMutation({
     mutationFn: (body: PublishRouteInput) => api.publishRoute(route.id, body),
@@ -120,6 +130,12 @@ export function RouteCatalogDialog({
       >
         <RoutePreview routeId={route.id} openLink={openLink} />
         <Banner tone="warning">{t('admin.routes.catalog.dialog.hint')}</Banner>
+        <TextField
+          label={t('admin.routes.field.title')}
+          autoComplete="off"
+          {...form.register('title')}
+          error={fieldErrorText(errors.title?.message)}
+        />
         <Controller
           control={form.control}
           name="city"

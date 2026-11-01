@@ -174,6 +174,7 @@ describe('«Маршруты» панели (routes-01)', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Опубликовать' }));
     await waitFor(() =>
       expect(mocked.publishRoute).toHaveBeenCalledWith(ROUTE_ID, {
+        title: 'Минское кольцо',
         city: 'minsk',
         surfaces: ['gravel'],
       }),
@@ -197,9 +198,43 @@ describe('«Маршруты» панели (routes-01)', () => {
     ).toBe('true');
     mocked.publishRoute.mockRejectedValue(httpError(409, 'ROUTE_INVALID_STATE'));
     fireEvent.click(within(dialog).getByRole('button', { name: 'Сохранить' }));
+    await waitFor(() =>
+      expect(mocked.publishRoute).toHaveBeenCalledWith(PUBLISHED_ID, {
+        title: 'Заславль',
+        city: 'minsk',
+        surfaces: ['asphalt', 'gravel'],
+      }),
+    );
     expect(
       await within(dialog).findByText('Маршрут ещё не готов — опубликовать можно только готовый'),
     ).toBeTruthy();
+  });
+
+  it('routes-08 (RC-14): название — поле с текущим, обрезка пробелов, пустое — «Заполните поле.»', async () => {
+    await renderApp('/routes');
+    const row = await rowOf('Заславль');
+    fireEvent.click(within(row).getByRole('button', { name: /Изменить/ }));
+    const dialog = await screen.findByRole('dialog', { name: '«Заславль» в каталоге' });
+    const title = within(dialog).getByLabelText(/^Название маршрута/) as HTMLInputElement;
+    expect(title.value).toBe('Заславль');
+
+    fireEvent.change(title, { target: { value: '  ' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Сохранить' }));
+    await waitFor(() => expect(title.getAttribute('aria-invalid')).toBe('true'));
+    expect(within(dialog).getByText('Заполните поле.')).toBeTruthy();
+    expect(mocked.publishRoute).not.toHaveBeenCalled();
+
+    fireEvent.change(title, { target: { value: '  Заславль — Минск ' } });
+    mocked.publishRoute.mockResolvedValue(route({ id: PUBLISHED_ID, title: 'Заславль — Минск' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Сохранить' }));
+    await waitFor(() =>
+      expect(mocked.publishRoute).toHaveBeenCalledWith(PUBLISHED_ID, {
+        title: 'Заславль — Минск',
+        city: 'minsk',
+        surfaces: ['asphalt', 'gravel'],
+      }),
+    );
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
   it('ошибки сервера — под полями', async () => {
@@ -208,11 +243,18 @@ describe('«Маршруты» панели (routes-01)', () => {
     fireEvent.click(within(row).getByRole('button', { name: /Изменить/ }));
     const dialog = await screen.findByRole('dialog', { name: '«Заславль» в каталоге' });
     mocked.publishRoute.mockRejectedValue(
-      httpError(400, 'VALIDATION_FAILED', { fields: [{ path: 'city', code: 'INVALID' }] }),
+      httpError(400, 'VALIDATION_FAILED', {
+        fields: [
+          { path: 'city', code: 'INVALID' },
+          { path: 'title', code: 'TOO_LONG' },
+        ],
+      }),
     );
     fireEvent.click(within(dialog).getByRole('button', { name: 'Сохранить' }));
     const city = within(dialog).getByLabelText(/^Город старта/);
     await waitFor(() => expect(city.getAttribute('aria-invalid')).toBe('true'));
+    const title = within(dialog).getByLabelText(/^Название маршрута/);
+    expect(title.getAttribute('aria-invalid')).toBe('true');
   });
 
   it('«Снять с публикации» — подтверждение → POST unpublish', async () => {
