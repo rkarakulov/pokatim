@@ -1,5 +1,5 @@
 import type { Job } from 'bullmq';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { daysAgo } from '../../../test/achievements';
 import { createHarness, type Harness } from '../../../test/harness';
@@ -14,6 +14,7 @@ import {
   RouteRidesMaintenanceProcessor,
 } from './route-rides-maintenance.processor';
 import { ROUTE_RIDE_ORPHANS_POLICY } from './route-rides.policy';
+import type { RouteRidesRepository } from './route-rides.repository';
 
 /**
  * Уборщик сирот (route-rides-08): `RouteRidesMaintenanceProcessor` напрямую на worker стенда; заезды — прямой вставкой
@@ -30,6 +31,7 @@ const policy = ROUTE_RIDE_ORPHANS_POLICY as { batchSize: number; maxBatches: num
 const defaults = { ...policy };
 afterEach(() => {
   Object.assign(policy, defaults);
+  vi.restoreAllMocks();
 });
 afterAll(async () => {
   await h.close();
@@ -127,5 +129,66 @@ describe('уборщик сирот route-rides (route-rides-08)', () => {
         .map((ride) => ride.rideId)
         .sort(),
     );
+  });
+  it('сбой посреди прогона — курсор последней полной пачки в Redis, следующий прогон продолжает с неё (ревью #200)', async () => {
+    const me = await rider(h);
+    const routeId = await catalogCorridorRoute(h, TEAM);
+    const rides = [];
+    for (let i = 0; i < 5; i += 1) {
+      rides.push(await seedRouteRide(h, me.userId, routeId, 900 + i, daysAgo(h, 5 - i)));
+    }
+    rides.sort((a, b) => a.rideId.localeCompare(b.rideId));
+    await tracks(h).activities.deleteMany({
+      _id: { $in: [rides[0]!.activityId, rides[4]!.activityId] },
+    });
+    Object.assign(policy, { batchSize: 2, maxBatches: 10 });
+    // первая пачка проходит, вторая — сбой Mongo
+    const repository = (sweeper() as unknown as { repository: RouteRidesRepository }).repository;
+    const scanRefs = repository.scanRefs.bind(repository);
+    let calls = 0;
+    const scan = vi.spyOn(repository, 'scanRefs').mockImplementation(async (after, limit) => {
+      calls += 1;
+      if (calls === 2) throw new Error('mongo down');
+      return scanRefs(after, limit);
+    });
+    await expect(sweeper().sweep()).rejects.toThrow('mongo down');
+    expect(await h.redis.get(ROUTE_RIDES_ORPHANS_CURSOR_KEY)).toBe(rides[1]!.rideId);
+    scan.mockRestore();
+
+    expect(await sweeper().sweep()).toEqual({
+      scanned: 3,
+      deletedActivity: 1,
+      deletedRoute: 0,
+      batches: 2,
+      more: false,
+    });
+    expect(await h.redis.get(ROUTE_RIDES_ORPHANS_CURSOR_KEY)).toBeNull();
+    expect(await remaining()).toEqual(
+      rides
+        .slice(1, 4)
+        .map((ride) => ride.rideId)
+        .sort(),
+    );
+  });
+
+  it('скрытый модератором маршрут райдера — заезды остаются; удалена основная активность при живом дубле — заезд основной удалён, заезд дубля остаётся (ревью #200)', async () => {
+    const me = await rider(h);
+    const own = await ownCorridorRoute(h, me.userId);
+    const catalog = await catalogCorridorRoute(h, TEAM);
+    const onHidden = await seedRouteRide(h, me.userId, own, 900, daysAgo(h, 5));
+    await routesDb(h).routes.updateOne(
+      { _id: own },
+      { $set: { catalog: null, publication: { status: 'hidden' } as never } },
+    );
+    const primary = await seedRouteRide(h, me.userId, catalog, 1000, daysAgo(h, 4));
+    const duplicate = await seedRouteRide(h, me.userId, catalog, 1100, daysAgo(h, 3));
+    await tracks(h).activities.updateOne(
+      { _id: duplicate.activityId },
+      { $set: { duplicateOf: primary.activityId } },
+    );
+    await tracks(h).activities.deleteOne({ _id: primary.activityId });
+
+    expect(await sweeper().sweep()).toMatchObject({ deletedActivity: 1, deletedRoute: 0 });
+    expect(await remaining()).toEqual([onHidden.rideId, duplicate.rideId].sort());
   });
 });

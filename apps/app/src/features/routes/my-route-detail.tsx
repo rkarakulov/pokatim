@@ -65,10 +65,34 @@ export const MY_ROUTES_HREF = '/routes?view=mine';
 
 const documentTitle = (title: string) => `${title} — ${t('app.name')}`;
 
-/** «Переименовать»: встроенная форма с ошибкой под полем (та же схема, что у сервера). */
-function RenameForm({ route, onDone }: { route: MyRoute; onDone: () => void }) {
+/**
+ * Правка карточки — у экрана, общая для раскладки без карты и шторки (ревью #198): опрос «Обрабатывается → готов»
+ * меняет раскладку, а черновик названия и открытое подтверждение удаления остаются. `draft` — `null`, пока не
+ * переименовываем.
+ */
+interface MyRouteEdit {
+  draft: string | null;
+  confirmingDelete: boolean;
+}
+type EditProps = { edit: MyRouteEdit; onEdit: (next: MyRouteEdit) => void };
+
+/** Форма открыта, только если название можно менять (routes-06, A3: заморожено — подпись вместо формы). */
+const isRenaming = (route: MyRoute, edit: MyRouteEdit) =>
+  edit.draft !== null && !myRouteRenameFrozen(route);
+
+/** «Переименовать»: встроенная форма с ошибкой под полем (та же схема, что у сервера); черновик — у экрана. */
+function RenameForm({
+  route,
+  title,
+  onTitleChange,
+  onDone,
+}: {
+  route: MyRoute;
+  title: string;
+  onTitleChange: (title: string) => void;
+  onDone: () => void;
+}) {
   const rename = useRenameMyRoute(route.id);
-  const [title, setTitle] = useState(route.title);
   const [error, setError] = useState<string | undefined>();
   const save = () => {
     const invalid = routeTitleError(title);
@@ -81,7 +105,7 @@ function RenameForm({ route, onDone }: { route: MyRoute; onDone: () => void }) {
       <TextField
         label={t('routes.mine.title')}
         value={title}
-        onChangeText={setTitle}
+        onChangeText={onTitleChange}
         error={error}
         autoCapitalize="sentences"
       />
@@ -117,18 +141,25 @@ function RenameForm({ route, onDone }: { route: MyRoute; onDone: () => void }) {
  * «Удалить» с подтверждением (как `UploadRow`): после успеха — «Мои маршруты» (`dismissTo`: вкладка уже в стеке —
  * снять экраны над ней, нет (ссылка) — заменить; `replace` положил бы второй экземпляр вкладок).
  */
-function DeleteAction({ route }: { route: MyRoute }) {
+function DeleteAction({
+  route,
+  confirming,
+  onConfirmingChange,
+}: {
+  route: MyRoute;
+  confirming: boolean;
+  onConfirmingChange: (confirming: boolean) => void;
+}) {
   const theme = useTheme();
   const router = useRouter();
   const remove = useDeleteMyRoute(route.id);
-  const [confirming, setConfirming] = useState(false);
   if (!confirming) {
     return (
       <View style={styles.action}>
         <TextAction
           label={t('routes.mine.detail.delete')}
           destructive
-          onPress={() => setConfirming(true)}
+          onPress={() => onConfirmingChange(true)}
         />
       </View>
     );
@@ -160,7 +191,7 @@ function DeleteAction({ route }: { route: MyRoute }) {
         <TextAction
           label={t('routes.mine.detail.deleteCancel')}
           onPress={() => {
-            setConfirming(false);
+            onConfirmingChange(false);
             remove.reset();
           }}
           disabled={remove.isPending}
@@ -193,13 +224,45 @@ function RenameAction({ route, onRename }: { route: MyRoute; onRename: () => voi
   );
 }
 
+/** «Переименовать» (форма, подпись «заморожено» или действие) и «Удалить» — обе раскладки. */
+function EditActions({ route, edit, onEdit }: { route: MyRoute } & EditProps) {
+  return (
+    <>
+      {isRenaming(route, edit) ? (
+        <RenameForm
+          route={route}
+          title={edit.draft ?? route.title}
+          onTitleChange={(draft) => onEdit({ ...edit, draft })}
+          onDone={() => onEdit({ ...edit, draft: null })}
+        />
+      ) : (
+        <RenameAction route={route} onRename={() => onEdit({ ...edit, draft: route.title })} />
+      )}
+      <DeleteAction
+        route={route}
+        confirming={edit.confirmingDelete}
+        onConfirmingChange={(confirmingDelete) => onEdit({ ...edit, confirmingDelete })}
+      />
+    </>
+  );
+}
+
 /**
  * Свой маршрут без карты (M4): «Обрабатывается», отказ или незнакомый статус — подпись «Мой маршрут», название,
  * статус, «Загружен», заявка в каталог, «Переименовать», «Удалить». Без «Поделиться» и OG (M3).
  */
-function MyRouteView({ route }: { route: MyRoute }) {
+function MyRouteView({
+  route,
+  rides,
+  now,
+  edit,
+  onEdit,
+}: {
+  route: MyRoute;
+  rides: ReturnType<typeof useRouteRides>;
+  now: Date;
+} & EditProps) {
   const theme = useTheme();
-  const [renaming, setRenaming] = useState(false);
   const status = myRouteStatus(route);
   return (
     <View style={styles.detail}>
@@ -213,13 +276,12 @@ function MyRouteView({ route }: { route: MyRoute }) {
         </View>
       ) : null}
       <DetailRow label={t('routes.mine.detail.uploadedAt')}>{myRouteUploadedAt(route)}</DetailRow>
+      {/* готовый без длины (старый API) — без карты, но «Мои заезды» есть, как до routes-07 */}
+      {route.status === 'ready' ? (
+        <RouteRidesBlock routeId={route.id} mine rides={rides} now={now} />
+      ) : null}
       <MyRoutePublication route={route} />
-      {renaming ? (
-        <RenameForm route={route} onDone={() => setRenaming(false)} />
-      ) : (
-        <RenameAction route={route} onRename={() => setRenaming(true)} />
-      )}
-      <DeleteAction route={route} />
+      <EditActions route={route} edit={edit} onEdit={onEdit} />
     </View>
   );
 }
@@ -249,23 +311,29 @@ function MyRouteSheetBody({
   route,
   rides,
   now,
-  renaming,
-  onRenamingChange,
+  edit,
+  onEdit,
 }: {
   route: MyRoute;
   rides: ReturnType<typeof useRouteRides>;
   now: Date;
-  renaming: boolean;
-  onRenamingChange: (renaming: boolean) => void;
-}) {
-  if (renaming) return <RenameForm route={route} onDone={() => onRenamingChange(false)} />;
+} & EditProps) {
+  if (isRenaming(route, edit)) {
+    return (
+      <RenameForm
+        route={route}
+        title={edit.draft ?? route.title}
+        onTitleChange={(draft) => onEdit({ ...edit, draft })}
+        onDone={() => onEdit({ ...edit, draft: null })}
+      />
+    );
+  }
   return (
     <View style={styles.detail}>
       <DetailRow label={t('routes.mine.detail.uploadedAt')}>{myRouteUploadedAt(route)}</DetailRow>
       <RouteRidesBlock routeId={route.id} mine rides={rides} now={now} />
       <MyRoutePublication route={route} />
-      <RenameAction route={route} onRename={() => onRenamingChange(true)} />
-      <DeleteAction route={route} />
+      <EditActions route={route} edit={edit} onEdit={onEdit} />
     </View>
   );
 }
@@ -282,16 +350,17 @@ function MyRouteSheet({
   rides,
   now,
   refresh,
+  edit,
+  onEdit,
 }: {
   route: MyRoute & { distanceM: number };
   query: ReturnType<typeof useMyRoute>;
   rides: ReturnType<typeof useRouteRides>;
   now: Date;
   refresh: ScrollViewProps['refreshControl'];
-}) {
+} & EditProps) {
   const [expanded, setExpanded] = useState(true);
   const [sheetHeight, setSheetHeight] = useState<number | undefined>(undefined);
-  const [renaming, setRenaming] = useState(false);
   return (
     <KeyboardAvoidingArea testID="my-route-keyboard-area" style={styles.keyboard}>
       {/* отступ клавиатуры уменьшает эту область: шторка (`absolute`, `bottom: 0`) поднимается с её низом —
@@ -329,8 +398,8 @@ function MyRouteSheet({
                   route={data}
                   rides={rides}
                   now={now}
-                  renaming={renaming}
-                  onRenamingChange={setRenaming}
+                  edit={edit}
+                  onEdit={onEdit}
                 />
               )}
             </AsyncContent>
@@ -393,6 +462,7 @@ export function MyRouteDetailScreen({ id }: { id: string }) {
     [route.refetch, queryClient, id, ready, rides.refetch],
   );
   const { refreshing, onRefresh } = usePullToRefresh(refetchers);
+  const [edit, setEdit] = useState<MyRouteEdit>({ draft: null, confirmingDelete: false });
   // 404 и при показанных данных (удалён на другом устройстве): «Маршрут недоступен», кеш карты — прочь
   const gone = apiErrorOf(route.error)?.code === 'NOT_FOUND';
   const notFound = !valid || gone;
@@ -432,7 +502,15 @@ export function MyRouteDetailScreen({ id }: { id: string }) {
           />
         </StateScroll>
       ) : route.data !== undefined && isMapped(route.data) ? (
-        <MyRouteSheet route={route.data} query={route} rides={rides} now={now} refresh={refresh} />
+        <MyRouteSheet
+          route={route.data}
+          query={route}
+          rides={rides}
+          now={now}
+          refresh={refresh}
+          edit={edit}
+          onEdit={setEdit}
+        />
       ) : (
         <StateScroll refresh={refresh}>
           <AsyncContent
@@ -444,7 +522,9 @@ export function MyRouteDetailScreen({ id }: { id: string }) {
               </View>
             }
           >
-            {(data) => <MyRouteView route={data} />}
+            {(data) => (
+              <MyRouteView route={data} rides={rides} now={now} edit={edit} onEdit={setEdit} />
+            )}
           </AsyncContent>
         </StateScroll>
       )}

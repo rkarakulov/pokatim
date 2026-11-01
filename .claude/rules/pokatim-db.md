@@ -470,7 +470,9 @@ paths:
   (стирание: `RouteRideErasure` удаляет планы и заезды по `userId`). Удаление своего заезда (route-rides-07,
   `deleteOwn`) в той же транзакции снимает маршрут из планов райдера (`$pull routeIds` по индексу `userId`) — повтор
   события не воскрешает автозаезд; автозаезд по плану вставляется транзакцией с `markPlannedInsert` (условная запись в
-  тот же документ плана — конфликт записи сериализует вставку с удалением).
+  тот же документ плана — конфликт записи сериализует вставку с удалением). Принятый риск: ручной заезд, удалённый до
+  первого `saveAutoPlan` события его активности (очередь отстаёт, ретрай до записи плана), может вернуться автозаездом —
+  `$pull` снимать ещё нечего; окно узкое, метку удаления не вводим.
 - Сироты (RC-1, RC-8): удалённая активность и недоступный маршрут — заезды не видны (фильтр на чтении по
   `ActivitySource.liveActivities` и `RouteRideRoutes`). Заезды удалённой активности удаляет `RouteRidesIntakeProcessor`
   по `tracks.activity-removed` (fan-out, очередь `route-rides-intake`, `deleteOfActivity`); фильтр и удаление сирот в
@@ -479,7 +481,8 @@ paths:
   `route-rides-maintenance`, раз в сутки и при старте worker): скан `_id` пачками по 500 (`scanRefs`, без индекса —
   `_id_`), сирота — активности нет (`ActivitySource.liveActivityIds`) или маршрута нет в `routes` вовсе
   (`RouteRideRoutes.existingIds`; снятый и скрытый — не сироты); удаление `deleteRefs` с условием ссылки, ≤ 200 пачек за
-  прогон, курсор хвоста — Redis `route-rides:orphans:cursor` (7 сут). Не append-only.
+  прогон, курсор — Redis `route-rides:orphans:cursor` (7 сут) после каждой полной пачки (хвост и сбой посреди прогона
+  продолжаются с него; конец скана — снят). Не append-only.
 - Таблица «Другие» (route-rides-04, миграция `0049_route_rides_leaderboard_idx` — номер после `0048_race_entry_numbers`, expand-only, без бэкфилла):
   частичный `route_rides_leaderboard_idx { routeId, 'segment.elapsedSec', 'activity.startedAt', _id }` по `status:
   'passed'` — агрегат `leaderboardTop` (`$match` → `$group` с `$topN` 3 → `$sort` по лучшему → `$limit` 5000, `hint`

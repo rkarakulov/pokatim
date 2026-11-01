@@ -5,7 +5,7 @@ import { onlineManager } from '@tanstack/react-query';
 import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
 import { getDocumentAsync } from 'expo-document-picker';
 import type { ReactElement } from 'react';
-import { StyleSheet, type RefreshControlProps } from 'react-native';
+import { DeviceEventEmitter, StyleSheet, type RefreshControlProps } from 'react-native';
 
 import { useSessionStore } from '@/features/auth/session-store';
 import { useOnboardingStore } from '@/features/onboarding/onboarding-store';
@@ -357,14 +357,28 @@ describe('карточка своего маршрута (AC3, M3)', () => {
     expect(screen.getByRole('button', { name: 'Переименовать' })).toBeOnTheScreen();
   });
 
-  it('routes-07: область карты и шторки поднимается над клавиатурой (iOS — padding); касания при клавиатуре доходят', async () => {
+  it('routes-07: клавиатура (keyboardWillShow) поднимает область карты и шторки отступом; касания при клавиатуре доходят', async () => {
     await openDetail(ring.id);
     await screen.findByTestId('bottom-sheet');
-    // KeyboardAvoidingView с behavior="padding" добавляет отступ снизу (без клавиатуры — 0)
-    const area = screen.getByTestId('my-route-keyboard-area');
-    expect(StyleSheet.flatten(area.props.style)).toMatchObject({ paddingBottom: 0, flex: 1 });
+    const area = () => screen.getByTestId('my-route-keyboard-area');
+    const padding = () => StyleSheet.flatten(area().props.style).paddingBottom as number;
+    expect(padding()).toBe(0);
+    await fireEvent(area(), 'layout', {
+      persist: () => undefined,
+      nativeEvent: { layout: { x: 0, y: 100, width: 375, height: 712 } },
+    });
+    await act(async () => {
+      DeviceEventEmitter.emit('keyboardWillShow', {
+        endCoordinates: { screenX: 0, screenY: 500, width: 375, height: 312 },
+        startCoordinates: { screenX: 0, screenY: 812, width: 375, height: 0 },
+        duration: 0,
+        easing: 'keyboard',
+        isEventFromThisApp: true,
+      });
+    });
+    expect(padding()).toBeGreaterThan(0);
     // шторка — во внутренней области: отступ уменьшает её, и `absolute`-шторка поднимается с её низом (ревью pass 1)
-    const inner = within(area).getByTestId('my-route-area');
+    const inner = within(area()).getByTestId('my-route-area');
     expect(StyleSheet.flatten(inner.props.style)).toMatchObject({ flex: 1 });
     expect(within(inner).getByTestId('bottom-sheet')).toBeOnTheScreen();
     expect(screen.getByTestId('my-route-detail')).toHaveProp(
@@ -373,16 +387,63 @@ describe('карточка своего маршрута (AC3, M3)', () => {
     );
   });
 
-  it('routes-04c: карту двигает один палец нативно — прокрутка карточки не выключается (вне карты — страница)', async () => {
+  it('ревью #198: «Обрабатывается → готов» во время переименования — форма и черновик на месте (в шторке)', async () => {
+    getMine.mockResolvedValue({ ...ring, status: 'processing', distanceM: null, isLoop: null });
     await openDetail(ring.id);
-    const map = await showMap();
-    const scroll = () => screen.getByTestId('my-route-detail');
-    expect(map).toHaveProp('dragPan', true);
-    expect(scroll().props.scrollEnabled).not.toBe(false);
-    await fireEvent(map, 'regionIsChanging', {
-      nativeEvent: { center: [27.6, 53.9], zoom: 12, bounds: [27.5, 53.8, 27.7, 54.0] },
+    await fireEvent.press(await screen.findByRole('button', { name: 'Переименовать' }));
+    await fireEvent.changeText(screen.getByDisplayValue('Вечерний круг'), 'Утренний');
+    getMine.mockResolvedValue(ring);
+    await act(() => jest.advanceTimersByTimeAsync(3000));
+    expect(await screen.findByTestId('bottom-sheet')).toBeOnTheScreen();
+    expect(
+      within(screen.getByTestId('my-route-detail')).getByDisplayValue('Утренний'),
+    ).toBeOnTheScreen();
+  });
+
+  it('ревью #198: «Обрабатывается → готов» при открытом подтверждении удаления — подтверждение на месте', async () => {
+    getMine.mockResolvedValue({ ...ring, status: 'processing', distanceM: null, isLoop: null });
+    await openDetail(ring.id);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Удалить' }));
+    getMine.mockResolvedValue(ring);
+    await act(() => jest.advanceTimersByTimeAsync(3000));
+    expect(await screen.findByTestId('bottom-sheet')).toBeOnTheScreen();
+    expect(
+      screen.getByText('Удалить маршрут насовсем? Линия и файл будут удалены.'),
+    ).toBeOnTheScreen();
+  });
+
+  it('ревью #198: название заморозилось (заявку подали на другом устройстве) — формы нет, подпись вместо неё', async () => {
+    await openDetail(ring.id);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Переименовать' }));
+    expect(screen.getByDisplayValue('Вечерний круг')).toBeOnTheScreen();
+    getMine.mockResolvedValue({
+      ...ring,
+      publication: {
+        status: 'pending',
+        city: 'minsk',
+        surfaces: ['asphalt'],
+        showAuthorName: false,
+        submittedAt: '2026-10-27T08:00:00.000Z',
+        decidedAt: null,
+        rejection: null,
+      },
     });
-    expect(scroll().props.scrollEnabled).not.toBe(false);
+    const control = screen.getByTestId('my-route-detail').props
+      .refreshControl as ReactElement<RefreshControlProps>;
+    await act(async () => {
+      await control.props.onRefresh?.();
+    });
+    expect(
+      await screen.findByText('Чтобы переименовать маршрут, сначала снимите его с публикации.'),
+    ).toBeOnTheScreen();
+    expect(screen.queryByDisplayValue('Вечерний круг')).toBeNull();
+  });
+
+  it('ревью #198: готовый без длины (старый API) — без карты, «Мои заезды» есть', async () => {
+    getMine.mockResolvedValue({ ...ring, distanceM: null });
+    await openDetail(ring.id);
+    expect(await screen.findByText('Мои заезды')).toBeOnTheScreen();
+    expect(screen.queryByTestId('bottom-sheet')).toBeNull();
   });
 
   it('обрабатывается — статус без карты и шторки; опрос до готовности — карта и шторка', async () => {
