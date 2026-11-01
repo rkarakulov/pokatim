@@ -66,6 +66,20 @@ const tokenKey = (hash: string) => `story-card:token:${hash}`;
 const pngKey = (token: string) => `story-card:png:${token}`;
 const pendingKey = (hash: string) => `story-card:pending:${hash}`;
 const failedKey = (hash: string) => `story-card:failed:${hash}`;
+const bindingKey = (token: string) => `story-card:ride:${token}`;
+
+/**
+ * Привязка картинки приглашения к райду и нарисованному фото (ride-photo-followups): отдача PNG проверяет её
+ * актуальность. `photoId` — фото на картинке (`night` с фото), иначе `null`.
+ */
+export interface InviteCardBinding {
+  rideId: string;
+  photoId: string | null;
+}
+const InviteCardBindingSchema = z.strictObject({
+  rideId: Uuid,
+  photoId: z.string().min(1).max(64).nullable(),
+});
 
 /**
  * Кэш карточек (сторис гонки, приглашение райда, достижение, маршрут каталога — ADR-0018; хэш входов включает вид карточки): PNG по капабилити-токену и ключ «хэш входов → токен» — Redis с TTL 24 ч, не
@@ -103,16 +117,41 @@ export class StoryCardCache {
     await this.redis.del(pendingKey(hash));
   }
 
-  /** PNG под новым токеном и ключ хэша — одной транзакцией (PNG первым), снять постановку и провал. */
-  async storeReady(hash: string, png: Buffer): Promise<string> {
+  /**
+   * PNG под новым токеном и ключ хэша — одной транзакцией (PNG первым), снять постановку и провал. Приглашение
+   * (`binding`) — в той же транзакции привязка токена с тем же TTL.
+   */
+  async storeReady(hash: string, png: Buffer, binding?: InviteCardBinding): Promise<string> {
     const token = randomBytes(16).toString('base64url');
-    await this.redis
-      .multi()
-      .set(pngKey(token), png, 'EX', STORY_CARD_POLICY.pngTtlSec)
+    const multi = this.redis.multi().set(pngKey(token), png, 'EX', STORY_CARD_POLICY.pngTtlSec);
+    if (binding) {
+      multi.set(bindingKey(token), JSON.stringify(binding), 'EX', STORY_CARD_POLICY.pngTtlSec);
+    }
+    await multi
       .set(tokenKey(hash), token, 'EX', STORY_CARD_POLICY.pngTtlSec)
       .del(pendingKey(hash), failedKey(hash))
       .exec();
     return token;
+  }
+
+  /**
+   * Привязка токена: нет — `null` (не приглашение или выдано до привязок); не разбирается — `'invalid'` (отказ).
+   * Токен уже проверен `png`.
+   */
+  async binding(token: string): Promise<InviteCardBinding | 'invalid' | null> {
+    const raw = await this.redis.get(bindingKey(token));
+    if (raw === null) return null;
+    try {
+      const parsed = InviteCardBindingSchema.safeParse(JSON.parse(raw));
+      return parsed.success ? parsed.data : 'invalid';
+    } catch {
+      return 'invalid';
+    }
+  }
+
+  /** Отозвать картинку: PNG и привязка; ключ хэша без PNG `readyToken` не отдаёт (перерендер). */
+  async revoke(token: string): Promise<void> {
+    await this.redis.del(pngKey(token), bindingKey(token));
   }
 
   async storeFailed(hash: string): Promise<void> {
