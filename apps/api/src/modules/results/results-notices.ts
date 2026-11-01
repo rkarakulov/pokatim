@@ -25,4 +25,8 @@ export class ResultsNoticesService implements ResultsNotices {
   entryUser(entryId: string): Promise<string | null> {
     return this.repository.entryUserId(entryId);
   }
+
+  entryRace(entryId: string): Promise<string | null> {
+    return this.repository.entryRaceId(entryId);
+  }
 }

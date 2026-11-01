@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { ReactionKind, ReactionTargetType } from '@pokatim/contracts';
 import { CLOCK, type Clock } from '@rkarakulov/api-kit/core';
-import { isDuplicateKey, uuidv7 } from '@rkarakulov/api-kit/mongo';
+import { isDuplicateKey, MongoOutboxWriter, uuidv7 } from '@rkarakulov/api-kit/mongo';
 
 import { MongoTransactions } from '../../db';
 import { PRODUCT_EVENTS, type ProductEventInput, type ProductEvents } from '../product-events';
@@ -11,6 +11,7 @@ import {
   REACTIONS_UNIQUE_INDEX,
   ReactionsRepository,
 } from './reactions.repository';
+import { SOCIAL_REACTION_CREATED, type SocialReactionCreated } from './social.events';
 import { socialBlocked } from './social.policy';
 
 /** Цель «Респекта» (K8), уже разрешённая вызывающим (порты `RESULTS_FOR_SOCIAL`, `ROUTES_FOR_SOCIAL` — P4, RC-5). */
@@ -43,6 +44,7 @@ export class SocialReactionsService {
     private readonly reactions: ReactionsRepository,
     private readonly attendance: AttendanceRepository,
     private readonly transactions: MongoTransactions,
+    private readonly outbox: MongoOutboxWriter,
     @Inject(PRODUCT_EVENTS) private readonly events: ProductEvents,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
@@ -130,15 +132,18 @@ export class SocialReactionsService {
   }
 
   /**
-   * Вставка с событием в одной транзакции; дубль уникального ключа — `false`. Единственная точка новых реакций
-   * (`thank`, `thankAll`, `setRespect(true)`, `toggleRespect`): уведомления P7 добавят запись outbox `social.*` сюда же,
-   * в эту транзакцию (RC-P4-14).
+   * Вставка с событием метрик и outbox `social.reaction-created` (уведомление K10, P7) в одной транзакции; дубль
+   * уникального ключа — `false`, без событий. Единственная точка новых реакций (`thank`, `thankAll`,
+   * `setRespect(true)`, `toggleRespect`, RC-P4-14).
    */
   private async insert(key: ReactionKey, event: ProductEventInput): Promise<boolean> {
     try {
       await this.transactions.run(async (tx) => {
-        await this.reactions.insert(tx, { _id: uuidv7(), ...key, createdAt: this.clock.now() });
+        const reactionId = uuidv7();
+        await this.reactions.insert(tx, { _id: reactionId, ...key, createdAt: this.clock.now() });
         await this.events.record(event, tx);
+        const payload: SocialReactionCreated = { reactionId };
+        await this.outbox.append(tx, { type: SOCIAL_REACTION_CREATED, payload });
       });
       return true;
     } catch (error) {

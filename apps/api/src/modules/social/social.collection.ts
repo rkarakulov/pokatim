@@ -36,6 +36,11 @@ export interface ConnectionDoc {
   removedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+  /**
+   * Последнее уведомление «Вас добавили в свои» по паре (K11, P7): не чаще раза в `manualRenotifyMs`. Нет поля —
+   * `null` (без миграции); `remove`, пересчёт явки и `EMPTY` его не трогают.
+   */
+  manualNoticeAt?: Date | null;
 }
 
 /** Запись явки райдера (одна на `userId`): явка — `declinedAt: null`; «Меня не было» ставит `declinedAt` (RC-3a). */

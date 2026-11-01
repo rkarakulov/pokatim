@@ -74,7 +74,11 @@ describe('POST rides/:id/join — источник (K12)', () => {
     const member = await rider(h, 'member@example.by');
     const ride = await createRide(h, org);
     const events = h.app.get<ProductEvents>(PRODUCT_EVENTS, { strict: false });
-    vi.spyOn(events, 'record').mockRejectedValueOnce(new Error('boom'));
+    // отказ — только `ride-joined`: `active-day` того же запроса (P7) пишется как обычно
+    const record = events.record.bind(events);
+    vi.spyOn(events, 'record').mockImplementation((event, session) =>
+      event.type === 'ride-joined' ? Promise.reject(new Error('boom')) : record(event, session),
+    );
     const warnings: string[] = [];
     vi.spyOn(Logger.prototype, 'warn').mockImplementation((message: unknown) => {
       warnings.push(String(message));

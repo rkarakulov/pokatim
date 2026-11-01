@@ -16,7 +16,7 @@
 - публичные `GET rides/:id` и `GET riders/:publicId` кэшируются (`max-age=60`) — данные, зависящие от зрителя, в них
   класть нельзя;
 - текст уведомления — снимок при приёме (ADR-0017), N12 запрещает чужие имена;
-- `identity` ни от кого, кроме `tokens`, не зависит.
+- `identity` ни от кого, кроме `tokens`, не зависит; с P7 — ещё лист `product-events` (активный день, п. 7, RC-14).
 
 ## Решение
 
@@ -59,6 +59,14 @@
    `GET|PUT routes/:id/respect` (`SocialRespectController`; `PUT { respected }` идемпотентен, получатель — из цели
    порта, не от клиента; `GET` без цели — нейтральное состояние `200`, `PUT` — `404`, своя цель — `409 self`).
    Лимиты — `social-thanks:<uid>` и `social-respect:<uid>` (60/ч, первой проверкой мутаций).
+   P7: `GET social/home` (`SocialHomeController`, лимит `social-home:<uid>` 60/мин) — до трёх строк секции Главной
+   (K7): «свои» — исходящие не убранные связи зрителя с публичным профилем (`listOf`, ≤ 500); райд — опубликованный,
+   старт в ближайшие 7 дн, участник «Иду» или организатор — «свой» **при взаимной связи** (как «Идёт» K6, RC-P7-1a;
+   порт `RIDES_FOR_SOCIAL.upcomingWithRiders`); результат — видимая строка протокола, опубликованного за 7 дн
+   (`RESULTS_FOR_SOCIAL.recentResults` на `publicTableMode`/`isPublicProtocolRow`/`protocolRevision`, разница с
+   видимой строкой зрителя той же группы — сервер); маршрут — райдера в каталоге за 7 дн с подписью автора
+   (`ROUTES_FOR_SOCIAL.recentByAuthors`, карточка каталога). Отбор — по кругу видов ride → result → route, показ —
+   сгруппировано (RC-P7-12); признака «есть ещё» нет — «Все свои» ведёт на экран «Свои».
 4. **Автоявка — подписка `social` на `tracks.activity-ready`** (fan-out `mergeOutboxRoutes`, api-kit ≥ 0.6.0),
    нового события в `tracks` нет. Группу и старт основной `social` читает портом `ACTIVITY_STARTS`, райды —
    `RIDES_FOR_SOCIAL` (точный старт — только при маршруте каталога). `results-intake` не меняется. Регламент
@@ -77,6 +85,15 @@
    отправке push из текущих публичных имён (`RIDER_NAMES.publicRiders`), нет имени — «Райдер». Схлопывание копит
    `actors` вместо замены документа. Остальные группы не меняются. События `social.*` → очередь
    `notifications-intake`; «Свои идут» строится из `rides.participant-joined` портом аудитории `social`.
+   **Привязка (social-p7):** `social` пишет outbox в транзакции действия — `social.reaction-created { reactionId }`
+   (`SocialReactionsService.insert`), `social.connection-added { ownerId, otherId }` (`addManual`, K11),
+   `social.invite-registered { inviterId, inviteeId }` (`linkInvite`, впервые), `social.ride-ask-due { rideId, userIds }`
+   (`OutboxRideAskDue` в транзакции захвата P5); payload — только id. Маршрут — `notificationsOutboxRoutes`;
+   `NotificationIntake.drafts(…, eventId)` строит черновики `socialNoticeDraft`, состояние «сейчас» — порт
+   `SOCIAL_NOTICES` (`reaction`, `connected`, `goingAudience`), названия — `RIDE_NOTICES`, `ROUTE_NOTICES`,
+   `RACE_REGISTRY` + `RESULTS_NOTICES.entryRace`. «Свои идут» — записавшийся = участник с `seq` события; только
+   публичный; аудитория — взаимные «свои» записавшегося без организатора и участников. K11 — отметка
+   `rider_connections.manualNoticeAt`: «Вас добавили» не чаще раза в 30 дн на пару (от последнего уведомления).
    **Уточнение (social-p1):** накопление — условный upsert по окну `(userId, collapseKey)` с `$push` лица при «его ещё
    нет» и «потолок 100 не достигнут» (`$addToSet` без условия снова делал бы прочитанное непрочитанным при повторе
    того же лица); дубль уникального ключа — один повтор без upsert. Создающее событие и доставка — только при вставке:
@@ -87,7 +104,10 @@
 7. **Журнал продуктовых событий — листовой модуль `product-events`** без зависимостей, порт `PRODUCT_EVENTS.record`.
    Пишут `social`, `rides` (источник «Иду» — необязательное тело `join` `{ source }`: событие `ride-joined` — только
    новой записи, после коммита транзакции `join`, сбой — лог без отказа), `identity` (активный день, дедуп в
-   Redis на сутки по Минску). Журнал append-only; единственное исключение — удаление записей райдера шагом стирания
+   Redis на сутки по Минску). **Активный день (P7):** `AuthGuard` после проверки сессии зовёт `ActiveDay.touch` —
+   `SET active-day:<uid>:<день> NX EX` до начала следующих суток по Минску + 1 ч, при захвате — `active-day { day }`;
+   ожидание ≤ 200 мс, сбой записи — `DEL` ключа и лог `product_events.record_failed type=active-day`, запрос не
+   падает. Панель (`PanelGuard`) и публичные ручки его не проходят. Журнал append-only; единственное исключение — удаление записей райдера шагом стирания
    аккаунта (K13). Наружу не уходит, выгрузка — скрипт. Справочник событий и их `props` — zod внутри API
    (`product-events.types.ts`), не в contracts (RC-11); в `props` — только поля-справочники, без id пользователей:
    стирание удаляет события по их `userId` (RC-12, `invite-registered` — с `userId` пригласившего).
@@ -101,8 +121,10 @@
 
 - Новые очереди `social-intake`, `social-maintenance`; новое outbox-событие в `identity` (`tracks` — без новых
   событий, P5).
-- `notifications` получает Nest-импорт `profile` (`ProfileCoreModule`, порт `RIDER_NAMES`) в P1 и `social` (порт
-  аудитории) — в P7, когда появится потребитель (правило «текст — снимок» в `pokatim-backend.md` и `pokatim-db.md`
-  дополняется исключением для группы «Свои»).
+- `notifications` получает Nest-импорт `profile` (`ProfileCoreModule`, порт `RIDER_NAMES`) в P1 и `social`
+  (`NotificationsWorkerModule → SocialCoreModule`, порт `SOCIAL_NOTICES`) — в P7 (правило «текст — снимок» в
+  `pokatim-backend.md` и `pokatim-db.md` дополняется исключением для группы «Свои»).
+- P7: ребро `identity → product-events` (лист, dependency-cruiser его не ограничивает); `RoutesCoreModule` импортирует
+  `ProfileCoreModule` (имя автора для Главной); миграция `0050_social_home` — индекс `races_protocol_published_idx`.
 - Имя в тексте push остаётся на устройстве после удаления аккаунта — принятый риск (решение автора 2026-10-31).
 - Явка — первый факт «был на райде» (R8); километры райдов в статистику по-прежнему не входят.

@@ -16,7 +16,7 @@ import { useMinskClockAfterMount } from '@/lib/use-minsk-clock';
 
 import type { useRiderSocial } from './queries';
 import { riderSocialKey, socialActionErrorText, useSetRiderConnection } from './queries';
-import { togetherText } from './social-format';
+import { CONNECT_LABELS, togetherText } from './social-format';
 
 /** Зритель профиля: сессия неизвестна (SSR, восстановление) — `pending`. */
 export type RiderSocialSession = 'signedIn' | 'guest' | 'pending';
@@ -56,7 +56,7 @@ function GoingRow({ ride, publicId, now }: { ride: RideCard; publicId: string; n
   );
 }
 
-/** «В свои» / «В своих» вошедшего: повтор убирает (K1, без подтверждения); отказ — текстом у кнопки. Карточка строки результата гонки (P4) — тоже. */
+/** «В свои» / «Убрать из своих» вошедшего: повтор убирает (K1, без подтверждения); отказ — текстом у кнопки. Карточка строки результата гонки (P4) — тоже. */
 export function ConnectButton({ publicId, connected }: { publicId: string; connected: boolean }) {
   const mutation = useSetRiderConnection(publicId, { refreshList: true });
   return (
@@ -64,6 +64,7 @@ export function ConnectButton({ publicId, connected }: { publicId: string; conne
       <View style={styles.start}>
         <Button
           label={t(connected ? 'social.connected' : 'social.connect')}
+          reserveLabels={CONNECT_LABELS}
           variant={connected ? 'secondary' : 'primary'}
           loading={mutation.isPending}
           onPress={() => mutation.mutate(!connected)}
@@ -96,9 +97,9 @@ function RiderSocialContent({ data, publicId }: { data: RiderSocial; publicId: s
 
 /**
  * Блок «Свои» на чужом профиле (P3, K6): «Вместе ехали N раз · последний — дата» (N > 0), «Идёт» — ближайший райд
- * (только если зритель у райдера в «своих» — решает сервер), «В свои» / «В своих». Свой профиль — ничего. Гость —
- * только «В свои» → вход с возвратом на профиль (как «Пожаловаться»). Сессия неизвестна — ничего (без рассинхрона
- * гидрации). Состояние запроса — `AsyncContent`; 404 (профиль скрыли между запросами) — блок молчит.
+ * (только если зритель у райдера в «своих» — решает сервер), «В свои» / «Убрать из своих». Свой профиль — ничего.
+ * Гость — только «В свои» → вход с возвратом на профиль (как «Пожаловаться»). Сессия неизвестна — ничего (без
+ * рассинхрона гидрации). Состояние запроса — `AsyncContent`; 404 (профиль скрыли между запросами) — блок молчит.
  */
 export function RiderSocialBlock({
   id,

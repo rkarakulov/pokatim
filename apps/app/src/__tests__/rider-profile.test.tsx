@@ -399,18 +399,23 @@ describe('«Свои» на чужом профиле (P3, K6)', () => {
     await waitFor(() => expect(router.getPathname()).toBe(`/rides/${RIDE_ID}`));
   });
 
-  it('«В свои» → PUT connected:true → «В своих»; повтор → connected:false', async () => {
+  it('«В свои» → PUT connected:true → «Убрать из своих»; повтор → connected:false', async () => {
     signIn();
     setConnection.mockResolvedValueOnce({ ...noSocial, connected: true });
     await openSocial();
-    await fireEvent.press(await screen.findByRole('button', { name: 'В свои' }));
+    const connect = await screen.findByRole('button', { name: 'В свои' });
+    // ширина кнопки — по длинной подписи: вторая подпись скрыто держит место, строка не прыгает
+    expect(
+      within(connect).getByText('Убрать из своих', { includeHiddenElements: true }),
+    ).not.toBeVisible();
+    await fireEvent.press(connect);
     expect(setConnection).toHaveBeenCalledWith(liveSession.accessToken, PUBLIC_ID, {
       connected: true,
     });
-    expect(await screen.findByRole('button', { name: 'В своих' })).toBeOnTheScreen();
+    expect(await screen.findByRole('button', { name: 'Убрать из своих' })).toBeOnTheScreen();
 
     setConnection.mockResolvedValueOnce(noSocial);
-    await fireEvent.press(screen.getByRole('button', { name: 'В своих' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Убрать из своих' }));
     expect(setConnection).toHaveBeenLastCalledWith(liveSession.accessToken, PUBLIC_ID, {
       connected: false,
     });

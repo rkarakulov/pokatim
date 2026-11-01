@@ -56,6 +56,8 @@ export const NOTIFICATION_KINDS = [
   'social_respect',
   'social_invite_registered',
   'social_ride_ask',
+  // ride-photo-followups: модератор удалил фото райда (организатору, группа `rides`)
+  'ride_photo_reset',
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 

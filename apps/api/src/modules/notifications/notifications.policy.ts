@@ -76,6 +76,8 @@ const KIND_GROUPS: Record<NotificationKind, NotificationGroup> = {
   social_respect: SOCIAL,
   social_invite_registered: SOCIAL,
   social_ride_ask: SOCIAL,
+  // ride-photo-followups: фото своего райда удалено модератором — организатору
+  ride_photo_reset: RIDES,
 };
 
 /** Группа настроек события (N4). */

@@ -97,3 +97,19 @@ export function hugePng(width = 5001, height = 5000): Buffer {
 /** Битый JPEG: сигнатура и мусор. */
 export const brokenJpeg = (): Buffer =>
   Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(2048, 0x5a)]);
+
+/**
+ * Шумное фото (детерминированный ГПСЧ, JPEG q82) — худший случай для сжатия PNG карточек с фото (ride-photo R5,
+ * ride-photo-followups R3); под нагрузкой — до ~15 с.
+ */
+export async function noisyPhoto(width = 1600, height = 1200): Promise<Buffer> {
+  const pixels = Buffer.alloc(width * height * 3);
+  let seed = 0x2f6b_1d35;
+  for (let i = 0; i < pixels.length; i++) {
+    seed = (Math.imul(seed, 1_103_515_245) + 12_345) >>> 0;
+    pixels[i] = seed >>> 24;
+  }
+  return sharp(pixels, { raw: { width, height, channels: 3 } })
+    .jpeg({ quality: 82 })
+    .toBuffer();
+}

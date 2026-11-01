@@ -14,6 +14,8 @@ import { DEFAULT_STALE_MS } from '@/lib/query-client';
 export const socialKey = ['social'] as const;
 export const riderSocialKey = (publicId: string) => ['social', 'rider', publicId] as const;
 export const socialConnectionsKey = ['social', 'connections'] as const;
+/** Секция «Свои» на Главной (K7, P7): под префиксом `['social']` — уход с экрана «Свои» обновит и её. */
+export const socialHomeKey = ['social', 'home'] as const;
 
 /**
  * Подсказка K3 нужна: у вошедшего нет публичного профиля (`publicId === null` — сервер отдаёт его только при имени и
@@ -35,6 +37,16 @@ export function useRiderSocial(publicId: string, enabled: boolean) {
   return useQuery({
     queryKey: riderSocialKey(publicId),
     queryFn: () => withAccessToken((token) => api.getRiderSocial(token, publicId)),
+    staleTime: DEFAULT_STALE_MS,
+    enabled,
+  });
+}
+
+/** Секция «Свои» на Главной (K7, P7): только вошедшему; ответ — строки сервера (≤ 3). */
+export function useSocialHome(enabled: boolean) {
+  return useQuery({
+    queryKey: socialHomeKey,
+    queryFn: () => withAccessToken((token) => api.getSocialHome(token)),
     staleTime: DEFAULT_STALE_MS,
     enabled,
   });
