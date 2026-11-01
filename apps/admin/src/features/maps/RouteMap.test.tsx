@@ -222,4 +222,37 @@ describe('RouteMap панели (routes-05, A2)', () => {
     act(() => plain.map.handlers.load!());
     expect(screen.queryByTestId('scrub-marker')).toBeNull();
   });
+
+  it('полный экран: кнопка «На весь экран» / «Свернуть карту» вызывает переключатель; без него кнопки нет', async () => {
+    const onToggle = vi.fn();
+    const view = render(
+      <RouteMap
+        geometry={geometry}
+        styleUrl={STYLE}
+        label="Карта маршрута"
+        variant="page"
+        fullscreen={{ active: false, onToggle }}
+      />,
+    );
+    await act(async () => {});
+    fireEvent.click(screen.getByRole('button', { name: 'На весь экран' }));
+    expect(onToggle).toHaveBeenCalledTimes(1);
+    view.rerender(
+      <RouteMap
+        geometry={geometry}
+        styleUrl={STYLE}
+        label="Карта маршрута"
+        variant="page"
+        fullscreen={{ active: true, onToggle }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Свернуть карту' }));
+    expect(onToggle).toHaveBeenCalledTimes(2);
+    // смена режима не пересоздаёт карту
+    expect(state.maps).toHaveLength(1);
+
+    cleanup();
+    await renderMap();
+    expect(screen.queryByRole('button', { name: 'На весь экран' })).toBeNull();
+  });
 });

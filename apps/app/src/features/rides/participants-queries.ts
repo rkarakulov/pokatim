@@ -70,3 +70,43 @@ export function attendanceErrorText(error: unknown): string {
   }
   return t('rides.attendance.error.unknown');
 }
+
+/**
+ * «Спасибо за компанию» (P4, K5): `variables` — `publicId` строки или `null` («Поблагодарить всех»). Ответ — свежие
+ * участники в кэш (как явка); отказ 409/404 — перечитать участников.
+ */
+export function useRideThanks(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (publicId: string | null) =>
+      withAccessToken((accessToken) => api.thankRideRiders(accessToken, id, publicId ?? undefined)),
+    networkMode: 'always',
+    onSuccess: (data) => {
+      queryClient.setQueryData(rideParticipantsKey(id), data);
+    },
+    onError: (error) => {
+      const code = apiErrorOf(error)?.code;
+      if (code === 'SOCIAL_ACTION_BLOCKED' || code === 'NOT_FOUND') {
+        void queryClient.invalidateQueries({ queryKey: rideParticipantsKey(id) });
+      }
+    },
+  });
+}
+
+/** Текст отказа «спасибо» (баннер под блоком): сеть, лимит, райда или райдера нет, причина `SOCIAL_ACTION_BLOCKED`. */
+export function thanksErrorText(error: unknown): string {
+  if (isNetworkError(error)) return t('rides.error.network');
+  const code = apiErrorOf(error)?.code;
+  if (code === 'RATE_LIMITED') {
+    return t('rides.error.rateLimited', { seconds: retryAfterSec(error) ?? 60 });
+  }
+  // 404 «спасибо» — райдер стал непубличным или райд скрыт; карточка ещё на экране, «Райд не найден» вводит в заблуждение
+  if (code === 'NOT_FOUND') return t('rides.thanks.error.not_found');
+  if (code === 'SOCIAL_ACTION_BLOCKED') {
+    const details = SocialActionBlockedDetails.safeParse(apiErrorOf(error)?.details);
+    if (details.success && details.data.reason === 'not_attended') {
+      return t('rides.thanks.error.not_attended');
+    }
+  }
+  return t('rides.thanks.error.unknown');
+}

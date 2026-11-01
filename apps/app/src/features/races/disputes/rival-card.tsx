@@ -14,6 +14,9 @@ import { useRouter } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { riderPath } from '@/features/riders/queries';
+import { useRiderSocial } from '@/features/social/queries';
+import { RespectButton, RespectReceived } from '@/features/social/respect-block';
+import { ConnectButton } from '@/features/social/rider-social-block';
 
 import { useMyRaceEntry, useRaceResults } from '../queries';
 import { ShareStoryButton } from '../story/share-story-button';
@@ -86,9 +89,18 @@ function RivalAction({
   );
 }
 
+/** «В свои» на карточке строки (P4, RC-P4-13): состояние связи — P3 `GET riders/:publicId/social`; себе и 404 — ничего. */
+function RivalConnect({ publicId }: { publicId: string }) {
+  const social = useRiderSocial(publicId, true);
+  if (!social.data || social.data.self) return null;
+  return <ConnectButton publicId={publicId} connected={social.data.connected} />;
+}
+
 /**
- * Карточка соперника (`/races/result/<гонка>/<заявка>`, RC-14; внутри `Stack.Protected`): место и время — из кэша
- * таблицы (холодный старт — первая страница); строки нет — «Результат не найден». Действие — по «моим спорам».
+ * Карточка строки результата (`/races/result/<гонка>/<заявка>`, RC-14; внутри `Stack.Protected`) — любому вошедшему
+ * (P4, Q2): место и время — из кэша таблицы (холодный старт — первая страница); строки нет — «Результат не найден».
+ * Чужая строка — «Респект» и «В свои» над «Оспорить результат»; «Оспорить» — только при своей заявке (RC-P4-10), по
+ * «моим спорам». Своя — полученные респекты с именами (Q4) и «Поделиться в сторис».
  */
 export function RivalCardScreen({
   raceId,
@@ -132,27 +144,48 @@ export function RivalCardScreen({
                   </View>
                 ) : null}
                 {own ? (
-                  entry.data?.actions.canShareStory ? (
-                    <ShareStoryButton raceId={raceId} />
-                  ) : null
-                ) : mine ? (
-                  // участие не загружено — подача не предлагается (ошибка и «Нет соединения» с повтором)
-                  <AsyncContent query={entry} skeleton={<ActionSkeletonLines />}>
-                    {(own) => (
-                      <RivalAction
-                        disputes={mine}
-                        raceId={raceId}
-                        entryId={entryId}
-                        group={group}
-                        otherGroup={inOtherGroup(own?.entry?.groupKey, found.page.group)}
-                      />
-                    )}
-                  </AsyncContent>
-                ) : disputes.isError ? (
-                  <DisputesFailure error={disputes.error} retry={() => void disputes.refetch()} />
-                ) : disputes.isPending ? (
-                  <ActionSkeleton />
-                ) : null}
+                  <>
+                    <RespectReceived raceId={raceId} entryId={entryId} />
+                    {entry.data?.actions.canShareStory ? (
+                      <ShareStoryButton raceId={raceId} />
+                    ) : null}
+                  </>
+                ) : (
+                  <>
+                    <RespectButton raceId={raceId} entryId={entryId} />
+                    {found.row.riderPublicId !== null ? (
+                      <RivalConnect publicId={found.row.riderPublicId} />
+                    ) : null}
+                    {/* участие не загружено — подача не предлагается (ошибка и «Нет соединения» с повтором) */}
+                    <AsyncContent query={entry} skeleton={<ActionSkeletonLines />}>
+                      {(participation) =>
+                        // «Оспорить» — только участнику гонки (Q2, RC-P4-10): не-участнику после публикации
+                        // сервер отдаёт закрытую подачу с причиной
+                        participation?.entry ? (
+                          mine ? (
+                            <RivalAction
+                              disputes={mine}
+                              raceId={raceId}
+                              entryId={entryId}
+                              group={group}
+                              otherGroup={inOtherGroup(
+                                participation.entry.groupKey,
+                                found.page.group,
+                              )}
+                            />
+                          ) : disputes.isError ? (
+                            <DisputesFailure
+                              error={disputes.error}
+                              retry={() => void disputes.refetch()}
+                            />
+                          ) : disputes.isPending ? (
+                            <ActionSkeleton />
+                          ) : null
+                        ) : null
+                      }
+                    </AsyncContent>
+                  </>
+                )}
               </View>
             );
           }}

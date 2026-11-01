@@ -1,6 +1,7 @@
 import { rm } from 'node:fs/promises';
 
 import { RouteRideDetail, RouteRidePage } from '@pokatim/contracts';
+import { ROUTE_SECTIONS_VERSION } from '@pokatim/tracks/parse';
 import { uuidv7 } from '@rkarakulov/api-kit/mongo';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -657,7 +658,7 @@ describe('участки маршрута (route-rides-05): автопровер
     expect(analyzeSections).toHaveBeenCalledTimes(1);
     const doc = await rides().findOne({ activityId: fresh });
     expect(doc).toMatchObject({ origin: 'auto', status: 'passed' });
-    expect(doc!.sections).toMatchObject({ version: 1, failure: null });
+    expect(doc!.sections).toMatchObject({ version: ROUTE_SECTIONS_VERSION, failure: null });
     expect(doc!.sections!.items.map((item) => item.status)).toEqual(['passed', 'passed', 'passed']);
   });
 });

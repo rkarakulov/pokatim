@@ -15,6 +15,8 @@ import {
   entryActions,
   entryDisputeBlock,
   EXCLUDABLE_STATUSES,
+  isPublicProtocolRow,
+  publicTableMode,
   type ProtocolBase,
   publishChecklist,
   recheckPending,
@@ -818,5 +820,28 @@ describe('storyCardEligible — карточка для сторис (story-card
     expect(storyCardEligible({ status: 'withdrawn' }, { status: 'final', elapsedSec: 3600 })).toBe(
       false,
     );
+  });
+});
+
+describe('publicTableMode / isPublicProtocolRow (P4, RC-P4-1): режим публичной таблицы и строка протокола', () => {
+  it('отменённая или без коридора — пусто; до публикации — живые места; после — протокол', () => {
+    expect(publicTableMode(race({ status: 'cancelled' }))).toBe('empty');
+    expect(publicTableMode(race({ corridor: null }))).toBe('empty');
+    expect(
+      publicTableMode(
+        race({ status: 'cancelled', protocolPublishedAt: at('2026-10-29T10:00:00Z') }),
+      ),
+    ).toBe('empty');
+    expect(publicTableMode(race())).toBe('provisional');
+    expect(publicTableMode(race({ protocolPublishedAt: at('2026-10-29T10:00:00Z') }))).toBe(
+      'protocol',
+    );
+  });
+
+  it('строка протокола видна при месте и без DQ', () => {
+    expect(isPublicProtocolRow({ status: 'final', place: 1 })).toBe(true);
+    expect(isPublicProtocolRow({ status: 'dq', place: null })).toBe(false);
+    expect(isPublicProtocolRow({ status: 'dq', place: 2 })).toBe(false);
+    expect(isPublicProtocolRow({ status: 'final', place: null })).toBe(false);
   });
 });

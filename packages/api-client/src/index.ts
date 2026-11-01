@@ -147,6 +147,8 @@ import {
   TicketView,
   type RideJoinSource,
   RideParticipants,
+  RespectState,
+  type SetRespectRequest,
 } from '@pokatim/contracts';
 import {
   ApiHttpError,
@@ -1282,6 +1284,51 @@ export function createApiClient({
         '/v1/social/connections',
         SocialConnections,
         authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    // --- «Свои»: реакции (P4, K5, K8) ---
+    /**
+     * «Спасибо за компанию» (идемпотентно): с `publicId` — одному явившемуся, без — «Поблагодарить всех». Отказ — 409
+     * `SOCIAL_ACTION_BLOCKED { reason }`, 404, 429. Ответ — свежий `RideParticipants`.
+     */
+    thankRideRiders: (accessToken: string, id: string, publicId?: string) =>
+      postAuthorized(
+        accessToken,
+        `/v1/rides/${encodeURIComponent(id)}/thanks`,
+        RideParticipants,
+        publicId ? { publicId } : {},
+      ),
+    /** «Респект» строке результата гонки: состояние зрителя (цели нет — нейтральное). */
+    getRaceEntryRespect: (accessToken: string, raceId: string, entryId: string) =>
+      request(
+        `/v1/races/${encodeURIComponent(raceId)}/results/${encodeURIComponent(entryId)}/respect`,
+        RespectState,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /** Поставить / снять «Респект» строке (идемпотентно); нет цели — 404, своя — 409, лимит — 429. */
+    setRaceEntryRespect: (
+      accessToken: string,
+      raceId: string,
+      entryId: string,
+      body: SetRespectRequest,
+    ) =>
+      request(
+        `/v1/races/${encodeURIComponent(raceId)}/results/${encodeURIComponent(entryId)}/respect`,
+        RespectState,
+        authorized(accessToken, { method: 'PUT', body: JSON.stringify(body), ...withCredentials }),
+      ),
+    /** «Респект автору» маршрута: состояние зрителя (цели нет — нейтральное). */
+    getRouteRespect: (accessToken: string, routeId: string) =>
+      request(
+        `/v1/routes/${encodeURIComponent(routeId)}/respect`,
+        RespectState,
+        authorized(accessToken, { method: 'GET', ...withCredentials }),
+      ),
+    /** Поставить / снять «Респект автору» (идемпотентно); отказы — как у `setRaceEntryRespect`. */
+    setRouteRespect: (accessToken: string, routeId: string, body: SetRespectRequest) =>
+      request(
+        `/v1/routes/${encodeURIComponent(routeId)}/respect`,
+        RespectState,
+        authorized(accessToken, { method: 'PUT', body: JSON.stringify(body), ...withCredentials }),
       ),
   };
 }

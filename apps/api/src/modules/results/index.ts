@@ -57,3 +57,9 @@ export {
   type ResultsForTickets,
   type TicketEntry,
 } from './results-for-tickets.port';
+/** Порт для `social` («Свои» P4): строка публичной таблицы гонки — цель «Респекта» (K8). */
+export {
+  type RaceEntryRespectTarget,
+  RESULTS_FOR_SOCIAL,
+  type ResultsForSocial,
+} from './results-for-social.port';

@@ -57,7 +57,13 @@ describe('rideParticipantsView — участники (K3, K4)', () => {
 describe('rideParticipantsView — явка зрителя (K5, RC-3)', () => {
   it('none — обе кнопки; attended — только «Меня не было»; declined — только «Я был»', () => {
     const none = rideParticipantsView(facts(), [], cards, 'p1', HOUR_AFTER).attendance;
-    expect(none).toEqual({ state: 'none', canMark: true, canDecline: true, attended: null });
+    expect(none).toEqual({
+      state: 'none',
+      canMark: true,
+      canDecline: true,
+      attended: null,
+      allThanked: false,
+    });
 
     const attended = rideParticipantsView(
       facts(),
@@ -80,6 +86,7 @@ describe('rideParticipantsView — явка зрителя (K5, RC-3)', () => {
       canMark: true,
       canDecline: false,
       attended: null,
+      allThanked: false,
     });
   });
 
@@ -117,8 +124,14 @@ describe('rideParticipantsView — явка зрителя (K5, RC-3)', () => {
     );
     expect(view.attendance?.attended).toEqual({
       riders: [
-        { name: 'Организатор', publicId: 'pub-org', avatar: { id: 'av-org' } },
-        { name: 'Вера', publicId: 'pub-p3', avatar: null },
+        {
+          name: 'Организатор',
+          publicId: 'pub-org',
+          avatar: { id: 'av-org' },
+          self: false,
+          thanked: false,
+        },
+        { name: 'Вера', publicId: 'pub-p3', avatar: null, self: false, thanked: false },
       ],
       hiddenCount: 1,
     });
@@ -133,5 +146,67 @@ describe('rideParticipantsView — явка зрителя (K5, RC-3)', () => {
       HOUR_AFTER,
     );
     expect(view.attendance?.attended).toBe(null);
+  });
+});
+
+describe('rideParticipantsView — «Спасибо за компанию» (P4, K5, RC-P4-7, RC-P4-8)', () => {
+  const present = [entry('org'), entry('p1'), entry('p2'), entry('p3')];
+
+  it('своя строка — `self`; поблагодарённые — `thanked`; список участников без флагов', () => {
+    const view = rideParticipantsView(facts(), present, cards, 'org', HOUR_AFTER, new Set(['p3']));
+    expect(view.attendance?.attended?.riders).toEqual([
+      {
+        name: 'Организатор',
+        publicId: 'pub-org',
+        avatar: { id: 'av-org' },
+        self: true,
+        thanked: false,
+      },
+      { name: 'Петя', publicId: null, avatar: null, self: false, thanked: false },
+      { name: 'Вера', publicId: 'pub-p3', avatar: null, self: false, thanked: true },
+    ]);
+    for (const row of view.riders)
+      expect(Object.keys(row).sort()).toEqual(['avatar', 'name', 'publicId']);
+    expect(JSON.stringify(view)).not.toContain('userId');
+  });
+
+  it('allThanked — все явившиеся, кроме себя, включая скрытых; скрытый не поблагодарён — false', () => {
+    const notHidden = rideParticipantsView(
+      facts(),
+      present,
+      cards,
+      'org',
+      HOUR_AFTER,
+      new Set(['p2', 'p3']),
+    );
+    expect(notHidden.attendance?.allThanked).toBe(false);
+    const all = rideParticipantsView(
+      facts(),
+      present,
+      cards,
+      'org',
+      HOUR_AFTER,
+      new Set(['p1', 'p2', 'p3']),
+    );
+    expect(all.attendance?.allThanked).toBe(true);
+  });
+
+  it('allThanked — только зритель явился — true; не явился — false', () => {
+    const alone = rideParticipantsView(facts(), [entry('p1')], cards, 'p1', HOUR_AFTER);
+    expect(alone.attendance).toMatchObject({ state: 'attended', allThanked: true });
+    const absent = rideParticipantsView(facts(), [entry('org')], cards, 'p1', HOUR_AFTER);
+    expect(absent.attendance?.allThanked).toBe(false);
+  });
+
+  it('явка вне списка участников (ушёл из «Иду») не входит в «Ехали» и в allThanked', () => {
+    const view = rideParticipantsView(
+      facts({ participantIds: ['org', 'p1'] }),
+      [entry('org'), entry('p1'), entry('gone')],
+      cards,
+      'p1',
+      HOUR_AFTER,
+      new Set(['org']),
+    );
+    expect(view.attendance?.allThanked).toBe(true);
   });
 });

@@ -35,7 +35,6 @@ import {
 import { useMinskClockAfterMount } from '@/lib/use-minsk-clock';
 import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
 
-import { canOpenRival, inOtherGroup } from './disputes/dispute-format';
 import { rivalPath } from './disputes/dispute-screen';
 import { useMyRaceDisputes } from './disputes/queries';
 import { RaceDisputes } from './disputes/race-disputes';
@@ -182,23 +181,16 @@ function RaceDetailView({
           ownEntryId={signedIn ? (entry.data?.entry?.id ?? null) : null}
           // своя группа — вкладка по умолчанию (race-results-07)
           ownGroup={signedIn ? (entry.data?.entry?.groupKey ?? null) : null}
-          // карточка соперника — только вошедшему участнику, когда ей есть что показать (RC-14); строка чужой группы
-          // зачёта — нет (подачу сервер отклонит); вкладка по умолчанию — группа ответа без `group`
-          // своя строка — «Ваш результат» и «Поделиться в сторис», когда карточка есть (story-cards, право — сервер)
+          // карточка строки — любому вошедшему (P4, Q2: «Респект», «В свои»; «Оспорить» — только участнику, решает
+          // карточка); вкладка по умолчанию — группа ответа без `group`. Своя строка — всегда при заявке (RC-P4-11):
+          // полученные респекты и «Поделиться в сторис» (право — сервер)
           ownRowAction={
-            signedIn && entry.data?.entry && entry.data.actions.canShareStory
+            signedIn && entry.data?.entry
               ? (group) => () => router.push(rivalPath(race.id, entry.data!.entry!.id, group))
               : null
           }
           rowAction={(entryId, group) =>
-            signedIn &&
-            canOpenRival(
-              disputes.data,
-              entryId,
-              inOtherGroup(entry.data?.entry?.groupKey, group ?? results.data?.pages[0]?.group),
-            )
-              ? () => router.push(rivalPath(race.id, entryId, group))
-              : null
+            signedIn ? () => router.push(rivalPath(race.id, entryId, group)) : null
           }
         />
       ) : null}

@@ -9,7 +9,6 @@ import {
   RIVAL_ENTRY_ID,
 } from '../../../__tests__/disputes-fixtures';
 import {
-  canOpenRival,
   descriptionError,
   disputeDate,
   disputeErrorText,
@@ -72,20 +71,6 @@ describe('действие карточки соперника (RC-14, M1)', () 
     expect(rivalAction(data, RIVAL_ENTRY_ID)).toEqual({ kind: 'mine', dispute: filed() });
     expect(rivalAction(data, OTHER)).toMatchObject({ kind: 'file' });
   });
-
-  it('строка нажимаема, только когда карточке есть что показать', () => {
-    expect(canOpenRival(myDisputes(), OTHER)).toBe(true);
-    expect(canOpenRival(myDisputes({ status: 'closed', reason: 'filing_closed' }), OTHER)).toBe(
-      true,
-    );
-    const unavailable = myDisputes({ status: 'unavailable', reason: 'withdrawn' });
-    expect(canOpenRival(unavailable, OTHER)).toBe(false);
-    expect(
-      canOpenRival({ ...unavailable, filed: [filed({ status: 'upheld' })] }, RIVAL_ENTRY_ID),
-    ).toBe(true);
-    expect(canOpenRival(null, OTHER)).toBe(false);
-    expect(canOpenRival(undefined, OTHER)).toBe(false);
-  });
 });
 
 describe('цель в чужой группе зачёта (race-results-07c)', () => {
@@ -104,10 +89,8 @@ describe('цель в чужой группе зачёта (race-results-07c)', 
     expect(
       rivalAction(myDisputes({ status: 'closed', reason: 'open_limit' }), RIVAL_ENTRY_ID, true),
     ).toBeNull();
-    expect(canOpenRival(myDisputes(), OTHER, true)).toBe(false);
     const data = myDisputes({}, { filed: [filed()] });
     expect(rivalAction(data, RIVAL_ENTRY_ID, true)).toEqual({ kind: 'mine', dispute: filed() });
-    expect(canOpenRival(myDisputes(), OTHER, false)).toBe(true);
   });
 });
 

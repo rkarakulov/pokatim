@@ -78,7 +78,9 @@ paths:
   Карта — `features/maps/` панели: `RouteMap` (DOM поверх чистых функций `@pokatim/route-view`: `interactiveMapOptions`,
   `guardWheelZoom`, слои `routeLayers(themes.panel …)` без коридора, линия `ROUTE_CATALOG_LINE_WIDTH`), `ScrubMarker`,
   `MapControls`; `maplibre-gl` и CSS — только через `loadMaplibre` (async-чанк, воркер — `maplibre-gl-worker.mjs?url`
-  + `setWorkerUrl`). Стиль — `VITE_MAP_STYLE_LIGHT` (`map-style.ts`); не задан — `LinePreview`. Смоук
+  + `setWorkerUrl`). CSS MapLibre встаёт в каскад позже `index.css` — свои правила для узла-контейнера карты (на нём
+  `.maplibregl-map { position: relative }`) — с селектором специфичнее одного класса (`.route-map .route-map__canvas`),
+  иначе холст высотой 0; сторож — `expectMapCanvasFilled` в e2e. Стиль — `VITE_MAP_STYLE_LIGHT` (`map-style.ts`); не задан — `LinePreview`. Смоук
   (`e2e/project.ts`) собирает панель со стилем своего origin (`MAP_STYLE_URL`), ответ — пустой стиль через
   `context.route`: карта, чанк, воркер и CSP проверяются в CI без сети. nginx отдаёт воркер `.mjs` как
   `application/javascript` (модульный воркер, `nosniff`).
@@ -88,6 +90,8 @@ paths:
   `src/csp.test.ts` (origin стиля из `deploy-dev.yml`). Превью (`RoutePreview`): компактная карта и «Открыть
   маршрут» — из поля коридора новая вкладка (`openLink="new-tab"`), из окна публикации — та же, на странице маршрута —
   без ссылки (`openLink={false}`).
+  Раскладка `RouteReadyView` (admin-maps-desktop): карта и профиль — блок `.route-view` (`useFullscreen`, кнопка
+  «На весь экран» в `MapControls`), «Цифры» — после; от 900 px карта ≤ 55vh, профиль 10:1 — оба в одном экране.
 - Карта гонки (panel-race-map) — `features/races/RaceCorridorMap.tsx`: секция «Карта гонки» под формой `RaceEditor` у
   сохранённой гонки с коридором (любой статус; несохранённый выбор — только превью поля). Тот же `RouteReadyView`
   (`corridorWidthM`, подзаголовки `headingLevel={3}`): `RouteMap corridorWidthM` добавляет слой коридора

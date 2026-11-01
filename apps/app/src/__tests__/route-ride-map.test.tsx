@@ -62,6 +62,14 @@ beforeEach(() => {
   getTrack.mockResolvedValue(rideTrack());
   getCatalogMap.mockResolvedValue(geometry);
   getMyMap.mockResolvedValue(geometry);
+  // «Респект автору» (P4): нейтральное состояние — строки нет
+  jest.mocked(api.getRouteRespect).mockResolvedValue({
+    available: false,
+    respected: false,
+    count: 0,
+    own: false,
+    from: null,
+  });
 });
 afterEach(() => {
   delete process.env.EXPO_PUBLIC_MAP_STYLE_LIGHT;

@@ -87,7 +87,10 @@ describe('предварительная таблица (AC10, AC17)', () => {
     getMyRaceEntry.mockResolvedValue(myEntry());
     await openSignedIn();
 
-    expect(await screen.findByLabelText('2-е место поровну, Вы, 1:42:05')).toBeOnTheScreen();
+    // строки вошедшему нажимаемы (P4 Q2, RC-P4-11): своя — «Вы»
+    expect(
+      await screen.findByRole('button', { name: 'Вы, =2 место, 1:42:05. Открыть карточку' }),
+    ).toBeOnTheScreen();
     expect(table().getAllByText('Участник')).toHaveLength(2);
     expect(table().getByText('Вы')).toBeOnTheScreen();
   });
@@ -119,7 +122,10 @@ describe('предварительная таблица (AC10, AC17)', () => {
     expect(await screen.findByText('Не удалось загрузить результаты')).toBeOnTheScreen();
     expect(screen.getByText('±50 м от маршрута')).toBeOnTheScreen();
     await fireEvent.press(table().getByRole('button', { name: 'Повторить' }));
-    expect(await screen.findByLabelText('1, Участник, 1:30:00')).toBeOnTheScreen();
+    // вошедшему строка — кнопка карточки (P4 Q2)
+    expect(
+      await screen.findByRole('button', { name: 'Участник, 1 место, 1:30:00. Открыть карточку' }),
+    ).toBeOnTheScreen();
   });
 
   it.each([

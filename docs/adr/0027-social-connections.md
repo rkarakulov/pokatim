@@ -24,7 +24,12 @@
    `index.ts` и порты `*_FOR_SOCIAL` (по образцу `RESULTS_FOR_TICKETS`). На `social` ссылаются `notifications`
    (порт аудитории и имён для группы «Свои»), `account` (порт стирания), `sharing` (порт `InviteCodes` — адрес
    приглашения `<домен>/i/<код>` на карточках для сторис, P6; только HTTP-модуль, worker берёт адрес из задачи),
-   `AppModule`, `WorkerModule`. Производители о `social` не знают; цикла нет — `social` не знает `sharing`.
+   `AppModule`, `WorkerModule`. Производители о `social` не знают; цикла нет — `social` не знает `sharing`. P4:
+   `RESULTS_FOR_SOCIAL.respectTarget(entryId)` (`results`: строка публичной таблицы гонки — до публикации живые места,
+   после — текущая ревизия; видимость — `ResultsReadService.publicRow` на общих с таблицей предикатах
+   `publicTableMode` / `isPublicProtocolRow`) и `ROUTES_FOR_SOCIAL.respectTarget(routeId)` (`routes`: `findInCatalog` +
+   `origin: rider`); `ResultsCoreModule` и `RoutesCoreModule` импортирует только HTTP-модуль `SocialModule` — ядро и
+   worker порты «Респекта» не используют.
 2. **Коллекции** (миграция `0045_social`, только expand; после `0043_achievements_seasonal` и
    `0044_route_rides_passed_idx` из develop):
    - `rider_connections` — направленная связь `ownerId → otherId`, уникальный `{ownerId, otherId}`; источники
@@ -49,6 +54,11 @@
    («Меня не было»; без тела, ответ — тот же `RideParticipants`); скрытый райд не организатору и неизвестный — `404`
    до вызова сервиса явки. «В свои» / «Убрать» (P3) — один
    идемпотентный `PUT riders/:publicId/social/connection { connected }` вместо пары глаголов (DELETE в CORS нет).
+   P4: `POST rides/:id/thanks { publicId? }` («Спасибо за компанию» одному явившемуся или без `publicId` — всем
+   явившимся, включая непубличных; ответ — `RideParticipants`), `GET|PUT races/:raceId/results/:entryId/respect` и
+   `GET|PUT routes/:id/respect` (`SocialRespectController`; `PUT { respected }` идемпотентен, получатель — из цели
+   порта, не от клиента; `GET` без цели — нейтральное состояние `200`, `PUT` — `404`, своя цель — `409 self`).
+   Лимиты — `social-thanks:<uid>` и `social-respect:<uid>` (60/ч, первой проверкой мутаций).
 4. **Автоявка — подписка `social` на `tracks.activity-ready`** (fan-out `mergeOutboxRoutes`, api-kit ≥ 0.6.0),
    нового события в `tracks` нет. Группу и старт основной `social` читает портом `ACTIVITY_STARTS`, райды —
    `RIDES_FOR_SOCIAL` (точный старт — только при маршруте каталога). `results-intake` не меняется. Регламент

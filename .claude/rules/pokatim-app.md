@@ -304,8 +304,9 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
 - Споры (race-results-06) — `features/races/disputes/*`. Экраны внутри `Stack.Protected` (статический сегмент
   первым): `races/result/[id]/[entryId]` — карточка соперника, `races/dispute/[id]/[entryId]` — подача,
   `races/dispute-response/[id]/[disputeId]` — ответ; все — в `app/_layout.tsx` и `__tests__/app-routes.ts`. Строки
-  таблицы (кроме своей) нажимаемы только у участника, когда карточке есть что показать (`filing.status !==
-  'unavailable'` или мой спор по строке); гостю и неучастнику таблица не меняется. Карточка соперника — без имени
+  таблицы нажимаемы любому вошедшему («Свои» P4, Q2: «Респект», «В свои»), своя — при заявке (RC-P4-11); гостю
+  таблица не меняется. «Оспорить» (`RivalAction`) — только при своей заявке (RC-P4-10: не-участнику после публикации
+  сервер отдаёт закрытую подачу). Карточка соперника — без имени
   (A12): место и время из кэша `useRaceResults`, статус — `page.status` таблицы; нет строки — `EmptyState`.
   `useMyRaceDisputes` (ключ `['races','disputes',id]`) — только у вошедшего с заявкой; опрос `ENTRY_POLL_MS`, пока
   есть открытый спор; мутации инвалидируют споры, участие и таблицу. Право подачи, сроки (D-44, D-25), анонимность
@@ -420,6 +421,14 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   условие — `publicId === null` из `['profile']`, `useNameMissing`): в `/profile` вместо прежней строки, на Главной —
   в слоте `socialSlotIndex` (`home/sections.ts`, слот P7) с «Не сейчас» на 14 дней (`pokatim.nameHint`,
   `name-hint-storage(.web).ts`: SecureStore / `localStorage`; видимость — `nameHintVisible`).
+- Реакции («Свои» P4, K5, K8): «Спасибо за компанию» — `useRideThanks(id)` (`participants-queries.ts`, `variables` —
+  `publicId | null`, ответ — в кэш участников, 409/404 — перечитать), `RideRiderList<Row>` с `trailing` в «Ехали N».
+  «Респект» — `features/social/respect-queries.ts` (ключи `['social','respect','race_entry',raceId,entryId]`,
+  `['social','respect','route',routeId]`; `PUT` — `setQueryData`, 404 — перечитать) и `respect-block.tsx`
+  (`RespectButton`, `RespectReceived`, `RouteAuthorRespect`; `available: false` — ничего). Карточка строки результата —
+  `RespectButton` и `ConnectButton` (экспорт P3, по `useRiderSocial`, только при `riderPublicId`) над «Оспорить»;
+  своя — `RespectReceived`. «Респект автору» — `route-ride-detail.tsx` при `passed && !mine`. Число — только в
+  карточке, не в таблице (K14).
 
 ## Достижения (achievements, `docs/product/profile.md` A1–A8, ADR-0020)
 

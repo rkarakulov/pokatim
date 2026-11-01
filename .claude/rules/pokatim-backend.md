@@ -36,6 +36,9 @@ paths:
   (halloween-decor: `none | halloween`; `themeId` — 400), журнал `appearance.decor_changed` с
   `subject.kind = 'platform'` (nil UUID) в транзакции; повтор того же декора — без записи; старые записи
   `appearance.theme_changed` — история).
+- Порт `ROUTES_FOR_SOCIAL.respectTarget` («Свои» P4, `RoutesCoreModule`): `findInCatalog` (`IN_CATALOG`) +
+  `origin: 'rider'` → `{ routeId, authorUserId }`; маршрут команды, заявка, скрытый — `null`. Копии `IN_CATALOG` вне
+  `routes` нет.
 - `routes` о гонках не знает и зависит от `panel` и `identity` (routes-02: `AuthGuard` «моих маршрутов», как `rides`); `races → routes` — только порт `RouteCatalog`
   (`modules/routes/index.ts`, `RoutesCoreModule`): готовый маршрут по id в транзакции правки гонки и названия
   маршрутов списка. Записи `routes`/`route_*` из `races` (и наоборот) — нет. Карта коридора (maps-01, ADR-0014):
@@ -550,6 +553,10 @@ RC-A1, ADR-0019).
   `standings-recalc` (`standingsOutboxRoutes`, fan-out).
 - Отказы состояния — `409 RESULTS_ACTION_BLOCKED { reason, count? }`, `409 RESULTS_PUBLISH_BLOCKED { blockedBy,
   checklist }`.
+- Видимость строки публичной таблицы — одна: `publicTableMode(race)` (`empty` / `provisional` / `protocol`) и
+  `isPublicProtocolRow(row)` (`results.policy.ts`) общие для `publicResults`/`protocolResults` и
+  `ResultsReadService.publicRow(entryId)` — порт `RESULTS_FOR_SOCIAL.respectTarget` («Свои» P4). Копии правила вне
+  `results` нет.
 
 ## Рейтинг сезона (`standings`, race-results-08)
 
@@ -695,10 +702,12 @@ RC-A1, ADR-0019).
   `route_rides.leaderboard_truncated` только при фактическом усечении.
 - Участки маршрута (route-rides-05, `docs/product/routes.md` U1–U4): разбиение — `routeSections(line, widthM)`
   (`packages/tracks/src/corridor/sections.ts`, чистая, только серверный вход): границы через 10 км по chainage
-  `matchLine`, хвост < 5 км — к последнему, < 15 км или > 30 участков — `[]`, концы участка ≤ `2·corridorGateRadiusM +
-  50` м или линия, снова подходящая к своему началу/концу ближе этого (`returnsTo`, Q1: движок завершает попытку на
-  повторном входе в ворота), — слияние с соседним; < 2 после слияний — без участков (разворот внутри участка), разворот
-  на границе — участки есть. Сверка — `analyzeSections` (белый список `PARSE_FUNCTIONS`): неизменённые
+  `matchLine`, хвост < 5 км — к последнему, < 15 км или > 30 участков — `[]`. Участок «у ворот» — концы ≤
+  `2·corridorGateRadiusM + 50` м или линия, снова подходящая к своему началу/концу ближе этого (`returnIndex`: движок
+  завершает попытку на повторном входе в ворота): его точка разворота (самая дальняя вершина до возврата) — опорная
+  граница, если дальше 5 км от остальных опорных; шаг/хвост — в каждом плече между опорными (route-rides-06). Остаток «у
+  ворот» — слияние с соседним; < 2 после слияний — без участков. Chainage линии считается один раз (`sectionLineOn`).
+  Любая смена границ → +1 `ROUTE_SECTIONS_VERSION` (сейчас 2). Сверка — `analyzeSections` (белый список `PARSE_FUNCTIONS`): неизменённые
   `prepareCorridor`/`matchCorridor` на подлиниях (`sectionLine`, `isLoop: false`), файл разбирается один раз; версия —
   `ROUTE_SECTIONS_VERSION`, отдельно от `CORRIDOR_ENGINE_VERSION` (движок и golden не меняются). В `RouteRideEvaluator`
   — второй вызов потока **после** итога движка: `evaluate(ride, { sections })`, ручная проверка — `always`,
@@ -760,19 +769,20 @@ RC-A1, ADR-0019).
 
 ## «Свои» (`social`, `product-events`, ADR-0027 Proposed, `docs/product/social.md`)
 
-- Модуль `social` — потребитель: `social → rides, profile, product-events, identity, tracks` (P0; `identity` — `AuthGuard`
-  контроллеров с P2; `tracks` — порт `ACTIVITY_STARTS`, P5; далее `results`, `routes` — в своих PR) только через
+- Модуль `social` — потребитель: `social → rides, profile, product-events, identity, results, routes, tracks` (P0;
+  `identity` — `AuthGuard` контроллеров с P2; `results`, `routes` — P4; `tracks` — порт `ACTIVITY_STARTS`, P5) только через
   `index.ts` и порты: `RIDES_FOR_SOCIAL`
   (`rides-for-social.port.ts`, `rideFacts`: фаза — `ridePhase` внутри `rides`, участники «Иду» с организатором первым,
   точная точка старта при `startPrecise`; `nextRideCard` (P3, «Идёт») — ближайший опубликованный будущий райд райдера
   (`RidesRepository.nextOfRider`, `rides_participant_idx`) карточкой ленты `rideCardOf` с этим зрителем;
   P5: `ridesOfParticipant` — райды участника по окну старта, любой статус, ≤ 20 (`participantRidesBetween`,
   `rides_participant_idx`), `startedRidesWithin` — опубликованные по окну старта поверх `startedWithin`),
-  `RIDER_NAMES.publicRiders` (публичность — при чтении, K3; ручное добавление — только к публичному). Коллекции
-  `rides`, `profiles`, `activities` `social` не читает. На `social` ссылаются только `notifications`, `account`,
+  `RIDER_NAMES.publicRiders` (публичность — при чтении, K3; ручное добавление — только к публичному),
+  `RESULTS_FOR_SOCIAL.respectTarget` и `ROUTES_FOR_SOCIAL.respectTarget` (P4, цели «Респекта»). Коллекции
+  `rides`, `profiles`, `activities`, `race_entries`, `routes` `social` не читает. На `social` ссылаются только `notifications`, `account`,
   `sharing` (порт `InviteCodes`, P6), `AppModule`, `WorkerModule` (dependency-cruiser `social-consumers-only`).
 - Композиция (RC-13): `SocialCoreModule` (репозитории, `SocialConnectionsService`, `SocialAttendanceService`,
-  `SocialReactionsService`, `SocialErasure`), `SocialModule` (`AppModule`, контроллеры: P2 — `RideParticipantsController`; P3 — `RiderSocialController`, `SocialConnectionsController`; далее P4, P7),
+  `SocialReactionsService`, `SocialErasure`), `SocialModule` (`AppModule`, контроллеры: P2 — `RideParticipantsController`; P3 — `RiderSocialController`, `SocialConnectionsController`; P4 — `SocialRespectController`; далее P7; `ResultsCoreModule` и `RoutesCoreModule` — только здесь, RC-P4-12),
   `SocialWorkerModule` (`WorkerModule`, процессоры `social-intake` / `social-maintenance`; imports `TracksCoreModule`,
   `RidesCoreModule`, одна `registerQueue` на обе очереди). Дальше правки —
   только в `social/*`.
@@ -805,8 +815,22 @@ RC-A1, ADR-0019).
 - Дубль пары в транзакции (RC-P3-2): параллельные upsert одной пары в транзакциях (`addManual`, `linkInvite`, пересчёт
   явки) приходят как `112 WriteConflict` и повторяются `withTransaction`; повторов по `isDuplicateKey` в транзакционных
   путях нет (дубль ловит только `remove` вне транзакции). Доказательство — ворота в `social-connections.int.test.ts`.
-- Реакции: `thank` — только между явившимися, повтор — no-op (RC-4); `toggleRespect` — на разрешённой вызывающим цели
-  (порты целей — P4), дубль уникального ключа — перечитать состояние.
+- Реакции: `thank` — только между явившимися, повтор — no-op (RC-4); `toggleRespect` — на разрешённой вызывающим цели,
+  дубль уникального ключа — перечитать состояние (HTTP его не вызывает). P4: `thankAll` — по явке P0 минус актёр
+  (непубличные включены), уже поблагодарённые (`recipientsOf`) пропускаются, по одной транзакции `insert` на реакцию;
+  `setRespect(actor, target, respected)` — идемпотентно (`true` — `insert`, дубль — `false`; `false` — `delete`), себе
+  — `409 self`. Все новые реакции — через приватный `insert` (вставка + `product_events` в одной транзакции): точка
+  outbox `social.*` для P7 (RC-P4-14). Писатель `social_reactions` — один (`ReactionsRepository`).
+- «Спасибо за компанию» (P4): `POST rides/:id/thanks` `{ publicId? }` (`RideThanksRequest.optional()`) →
+  `SocialRideParticipantsService.thank`: лимит `social-thanks:<uid>` 60/ч → видимость (404) → `publicId` —
+  `RIDER_PROFILES.findPublic` (нет — 404) и `thank`, без — `thankAll` → лог `social.thanks ride= uid= added=` → `view`.
+  Строка «Ехали» — `RideAttendedRow` (`self`, `thanked`), `allThanked` — все явившиеся «Ехали N», кроме зрителя.
+- «Респект» (P4): `SocialRespectController` (`@Controller()`, `AuthGuard`, `no-store`: `GET|PUT
+  races/:raceId/results/:entryId/respect`, `GET|PUT routes/:id/respect`) → `SocialRespectService` (`SocialModule`):
+  цель — только портом (`raceId` пути ≠ `target.raceId` — как нет цели); `GET` без цели — `NEUTRAL_RESPECT`, `PUT` —
+  лимит `social-respect:<uid>` 60/ч (общий) → 404 → `setRespect` → свежий `respectStateView` (`count` всем, `from` —
+  только получателю: `respectActors` ≤ `respectFromMax` + `RIDER_NAMES`, остальные числом). Получатель от клиента не
+  принимается, `userId` наружу не выходит.
 - Участники и явка райда (P2): `RideParticipantsController` (`SocialModule` + `IdentityModule`, `@Controller('rides')`,
   `AuthGuard`, `no-store`: `GET :id/participants`, `POST :id/attendance`, `POST :id/attendance/decline`) →
   `SocialRideParticipantsService` (`SocialCoreModule`, export — P4): лимит `social-attendance:<uid>` 60/ч

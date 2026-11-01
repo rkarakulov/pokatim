@@ -103,6 +103,18 @@ describe('страница маршрута панели (routes-05, AC1–AC3)'
     expect(screen.getByText(/Минск · гравий/)).toBeTruthy();
   });
 
+  it('карта и профиль — один блок (на весь экран разворачивается вместе), «Цифры» — после профиля', async () => {
+    vi.stubEnv('VITE_MAP_STYLE_LIGHT', 'https://tiles.example/styles/positron');
+    await renderApp(`/routes/${ROUTE_ID}`);
+    const map = await screen.findByTestId('route-map');
+    const view = screen.getByTestId('route-view');
+    expect(view.contains(map)).toBe(true);
+    expect(view.contains(screen.getByRole('slider', { name: /^Профиль высоты/ }))).toBe(true);
+    const stats = screen.getByRole('group', { name: 'Длина' });
+    expect(view.contains(stats)).toBe(false);
+    expect(view.compareDocumentPosition(stats) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('без профиля высоты — «Нет данных о высоте», слайдера нет; цифры высот — «—»', async () => {
     mocked.getRoute.mockResolvedValue(route({ elevation: null }));
     await renderApp(`/routes/${ROUTE_ID}`);

@@ -20,6 +20,19 @@ export interface RespectTarget {
   recipientId: string;
 }
 
+const thanksKey = (actorId: string, rideId: string, recipientId: string): ReactionKey => ({
+  kind: 'thanks',
+  actorId,
+  targetType: 'ride_rider',
+  targetId: rideId,
+  recipientId,
+});
+const thanksEvent = (actorId: string): ProductEventInput => ({
+  type: 'thanks-sent',
+  userId: actorId,
+  props: {},
+});
+
 /**
  * Реакции (K5, K8): «Спасибо за компанию» — только между явившимися на одном райде, повтор — no-op (RC-4); «Респект» —
  * переключение, себе — нельзя. Гонку двух нажатий держит уникальный индекс (RC-1).
@@ -41,14 +54,56 @@ export class SocialReactionsService {
     if (!attendees.includes(actorId) || !attendees.includes(recipientId)) {
       throw socialBlocked('not_attended');
     }
-    const key: ReactionKey = {
-      kind: 'thanks',
-      actorId,
-      targetType: 'ride_rider',
-      targetId: rideId,
-      recipientId,
-    };
-    return this.insert(key, { type: 'thanks-sent', userId: actorId, props: {} });
+    return this.insert(thanksKey(actorId, rideId, recipientId), thanksEvent(actorId));
+  }
+
+  /**
+   * «Поблагодарить всех» (K5, P4 Q1, RC-P4-8): «спасибо» каждому явившемуся, включая непубличных, кроме себя; уже
+   * поблагодарённые пропускаются. Актёр не явился — `409 not_attended`. Каждая реакция — своя транзакция `insert`
+   * (дубль параллельного нажатия — не новая); частичный сбой — повтор идемпотентен. Результат — сколько новых.
+   */
+  async thankAll(actorId: string, rideId: string): Promise<number> {
+    const attendees = await this.attendance.attendees(rideId);
+    if (!attendees.includes(actorId)) throw socialBlocked('not_attended');
+    const done = await this.thankedBy(actorId, rideId);
+    let added = 0;
+    for (const recipientId of attendees) {
+      if (recipientId === actorId || done.has(recipientId)) continue;
+      if (await this.insert(thanksKey(actorId, rideId, recipientId), thanksEvent(actorId))) {
+        added += 1;
+      }
+    }
+    return added;
+  }
+
+  /** Кого зритель уже поблагодарил на райде (P4, флаги «Ехали N»). */
+  thankedBy(actorId: string, rideId: string): Promise<Set<string>> {
+    return this.reactions.recipientsOf(actorId, 'thanks', 'ride_rider', rideId);
+  }
+
+  /**
+   * Идемпотентный «Респект» (P4, RC-P4-4): `true` — поставить (уже стоит — `false` без события), `false` — снять.
+   * Себе — `409 self`. Результат — изменилось ли состояние. HTTP вызывает его, не `toggleRespect`.
+   */
+  async setRespect(actorId: string, target: RespectTarget, respected: boolean): Promise<boolean> {
+    if (actorId === target.recipientId) throw socialBlocked('self');
+    const key: ReactionKey = { kind: 'respect', actorId, ...target };
+    if (!respected) return this.reactions.delete(key);
+    return this.insert(key, {
+      type: 'respect-sent',
+      userId: actorId,
+      props: { targetType: target.targetType },
+    });
+  }
+
+  /** Поставил ли актёр «Респект» цели. */
+  respectedBy(actorId: string, target: RespectTarget): Promise<boolean> {
+    return this.reactions.exists({ kind: 'respect', actorId, ...target });
+  }
+
+  /** Поставившие «Респект» цели, новые сверху, не больше `limit` (P4: `from` получателю). */
+  respectActors(target: Pick<RespectTarget, 'targetType' | 'targetId'>, limit: number) {
+    return this.reactions.actorsOf(target.targetType, target.targetId, 'respect', limit);
   }
 
   /** «Респект» (K8): есть — снять (`false`), нет — поставить (`true`). */
@@ -74,7 +129,11 @@ export class SocialReactionsService {
     return this.reactions.count(targetType, targetId, kind);
   }
 
-  /** Вставка с событием в одной транзакции; дубль уникального ключа — `false`. */
+  /**
+   * Вставка с событием в одной транзакции; дубль уникального ключа — `false`. Единственная точка новых реакций
+   * (`thank`, `thankAll`, `setRespect(true)`, `toggleRespect`): уведомления P7 добавят запись outbox `social.*` сюда же,
+   * в эту транзакцию (RC-P4-14).
+   */
   private async insert(key: ReactionKey, event: ProductEventInput): Promise<boolean> {
     try {
       await this.transactions.run(async (tx) => {

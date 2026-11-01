@@ -5,7 +5,9 @@ import { QUEUE } from '../../queues';
 import { IdentityAccountsModule, IdentityModule } from '../identity';
 import { ProductEventsCoreModule } from '../product-events';
 import { ProfileCoreModule } from '../profile';
+import { ResultsCoreModule } from '../results';
 import { RidesCoreModule } from '../rides';
+import { RoutesCoreModule } from '../routes';
 import { TracksCoreModule } from '../tracks';
 import { AttendanceRepository } from './attendance.repository';
 import { SocialAttendanceService } from './attendance.service';
@@ -22,6 +24,8 @@ import { RideAskSweep } from './ride-ask-sweep';
 import { RideParticipantsController } from './ride-participants.controller';
 import { SocialRideParticipantsService } from './ride-participants.service';
 import { SocialReactionsService } from './reactions.service';
+import { SocialRespectController } from './respect.controller';
+import { SocialRespectService } from './respect.service';
 import { RiderSocialController } from './rider-social.controller';
 import { RiderSocialService } from './rider-social.service';
 import { SocialConnectionsController } from './social-connections.controller';
@@ -63,18 +67,28 @@ import { SocialMaintenanceProcessor, SocialSchedules } from './social-maintenanc
 export class SocialCoreModule {}
 
 /**
- * HTTP «Свои» (якорь композиции `AppModule`, RC-13): участники и явка райда (P2), профиль райдера и список «Свои» (P3),
- * код приглашения (P6); P4, P7 — свои контроллеры. Порты `RIDER_PROFILES` и `RIDES_FOR_SOCIAL` — из ядер владельцев.
+ * HTTP «Свои» (якорь композиции `AppModule`, RC-13): участники, явка и «спасибо» райда (P2, P4), профиль райдера и
+ * список «Свои» (P3), «Респект» (P4), код приглашения (P6); P7 — свои контроллеры. Порты `RIDER_PROFILES`,
+ * `RIDES_FOR_SOCIAL`, `RESULTS_FOR_SOCIAL` и `ROUTES_FOR_SOCIAL` — из ядер владельцев (порты «Респекта» нужны только
+ * HTTP, RC-P4-12).
  */
 @Module({
-  imports: [SocialCoreModule, IdentityModule, ProfileCoreModule, RidesCoreModule],
+  imports: [
+    SocialCoreModule,
+    IdentityModule,
+    ProfileCoreModule,
+    RidesCoreModule,
+    ResultsCoreModule,
+    RoutesCoreModule,
+  ],
   controllers: [
     RideParticipantsController,
     InviteCodeController,
     RiderSocialController,
     SocialConnectionsController,
+    SocialRespectController,
   ],
-  providers: [RiderSocialService],
+  providers: [RiderSocialService, SocialRespectService],
 })
 export class SocialModule {}
 
