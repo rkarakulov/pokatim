@@ -333,6 +333,14 @@ PR A (coder, 2026-11-01):
   предела). Предел не поднимался (условие задачи соблюдено); реальные фото, как правило, — палитра 256.
 - **D6. `pokatim-web.md`, `pokatim-app.md`** не менялись в PR A — их содержание (панель, шапка) — PR B.
 
+PR B (coder, 2026-11-01):
+
+- **D7. Тест центра уведомлений `ride_photo_reset`** (`notifications.test.tsx`) — сверх матрицы: проверка, что кода в
+  приложении не нужно (текст сервера, цель `ride` → `/rides/<id>`). Зелёный сразу, без правок кода — регрессионный.
+- **D8. Пометка у скрытого** — класс `.ride-photo-preview__note` (`display: block`, отступ `--space-s2`) вместо голого
+  `t-meta`: иначе строка встаёт вплотную к картинке. Токенов не добавлено.
+- **D9. Тест api-client** на отсутствие `ridePhotoUrl` не добавлялся (тавтология): удаление держит typecheck панели.
+
 ## 9. Test matrix
 
 Int-тесты — реальные mongod `127.0.0.1:27117` (rs0) и redis `6479` через `test/harness.ts`, своя БД/Redis db на сессию
@@ -523,3 +531,28 @@ ModerationRidePhotoQuery = z.strictObject({ photoId: RidePhotoId })
 чтением `expected 200 to be 404`); LOW — текст последствий упоминает превью соцсетей.
 
 **NOT VERIFIED:** визуальная проверка OG с фото (превью `preview:story-cards` не запускалось); e2e — не нужен (§9).
+
+### PR B (coder, 2026-11-01)
+
+Ветка `ride-photo-followups-b` (стек поверх PR A #185), не запушено. Коммиты: `4538cbbc` шапка карточки райда (AC1),
+`3789b362` тест центра уведомлений `ride_photo_reset`, `f02fc725` панель (AC6) + удаление `ridePhotoUrl` из админского
+клиента, `25b76a6f` доки и правила, затем итог (§8.2 D7–D9, §12, `pr-b.md`).
+
+- **AC1** — `ride-detail.tsx`: `SectionHero photo={ride.photo ? api.ridePhotoUrl(ride.photo.id) : null}`; SSR и клиент
+  строят тот же абсолютный адрес (`EXPO_PUBLIC_API_URL`). `ride-detail.test.tsx` «фото в шапке»: гость с фото —
+  `section-hero-photo` с адресом и пустым alt, `photo-scrim`; вошедший (`me`) — фото, `error` картинки — типографский
+  герой; скрытый (`photo: null`) — без фото, `ridePhotoUrl` не вызывается. Сначала красный (`Number of calls: 0`).
+  Поведение `SectionHero` (`section-hero(.web).test.tsx`) — без изменений.
+- **AC6** — `RidePhoto`: одна ветка у любого статуса — `PhotoImage key={photo.id} src={api.moderationRidePhotoUrl(
+  ride.id, photo.id)}`, у `hidden` — пометка `photoHidden` «Райд скрыт — райдеры это фото не видят». Тесты: видимый —
+  админский адрес, без пометки; скрытый — та же картинка и пометка, «Удалить фото» и «Вернуть» есть; скрытый с ошибкой
+  картинки — «Фото недоступно» + «Повторить» / «Обновить карточку», пометка остаётся; прежние кейсы скелетона, ошибки,
+  смены `photo.id`, 409 — на админском адресе. Сначала красные (9 failed). `csp.test.ts` — название кейса.
+- **`ride_photo_reset` в приложении** — кода не нужно (§11): тест центра — текст сервера и переход `/rides/<id>`.
+
+**Полный `TURBO_CONCURRENCY=4 pnpm check`** на `25b76a6f` (`MONGO_URL_TEST=…/ride_photo_fu_test`, `REDIS_URL_TEST=…/10`):
+`Tasks: 15 successful, 15 total` (9 из кэша turbo); app — `Test Suites 288 passed`, `Tests 2817 passed`; admin —
+`Tests 527 passed`; api — `Test Files 262 passed`, `Tests 2994 passed`; EXIT=0.
+
+**NOT VERIFIED:** визуальная проверка шапки с фото на iOS/Android/web (и SSR-HTML в браузере) и карточки панели —
+симулятор и превью не запускались; e2e — не нужен (§9).
