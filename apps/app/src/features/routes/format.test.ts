@@ -14,6 +14,7 @@ import {
   routeChips,
   routeDuration,
   routeHeroDate,
+  km,
   routeKm,
   routePlace,
   routeShareDescription,
@@ -39,6 +40,9 @@ describe('подписи маршрута каталога (routes-01)', () => {
   it('км — с десятыми, без лишнего нуля', () => {
     expect(routeKm(86_012)).toBe('86 км');
     expect(text(routeKm(48_550))).toBe('48,6 км');
+    // route-rides-05 B: км участков — то же округление
+    expect(km(24_999)).toBe(25);
+    expect(km(48_612)).toBe(48.6);
     expect(routeHeroDate(route({ distanceM: 48_550 }))).toEqual({ value: '48,6', unit: 'км' });
   });
 

@@ -13,7 +13,8 @@ import { domainLabel, formatDistances, meta } from '@/lib/minsk-format';
 
 /** Подписи маршрута каталога (вкладка, карточка, Главная, мета) — чистые функции; `'unknown'` — без своей части. */
 
-const km = (distanceM: number) => Math.round(distanceM / 100) / 10;
+/** Метры → км с десятыми (длина маршрута, границы участков заезда). */
+export const km = (distanceM: number) => Math.round(distanceM / 100) / 10;
 
 /** «86 км», «48,6 км» — длина маршрута с десятыми. */
 export const routeKm = (distanceM: number) => formatDistances([km(distanceM)]) ?? '';

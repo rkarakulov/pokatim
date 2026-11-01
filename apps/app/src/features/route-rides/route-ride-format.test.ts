@@ -8,6 +8,7 @@ import {
   RIDER_PUBLIC_ID,
   rideDetail,
   rideRow,
+  rideSection,
   ROUTE_ID,
   RIDE_ID,
 } from '../../__tests__/route-rides-fixtures';
@@ -30,6 +31,9 @@ import {
   routeRidePickPath,
   routeRideReasonText,
   routeRideRowView,
+  routeRideSectionsShown,
+  routeRideSectionsSummary,
+  routeRideSectionView,
   routeRideSourceLabel,
   routeRidesSummary,
   routeRideStatusPill,
@@ -213,9 +217,102 @@ describe('текстовая альтернатива трека (RC-9)', () => 
 
   it('разметка недоступна — отдельная строка; пройден с разметкой — ничего', () => {
     expect(routeRideTrackLines(rideDetail(), 'unavailable', 0)).toEqual([
-      'Разметка участков для этого заезда недоступна',
+      'Разметка трека для этого заезда недоступна',
     ]);
     expect(routeRideTrackLines(rideDetail(), 'ready', 0)).toEqual([]);
+  });
+});
+
+describe('участки заезда (route-rides-05 B)', () => {
+  it('пройден лучшим — время, «Лучший», без сравнения; a11y из видимых частей', () => {
+    expect(routeRideSectionView(rideSection(), 0)).toEqual({
+      title: 'Участок 1 · 0–10 км',
+      time: '0:18:04',
+      status: null,
+      best: true,
+      comparison: null,
+      a11y: 'Участок 1 · 0–10 км · 0:18:04 · Лучший',
+    });
+  });
+
+  it('пройден не лучшим — «К лучшему» со знаком сервера; ничья (isBest false, 0) — «0:00», не лучший (RC-9)', () => {
+    const slower = routeRideSectionView(
+      rideSection({ isBest: false, elapsedSec: 1_096, deltaToBestSec: 12 }),
+      1,
+    );
+    expect(slower).toMatchObject({
+      time: '0:18:16',
+      best: false,
+      comparison: 'К лучшему: +0:12',
+    });
+    expect(slower.a11y).toBe('Участок 2 · 0–10 км · 0:18:16 · К лучшему: +0:12');
+    expect(routeRideSectionView(rideSection({ isBest: false }), 0)).toMatchObject({
+      best: false,
+      comparison: 'К лучшему: 0:00',
+    });
+    expect(
+      routeRideSectionView(rideSection({ isBest: false, deltaToBestSec: null }), 0).comparison,
+    ).toBeNull();
+  });
+
+  it('не пройден — «Не пройден», «Лучшее время» только если сервер отдал; без времени', () => {
+    const missed = rideSection({
+      status: 'not_passed',
+      elapsedSec: null,
+      isBest: false,
+      deltaToBestSec: null,
+    });
+    expect(routeRideSectionView(missed, 2)).toEqual({
+      title: 'Участок 3 · 0–10 км',
+      time: null,
+      status: 'Не пройден',
+      best: false,
+      comparison: 'Лучшее время: 0:18:04',
+      a11y: 'Участок 3 · 0–10 км · Не пройден · Лучшее время: 0:18:04',
+    });
+    expect(routeRideSectionView({ ...missed, bestElapsedSec: null }, 0).comparison).toBeNull();
+  });
+
+  it('незнакомый статус — «Статус неизвестен», без времени и сравнения', () => {
+    const view = routeRideSectionView(rideSection({ status: 'unknown', isBest: true }), 0);
+    expect(view).toMatchObject({
+      time: null,
+      status: 'Статус неизвестен',
+      best: false,
+      comparison: null,
+    });
+  });
+
+  it('заголовок — км с десятыми тем же округлением, что у маршрута; номер — позиция в ответе', () => {
+    expect(routeRideSectionView(rideSection({ fromM: 10_000, toM: 24_999 }), 1).title).toBe(
+      'Участок 2 · 10–25 км',
+    );
+    expect(
+      routeRideSectionView(rideSection({ fromM: 24_999, toM: 48_612 }), 2).title.replace(
+        /\s/g,
+        ' ',
+      ),
+    ).toBe('Участок 3 · 25–48,6 км');
+  });
+
+  it('сводка — пройденные из всех (`unknown` не пройден); суммы времён нет', () => {
+    expect(
+      routeRideSectionsSummary([
+        rideSection(),
+        rideSection({ status: 'unknown' }),
+        rideSection({ status: 'passed' }),
+        rideSection({ status: 'not_passed', elapsedSec: null }),
+      ]),
+    ).toBe('Пройдено участков: 2 из 4');
+  });
+
+  it('блок виден — только с участками и не во время проверки', () => {
+    const sections = [rideSection()];
+    expect(routeRideSectionsShown(rideDetail())).toBe(false);
+    expect(routeRideSectionsShown(rideDetail({ status: 'queued', sections }))).toBe(false);
+    expect(routeRideSectionsShown(rideDetail({ status: 'checking', sections }))).toBe(false);
+    expect(routeRideSectionsShown(rideDetail({ sections }))).toBe(true);
+    expect(routeRideSectionsShown(rideDetail({ status: 'not_passed', sections }))).toBe(true);
   });
 });
 
