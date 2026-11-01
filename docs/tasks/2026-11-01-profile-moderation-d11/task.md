@@ -59,6 +59,7 @@
 ## 10. Documentation Impact
 
 `docs/product/profile.md` (решения D11-1, D11-2, «Где в продукте», риски, Follow-up), `docs/product/notifications.md`,
+`docs/product/admin-panel.md`, `.claude/rules/pokatim-db.md`,
 `.claude/rules/pokatim-contracts.md`, `.claude/rules/pokatim-backend.md`, `.claude/rules/pokatim-web.md`.
 
 ## 12. Outcome

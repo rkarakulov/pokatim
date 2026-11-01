@@ -149,7 +149,7 @@ paths:
 ## Сброс имени райдера (profile-02)
 
 - `/v1/admin/profiles/*` — `PanelGuard` + `@RequirePermission('profiles.moderate')` на классе (admin, moderator);
-  `userId` пути — `Uuid`, тело — `strictObject` с `ActionReason`. Журнал `profile.name_reset` — объект `rider`
+  `userId` пути — `Uuid`, тело — `strictObject` `{ reason: ProfileReportReason, comment?: ActionReason }` (D11-1). Журнал `profile.name_reset` — объект `rider`
   (`Участник ·<id>`), причина; ни сброшенного имени, ни `targetUserId`. Лог после коммита — только id сотрудника и
   исход, без имени, причины и `userId` райдера. Причина — код из справочника, текст — только у «Другое» (D11-1):
   может содержать имя — предупреждение в окне сброса при «Другое».

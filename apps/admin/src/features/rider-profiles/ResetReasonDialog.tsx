@@ -32,7 +32,8 @@ export interface ResetReasonDialogProps {
  * Сброс имени, фото или клуба модератором (profile-moderation-d11, D11-1): причина — из справочника причин жалоб на
  * профиль (радио), текст — только у «Другое» (обязателен, 3–500, уходит в append-only журнал) — с предупреждением не
  * повторять имя и клуб. Подтверждение неактивно до выбора причины и, у «Другое», до достаточного текста. Esc и
- * «Отмена» закрывают (не во время запроса); ошибка сервера — в окне. Как `ReasonDialog`, но тело — `{ reason, comment? }`.
+ * «Отмена» закрывают (не во время запроса) и сбрасывают выбор; ошибка сервера — в окне. Выбор «Другое» — фокус в поле
+ * текста. Как `ReasonDialog`, но тело — `{ reason, comment? }`.
  */
 export function ResetReasonDialog({
   open,
@@ -92,6 +93,8 @@ export function ResetReasonDialog({
           <TextAreaField
             label={t('admin.dialog.reason')}
             value={comment}
+            // выбор «Другое» — сразу к тексту (поле появляется только тогда)
+            autoFocus
             maxLength={ACTION_REASON_MAX_LENGTH}
             onChange={(event) => setComment(event.target.value)}
           />
