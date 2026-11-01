@@ -9,7 +9,12 @@ import { consumeUserLimit } from '../../user-limit';
 import { PRODUCT_EVENTS, type ProductEvents } from '../product-events';
 import { type PublicRiderCard, RIDER_NAMES, type RiderNameDirectory } from '../profile';
 import { ConnectionsRepository } from './connections.repository';
-import { SOCIAL_INVITE_REGISTERED, type SocialInviteRegistered } from './social.events';
+import {
+  SOCIAL_CONNECTION_ADDED,
+  SOCIAL_INVITE_REGISTERED,
+  type SocialConnectionAdded,
+  type SocialInviteRegistered,
+} from './social.events';
 import { connectionSources, SOCIAL_POLICY, socialBlocked } from './social.policy';
 
 /** Строка списка «своих» владельца (K6): только публичные профили. */
@@ -53,7 +58,8 @@ export class SocialConnectionsService {
   /**
    * «В свои» (K1, K11): лимит — на каждую попытку и до остальных проверок (против перебора профилей); себе — нельзя;
    * неизвестный, непубличный и удалённый — одинаковый `404 NOT_FOUND` (RC-16). Снимает `removedAt`. `true` — связь
-   * создана.
+   * создана. Уведомление «Вас добавили» (K10, K11, P7) — outbox `social.connection-added` в той же транзакции, только
+   * если связи не было (или убрана) и по паре не уведомляли последние `manualRenotifyMs` (`claimManualNotice`).
    */
   async addManual(ownerId: string, otherId: string): Promise<boolean> {
     const now = this.clock.now();
@@ -70,12 +76,19 @@ export class SocialConnectionsService {
     const pair = { ownerId, otherId };
     // гонка первых upsert одной пары (и с пересчётом явки) — `WriteConflict`, повтор `withTransaction` (RC-P3-2)
     return this.transactions.run(async (tx) => {
-      const created = await this.connections.upsertManual(tx, pair, now);
+      const { created, connectedBefore } = await this.connections.upsertManual(tx, pair, now);
       if (created) {
         await this.events.record(
           { type: 'connection-created', userId: ownerId, props: { source: 'manual' } },
           tx,
         );
+      }
+      if (
+        !connectedBefore &&
+        (await this.connections.claimManualNotice(tx, pair, now, SOCIAL_POLICY.manualRenotifyMs))
+      ) {
+        const payload: SocialConnectionAdded = pair;
+        await this.outbox.append(tx, { type: SOCIAL_CONNECTION_ADDED, payload });
       }
       return created;
     });

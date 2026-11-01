@@ -46,17 +46,51 @@ export class ConnectionsRepository {
     this.connections = socialCollections(db).connections;
   }
 
-  /** «В свои» (K1): upsert пары, `manualAt = now`, `removedAt = null`. `true` — документ создан. */
-  async upsertManual(tx: DbSession, pair: ConnectionPair, now: Date): Promise<boolean> {
-    const result = await this.connections.updateOne(
+  /**
+   * «В свои» (K1): upsert пары, `manualAt = now`, `removedAt = null`. `created` — документ создан, `connectedBefore` —
+   * связь уже была и не убрана (любой источник; K11, P7: тогда без уведомления).
+   */
+  async upsertManual(
+    tx: DbSession,
+    pair: ConnectionPair,
+    now: Date,
+  ): Promise<{ created: boolean; connectedBefore: boolean }> {
+    const before = await this.connections.findOneAndUpdate(
       pair,
       {
         $set: { manualAt: now, removedAt: null, updatedAt: now },
         $setOnInsert: { ...fresh(now), inviteAt: null },
       },
-      { upsert: true, session: tx },
+      { upsert: true, session: tx, returnDocument: 'before', projection: { removedAt: 1 } },
     );
-    return result.upsertedCount > 0;
+    return {
+      created: before === null,
+      connectedBefore: before !== null && before.removedAt === null,
+    };
+  }
+
+  /**
+   * K11 (P7): отметка уведомления о ручном добавлении пары — если прошлого не было (`manualNoticeAt` нет или `null`)
+   * или оно старше `renotifyMs`. `true` — отметка поставлена, уведомлять.
+   */
+  async claimManualNotice(
+    tx: DbSession,
+    pair: ConnectionPair,
+    now: Date,
+    renotifyMs: number,
+  ): Promise<boolean> {
+    const result = await this.connections.updateOne(
+      {
+        ...pair,
+        $or: [
+          { manualNoticeAt: null },
+          { manualNoticeAt: { $lte: new Date(now.getTime() - renotifyMs) } },
+        ],
+      },
+      { $set: { manualNoticeAt: now } },
+      { session: tx },
+    );
+    return result.modifiedCount > 0;
   }
 
   /**

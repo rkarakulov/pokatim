@@ -17,6 +17,7 @@ import { pastRide, socialDb, socialServices } from '../../../test/social';
 import { seedProtocolRace, seedSeason } from '../../../test/standings';
 import { RIDES_PARTICIPANT_JOINED } from '../rides';
 import {
+  SOCIAL_CONNECTION_ADDED,
   SOCIAL_INVITE_REGISTERED,
   SOCIAL_REACTION_CREATED,
   type SocialReactionCreated,
@@ -243,3 +244,64 @@ async function seedEntry(raceId: string, owner: Rider): Promise<string> {
   } as never);
   return entryId;
 }
+
+describe('«Вас добавили» и K11 (AC4)', () => {
+  const MINUTE = 60_000;
+  const added = async () => (await eventsOfType(h, SOCIAL_CONNECTION_ADDED)).length;
+
+  it('«В свои» — добавленному; убрать и снова через 10 дн — нет; через 30 дн + 1 мин — есть', async () => {
+    const owner = await rider(h, 'owner@example.by');
+    const other = await publicRider(h, 'other@example.by', 'Катя Л.');
+    const { connections } = socialServices(h);
+    expect(await connections.addManual(owner.userId, other.userId)).toBe(true);
+    expect(await added()).toBe(1);
+    await notificationsIntake(h).drain();
+    expect(await notificationsOf(h, other.userId)).toMatchObject([
+      { kind: 'social_added', actors: [owner.userId], target: null },
+    ]);
+
+    // повторный `PUT connected: true` при активной связи — без уведомления
+    await connections.addManual(owner.userId, other.userId);
+    expect(await added()).toBe(1);
+
+    await connections.remove(owner.userId, other.userId);
+    h.clock.advance(10 * DAY);
+    await connections.addManual(owner.userId, other.userId);
+    expect(await added()).toBe(1);
+
+    await connections.remove(owner.userId, other.userId);
+    h.clock.advance(20 * DAY + MINUTE);
+    await connections.addManual(owner.userId, other.userId);
+    expect(await added()).toBe(2);
+  });
+
+  it('связь по райду, затем «В свои» — без уведомления', async () => {
+    const owner = await rider(h, 'owner@example.by');
+    const other = await publicRider(h, 'other@example.by', 'Катя Л.');
+    const now = h.clock.now();
+    await socialDb(h).connections.insertOne({
+      _id: uuidv7(),
+      ownerId: owner.userId,
+      otherId: other.userId,
+      rides: [{ rideId: uuidv7(), at: now }],
+      rideCount: 1,
+      lastRideAt: now,
+      inviteAt: null,
+      manualAt: null,
+      removedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    expect(await socialServices(h).connections.addManual(owner.userId, other.userId)).toBe(false);
+    expect(await added()).toBe(0);
+  });
+
+  it('убрал до приёма — без уведомления (state)', async () => {
+    const owner = await rider(h, 'owner@example.by');
+    const other = await publicRider(h, 'other@example.by', 'Катя Л.');
+    await socialServices(h).connections.addManual(owner.userId, other.userId);
+    await socialServices(h).connections.remove(owner.userId, other.userId);
+    expect(await notificationsIntake(h).drain()).toEqual(['skipped']);
+    expect(await notificationsOf(h, other.userId)).toEqual([]);
+  });
+});
