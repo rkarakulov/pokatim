@@ -279,6 +279,26 @@ export class RouteRidesRepository {
     return (await this.c.rides.deleteMany({ userId, activityId })).deletedCount;
   }
 
+  /**
+   * Удаление своего заезда (route-rides-07): `{ _id, userId, routeId }` и снятие маршрута из планов автопроверки
+   * райдера (индекс `route_ride_auto_plans_user_idx`) — повтор события не воскрешает автозаезд. `false` — заезда нет.
+   */
+  async deleteOwn(
+    session: DbSession,
+    userId: string,
+    routeId: string,
+    id: string,
+  ): Promise<boolean> {
+    const deleted = await this.c.rides.deleteOne({ _id: id, userId, routeId }, { session });
+    if (deleted.deletedCount !== 1) return false;
+    await this.c.autoPlans.updateMany(
+      { userId, routeIds: routeId },
+      { $pull: { routeIds: routeId } },
+      { session },
+    );
+    return true;
+  }
+
   /** План автопроверки события (route-rides-03); нет — `null`. */
   async autoPlanOf(eventId: string): Promise<string[] | null> {
     const doc = await this.c.autoPlans.findOne({ _id: eventId }, { projection: { routeIds: 1 } });

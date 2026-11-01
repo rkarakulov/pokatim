@@ -106,6 +106,20 @@ describe('приложение: заезд по маршруту (route-rides-01
     expect(client.calls[0]?.headers.get('authorization')).toBe('Bearer access');
   });
 
+  it('удалить заезд (route-rides-07) — POST …/delete с Bearer → 204 undefined; 404 — ApiHttpError', async () => {
+    const client = app(204, undefined);
+    await expect(client.api.deleteRouteRide('access', ROUTE, RIDE)).resolves.toBeUndefined();
+    expect(client.calls[0]).toMatchObject({
+      url: `https://api.test/v1/routes/${ROUTE}/rides/${RIDE}/delete`,
+      method: 'POST',
+      body: {},
+    });
+    expect(client.calls[0]?.headers.get('authorization')).toBe('Bearer access');
+    await expect(
+      app(404, { code: 'NOT_FOUND', message: 'x' }).api.deleteRouteRide('access', ROUTE, RIDE),
+    ).rejects.toMatchObject({ apiError: { code: 'NOT_FOUND' } });
+  });
+
   it('деталь (route-rides-05): старый ответ без участков → sections []; участки разбираются', async () => {
     await expect(app(200, detail).api.getRouteRide('access', ROUTE, RIDE)).resolves.toMatchObject({
       sections: [],
