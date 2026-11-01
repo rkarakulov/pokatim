@@ -214,6 +214,29 @@ describe('«Уведомления»: нажатие и «Прочитать в�
     expect(router.getSearchParams()).toMatchObject({ season: RACE });
   });
 
+  it('фото райда удалено модератором (ride_photo_reset) — текст сервера, переход в карточку райда', async () => {
+    const rideId = '0190a6f4-0000-7000-8000-000000000005';
+    list.mockResolvedValue(
+      page([
+        notice({
+          kind: 'ride_photo_reset',
+          group: 'rides',
+          title: 'Фото райда удалено',
+          body: 'Модератор удалил фото райда «Кофе-райд». Можно загрузить другое, пока райд не начался.',
+          target: { type: 'ride', rideId },
+        }),
+      ]),
+    );
+    const router = await open('/notifications');
+    expect(
+      await screen.findByText(
+        'Модератор удалил фото райда «Кофе-райд». Можно загрузить другое, пока райд не начался.',
+      ),
+    ).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole('button', { name: /^Фото райда удалено\./ }));
+    await waitFor(() => expect(router.getPathname()).toBe(`/rides/${rideId}`));
+  });
+
   it('«Свои»: цель rider — переход на публичный профиль', async () => {
     const publicId = 'K'.repeat(43);
     list.mockResolvedValue(

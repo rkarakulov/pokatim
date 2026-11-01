@@ -1,13 +1,15 @@
 /// <reference types="jest" />
 import { AVATAR_MAX_BYTES } from '@pokatim/contracts';
 
-import { imagePickerSupported } from './image-picker-support';
-import { loadImagePicker } from './load-image-picker';
+import { imagePickerSupported } from '@/features/media/image-picker-support';
+import { loadImagePicker } from '@/features/media/load-image-picker';
 import { pickAvatar } from './pick-avatar';
 import { AvatarPickerUnavailableError } from './picked-avatar';
 
-jest.mock('./image-picker-support', () => ({ imagePickerSupported: jest.fn(() => true) }));
-jest.mock('./load-image-picker', () => ({ loadImagePicker: jest.fn() }));
+jest.mock('@/features/media/image-picker-support', () => ({
+  imagePickerSupported: jest.fn(() => true),
+}));
+jest.mock('@/features/media/load-image-picker', () => ({ loadImagePicker: jest.fn() }));
 
 const launch = jest.fn();
 const blob = new Blob(['jpeg']);

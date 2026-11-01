@@ -1361,6 +1361,147 @@ describe('сброс поля профиля модератором (profile-mod
   });
 });
 
+describe('фото райда удалено модератором (ride-photo-followups, AC4)', () => {
+  const RESET = 'rides.photo-reset';
+  const PHOTO_A = 'A'.repeat(43);
+  const PHOTO_B = 'B'.repeat(43);
+  let moderator: { userId: string; token: string };
+  beforeEach(async () => {
+    moderator = await staff(h, 'moderator@example.by', 'moderator');
+  });
+  /** Фото райда прямой записью (байты не нужны: сброс удаляет документ фото по id, отсутствующий — no-op). */
+  const setPhoto = (rideId: string, photoId: string) =>
+    ridesDb(h).updateOne({ _id: rideId }, { $set: { photoId } });
+  const resetPhoto = async (rideId: string, photoId: string) => {
+    const res = await panelCall(
+      h,
+      moderator.token,
+      'POST',
+      `/v1/admin/rides/${rideId}/photo-reset`,
+      {
+        photoId,
+        reason: 'Чужое фото с номерами',
+      },
+    );
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+  };
+
+  it('организатору: группа «Райды», цель — райд, текст с призывом; участникам и модератору — нет; push pending', async () => {
+    const ride = await rideWithParticipants();
+    const worker = notificationsIntake(h);
+    await worker.drain();
+    await setPhoto(ride.id, PHOTO_A);
+    await resetPhoto(ride.id, PHOTO_A);
+    expect(await worker.drain()).toEqual(['written']);
+    // «Новый участник» от входа a и b — своё уведомление организатору
+    const docs = (await notificationsOf(h, organizer.userId)).filter(
+      (doc) => doc.kind !== 'ride_joined',
+    );
+    expect(docs).toHaveLength(1);
+    expect(docs[0]).toMatchObject({
+      kind: 'ride_photo_reset',
+      group: 'rides',
+      title: 'Фото райда удалено',
+      body: 'Модератор удалил фото райда «Кофе на море». Можно загрузить другое, пока райд не начался.',
+      target: { type: 'ride', rideId: ride.id },
+      collapseKey: `ride:${ride.id}:photo-reset`,
+      readAt: null,
+      push: { state: 'pending' },
+      // без письма (P5): e-mail — только N2
+      email: null,
+    });
+    expect(JSON.stringify(docs)).not.toContain('Чужое фото с номерами');
+    for (const who of [a, b, stranger]) expect(await notificationsOf(h, who.userId)).toEqual([]);
+    expect(await notificationsOf(h, moderator.userId)).toEqual([]);
+  });
+
+  it('прошедший райд — без призыва загрузить другое', async () => {
+    const ride = await createRide(h, organizer, { title: 'Кофе на море' });
+    await setPhoto(ride.id, PHOTO_A);
+    await ridesDb(h).updateOne(
+      { _id: ride.id },
+      { $set: { startsAt: new Date(h.clock.now().getTime() - HOUR) } },
+    );
+    await resetPhoto(ride.id, PHOTO_A);
+    await notificationsIntake(h).drain();
+    const [doc] = await notificationsOf(h, organizer.userId);
+    expect(doc?.body).toBe('Модератор удалил фото райда «Кофе на море».');
+  });
+
+  it('повторный сброс после новой загрузки заменяет прочитанное и снова непрочитан (N7)', async () => {
+    const ride = await createRide(h, organizer, { title: 'Кофе на море' });
+    const worker = notificationsIntake(h);
+    await setPhoto(ride.id, PHOTO_A);
+    await resetPhoto(ride.id, PHOTO_A);
+    await worker.drain();
+    const [first] = await notificationsOf(h, organizer.userId);
+    await notificationsDb(h).notifications.updateOne(
+      { _id: first!._id },
+      { $set: { readAt: h.clock.now() } },
+    );
+    h.clock.advance(MINUTE);
+    await setPhoto(ride.id, PHOTO_B);
+    await resetPhoto(ride.id, PHOTO_B);
+    await worker.drain();
+    const docs = await notificationsOf(h, organizer.userId);
+    expect(docs).toHaveLength(1);
+    expect(docs[0]).toMatchObject({ _id: first!._id, readAt: null, createdAt: h.clock.now() });
+  });
+
+  it('более раннее событие (меньший seq) после позднего не заменяет его', async () => {
+    const ride = await createRide(h, organizer, { title: 'Кофе на море' });
+    const later = await appendEvent(h, RESET, { rideId: ride.id, seq: 5 });
+    expect(await runIntake(h, RESET, later)).toBe('written');
+    await notificationsDb(h).notifications.updateMany({}, { $set: { readAt: h.clock.now() } });
+    h.clock.advance(MINUTE);
+    const earlier = await appendEvent(h, RESET, { rideId: ride.id, seq: 3 });
+    await runIntake(h, RESET, earlier);
+    const docs = await notificationsOf(h, organizer.userId);
+    expect(docs).toHaveLength(1);
+    expect(docs[0]).toMatchObject({ sourceEventId: later, collapseSeq: 5 });
+    expect(docs[0]?.readAt).not.toBeNull();
+  });
+
+  it('удалённый организатор — без уведомления; битый payload — skipped', async () => {
+    const ride = await createRide(h, organizer, { title: 'Кофе на море' });
+    await setPhoto(ride.id, PHOTO_A);
+    await resetPhoto(ride.id, PHOTO_A);
+    await collections(h).users.updateOne(
+      { _id: organizer.userId },
+      { $set: { deletedAt: h.clock.now() } },
+    );
+    await notificationsIntake(h).drain();
+    expect(await notificationsOf(h, organizer.userId)).toEqual([]);
+    const bad = await appendEvent(h, RESET, { rideId: ride.id });
+    expect(await runIntake(h, RESET, bad)).toBe('skipped');
+    expect(await total()).toBe(0);
+  });
+
+  it('push группы «Райды» выключен — в центре есть, push skipped: disabled', async () => {
+    const res = await call(
+      h,
+      'PUT',
+      '/v1/notifications/settings',
+      {
+        push: { races: true, disputes: true, rides: false },
+        email: { disputes: true, rides: false },
+        quietHours: { enabled: false, startHour: 22, endHour: 8 },
+      },
+      bearer(organizer.token),
+    );
+    expect(res.status).toBe(200);
+    const ride = await createRide(h, organizer, { title: 'Кофе на море' });
+    await setPhoto(ride.id, PHOTO_A);
+    await resetPhoto(ride.id, PHOTO_A);
+    await notificationsIntake(h).drain();
+    const [doc] = await notificationsOf(h, organizer.userId);
+    expect(doc).toMatchObject({
+      kind: 'ride_photo_reset',
+      push: { state: 'skipped', reason: 'disabled' },
+    });
+  });
+});
+
 describe('новое достижение (achievements-push, AC1, AC4, P1)', () => {
   /** Райдер после первой сверки с «Подиумом» (тихо, без события) — id выдачи для событий теста. */
   async function podiumGrant(who: Rider): Promise<string> {

@@ -316,3 +316,25 @@ describe('«Свои» (social-p1, RC-3): запасной текст без и�
     });
   });
 });
+
+describe('фото райда удалено модератором (ride-photo-followups P5): без причины модератора (N12)', () => {
+  it('райд ещё можно поменять — с призывом загрузить другое', () => {
+    expect(renderNotification({ kind: 'ride_photo_reset', ride: RIDE, canReplace: true })).toEqual({
+      title: 'Фото райда удалено',
+      body: `Модератор удалил фото райда «${RIDE}». Можно загрузить другое, пока райд не начался.`,
+    });
+  });
+
+  it('загрузка невозможна (начался, отменён, скрыт) — без призыва', () => {
+    expect(renderNotification({ kind: 'ride_photo_reset', ride: RIDE, canReplace: false })).toEqual(
+      { title: 'Фото райда удалено', body: `Модератор удалил фото райда «${RIDE}».` },
+    );
+  });
+
+  it('название — одна строка в кавычках', () => {
+    expect(
+      renderNotification({ kind: 'ride_photo_reset', ride: '  Кофе \n  райд ', canReplace: false })
+        .body,
+    ).toBe('Модератор удалил фото райда «Кофе райд».');
+  });
+});

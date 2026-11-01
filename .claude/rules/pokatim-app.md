@@ -220,6 +220,13 @@ paths:
   `date.month.*`; общие подписи дат, дистанций и меты — `src/lib/minsk-format.ts`, подписи гонки —
   `features/races/format.ts`, «сейчас» — `src/lib/use-minsk-clock.ts` (тесты в TZ ≠ Минск). Фаза — с сервера; `'unknown'` в фазе, покрытии,
   дисциплине — нейтрально: без строки и подписи.
+- Секция «Свои» (P7, K7) — `features/social/social-home-section.tsx` (`SocialHomeSection`, строки `SocialRideRow` /
+  `SocialResultRow` / `SocialRouteRow`; тексты — `social-home-format.ts`, разницу считает сервер): слот
+  `socialSlotIndex` — секция и под ней подсказка K3 (`NameHint`); профиль не пришёл — слота нет. Запрос
+  `useSocialHome(signedIn)` (ключ `['social','home']`, под префиксом `['social']`; гостю — нет), в pull-to-refresh
+  Главной. Исключение §4.12 (RC-P7-17, прецедент «Ваших билетов»): первой загрузки, ошибки без данных и пустого ответа —
+  секции нет, ошибка обновления — данные остаются. «Я иду» — `useRideRsvp(id, 'social_home')` + перезапрос
+  `['social','home']`; результат → `/races/result/<raceId>/<entryId>`, маршрут → `/routes/<id>`, «Все свои» → `/social`.
 - Обновление: pull-to-refresh (`usePullToRefresh`, индикатор только на время жеста) и `focusManager` — native
   `src/lib/focus-manager.ts` (`AppState`), web — встроенный `visibilitychange`. Polling — нет.
 
@@ -390,10 +397,14 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
 - Аватар — только `components/rider-avatar.tsx` (`expo-image`, `cachePolicy: memory-disk` — URL `immutable`; нет фото
   или ошибка — иконка человека); размер шапки — `layout.avatarProfile` (`@pokatim/design-tokens`, follow-up
   `size.avatarLg` в базе), верхней панели — `size.avatarTopBar`.
-- Выбор фото — развилка `features/profile/pick-avatar(.web).ts`: native — `expo-image-picker` лениво
-  (`load-image-picker.ts`) после `imagePickerSupported()` (`requireOptionalNativeModule('ExponentImagePicker')`; нет —
-  «Обновите приложение»), системная обрезка 1:1, без `crop`; web — `expo-document-picker` (JPEG/PNG/WebP, пре-чек
-  формата и 10 МиБ) + `avatar-crop.web.tsx` (pointer events, кнопки и клавиши масштаба, без колеса; доли `x, y, size` в
+- Выбор фото — только общий `features/media/pick-image(.web).ts` (`pickImage({ maxBytes, square })`, аватар — обёртка
+  `features/profile/pick-avatar.ts`): native — `expo-image-picker` лениво
+  (`media/load-image-picker.ts`) после `imagePickerSupported()` (`requireOptionalNativeModule('ExponentImagePicker')`; нет —
+  «Обновите приложение»), `square` — системная обрезка 1:1, без `crop`; без `square` (фото райда) — без редактора, iOS —
+  `preferredAssetRepresentationMode: compatible` (HEIC → JPEG); формат на native по `asset.mimeType` не проверяется
+  (MIME исходника, а при `quality < 1` файл уже JPEG — Android HEIC), сигнатуру проверяет сервер; занятость кнопки на
+  время системного выбора — `PICK_IMAGE_BUSY_WHILE_OPEN` (native — да, web — нет: без `cancel` залипла бы); web —
+  `expo-document-picker` (JPEG/PNG/WebP, пре-чек формата и предела) + у аватара `avatar-crop.web.tsx` (pointer events, кнопки и клавиши масштаба, без колеса; доли `x, y, size` в
   ориентированном изображении — `avatar-crop-math.ts`). Блок «Фото» — `avatar-editor(.web).tsx` поверх
   `avatar-section.tsx`; удаление — инлайн-подтверждение. Загрузка — `api.uploadAvatar` в `withAccessToken`, без XHR и
   прогресса; тексты 413/415/422/429 — `avatar-errors.ts` (429 загрузки с паузой занятой обработки, 5 с, — «через
@@ -657,6 +668,24 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
     старта — `ride-points-style.ts`, только роли `theme.map.*`); native — `GeoJSONSource onPress`
     (`nativeEvent.features`), web — `on('click', layer)`; выбор точки — `RidePointCard` под картой; «Ещё N райдов без
     точки старта — в списке» → режим «Список». Запрос карты — только в режиме «Карта».
+- Фото организатора (ride-photo PR B, ADR-0028): блок «Своё фото» (`RidePhotoBlock`,
+  `features/rides/invite/ride-photo-section.tsx`) под `CardPanel` экрана приглашения — `AsyncContent` по `me`
+  (скелетон, ошибка с повтором, при ошибке обновления блок остаётся; 404 — без блока), после ответа — только при
+  `viewer.role === 'organizer' && viewer.canManage`; «Удалить фото» — только при `ride.photo`. Прошедший и отменённый
+  райд — «Удалить фото» в карточке `rides/[id]` (`ride-photo-delete.tsx`: организатор, без `canManage`, при
+  `ride.photo`); скрытый — `photo: null`, из приложения не удаляется; загрузка — `api.uploadRidePhoto` (Blob, как аватар), удаление — `api.deleteRidePhoto`, хуки
+  `useUploadRidePhoto`/`useDeleteRidePhoto` (ответ → `applyRideView`: кеш `me` + инвалидация `['rides']`, в т. ч. статус
+  карточек `['rides','invite',…]`); тексты — `ride-photo-errors.ts`. Герой — `SectionHero photo` (`RideHero`:
+  `api.ridePhotoUrl`): картинка — `components/hero-photo(.web).tsx` (native — `expo-image` `cover`, `accessible={false}`;
+  web — обычный `<img alt="">` `object-fit: cover`: `expo-image` на web вставляет картинку только в эффекте, в SSR её
+  нет; сломанная до гидрации — `complete && naturalWidth === 0` после монтирования; сторож SSR —
+  `section-hero.web.test.tsx` `renderToString`) декоративно под `components/photo-scrim.tsx`
+  (полосы `View` по профилю `photoScrimHero` — без провала, порог контраста на всей высоте; у 4a — свой `photoScrim`; цвет
+  `overlay.scrim`, `aria-hidden`), текст и линия — `text.onPhoto`; ошибка картинки — типографский герой. Тот же герой —
+  шапка карточки `rides/[id]` (ride-photo-followups, `ride-detail.tsx`: `photo` по `api.ridePhotoUrl` — абсолютный
+  адрес из `EXPO_PUBLIC_API_URL`, SSR и клиент совпадают); скрытый (`photo: null`) — типографский. Уведомление
+  `ride_photo_reset` — заголовок и текст с сервера, цель `ride` → `/rides/<id>`, своего кода нет. Свой градиент
+  или значения затемнения — только через профили `photoScrim*` `@pokatim/design-tokens` (тест контраста зон текста).
 - Шит «Райд опубликован» (ride-published-og): форма создания ведёт на `/rides/<id>?published=1`; шит — только
   организатору (`viewer.role` сервера) будущего райда после монтирования (`components/modal-sheet.tsx` — модальный
   шит `Modal` RN поверх экрана: затемнение, `sheetSurface`, heading, `onRequestClose`; не `BottomSheet` карты).
@@ -670,7 +699,8 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   (гость — только число, без запроса); мутации явки — `setQueryData` ответа без инвалидации `['rides']`, 409/404 —
   перечитать участников (RC-9). Блок явки — только `phase === 'past'` и по флагам сервера `canMark`/`canDecline`
   (RC-10), окно и фазу клиент не считает. Подпись стопки прошедшего — `rides.going.pastJoined`. «Я иду» с карточки —
-  `useRideRsvp(id, 'ride_card')`, лента и Главная — без `source`. Подсказка имени — ключи `social.nameHint.*` (общие с P3).
+  `useRideRsvp(id, 'ride_card')`, из уведомления (`?from=notification`: цель `ride` в `notification-target.ts` и SW,
+  P7) — `'notification'`; секция «Свои» Главной — `'social_home'`; лента и герой Главной — без `source`. Подсказка имени — ключи `social.nameHint.*` (общие с P3).
 - Жалоба (05b) — экран `rides/report/[id]` (`features/rides/ride-report.tsx`) внутри `Stack.Protected`: причина —
   `Chip` из `RIDE_REPORT_REASONS`, комментарий — однострочный `TextField` (фолбэк до многострочного поля базы), успех —
   баннер на месте формы. Кнопка «Пожаловаться» и строка «Вы пожаловались…» — только по `viewer.canReport` /

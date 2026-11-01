@@ -55,6 +55,11 @@ export interface RaceRegistry {
   get(raceId: string, tx?: DbSession): Promise<RaceForResults | null>;
   /** Пачкой (event-tickets: «Мои билеты», сверка): только `published` и `cancelled`, остальных в карте нет. */
   getMany(raceIds: readonly string[]): Promise<Map<string, RaceForResults>>;
+  /**
+   * Опубликованные гонки с протоколом не старше `since` (Главная «Свои», social-p7): `protocolPublishedAt ↓, _id ↓`,
+   * ≤ `limit`. Отменённые — нет.
+   */
+  protocolsPublishedSince(since: Date, limit: number): Promise<RaceForResults[]>;
   /** Гонка, видимая сотруднику (видимость — как в панели гонок); иначе `null`. */
   findForPanel(principal: PanelPrincipal, raceId: string): Promise<RaceForResults | null>;
   phase(race: RaceForResults, now: Date): RacePhase;

@@ -9,8 +9,11 @@ import {
   type SocialBlockReason,
 } from '@pokatim/contracts';
 
+import { haversineMeters } from '@pokatim/tracks';
+
 import { domainError } from '../../error-messages';
 import type { SocialRideFacts } from '../rides';
+import type { ActivityStart } from '../tracks';
 import type { ConnectionDoc } from './social.collection';
 
 const MINUTE_MS = 60_000;
@@ -20,7 +23,9 @@ const DAY_MS = 24 * HOUR_MS;
 /**
  * Правила «Свои» (`docs/product/social.md`): лимит ручного «В свои» (K11, `consumeUserLimit` `social-manual:<uid>`),
  * лимит ручных отметок явки (`social-attendance:<uid>`), лимиты «спасибо» и «респекта» (P4), окно ручной явки (K2), пороги автоявки (K2 `[ASSUMPTION]`, P5), «Как прошёл райд?» и повтор уведомления о ручном
- * добавлении (K10, K11 — P7), пачка `bulkWrite` пересчёта связей.
+ * добавлении (K10, K11 — P7), пачка `bulkWrite` пересчёта связей. P5: окно догона регламента «Как прошёл райд?»
+ * (`askCatchUpMs`, RC-P5-10 — старше не спрашиваются) и страница райдов регламента (`askPageRows`). P7: лимит, окно и
+ * предел «своих» Главной (`home*`).
  */
 export const SOCIAL_POLICY = {
   manualLimit: { limit: 30, windowSec: 86_400 },
@@ -37,6 +42,14 @@ export const SOCIAL_POLICY = {
   askAfterMs: 4 * HOUR_MS,
   manualRenotifyMs: 30 * DAY_MS,
   bulkBatch: 1000,
+  askCatchUpMs: 24 * HOUR_MS,
+  askPageRows: 500,
+  /** Главная «Свои» (P7, K7): лимит `social-home:<uid>` на каждый `GET social/home` */
+  homeLimit: { limit: 60, windowSec: 60 },
+  /** окно строк Главной: райды — старт в ближайшие 7 дн, протоколы и маршруты — за последние 7 дн */
+  homeWindowMs: 7 * DAY_MS,
+  /** «своих» зрителя для запросов Главной — не больше (порядок `listOf`: недавние совместные райды первыми) */
+  homeConnectionsMax: 500,
 } as const;
 
 /** Источники связи из полей документа (K1) в порядке справочника `CONNECTION_SOURCES`. */
@@ -66,6 +79,50 @@ export function attendanceCheck(
   const closesAt = facts.startsAt.getTime() + SOCIAL_POLICY.attendanceWindowMs;
   if (facts.phase === 'upcoming' || now.getTime() > closesAt) return 'attendance_window';
   return null;
+}
+
+/** Причина, по которой заезд не засчитан в явку райда (P5, внутренний тип API). */
+export type AutoAttendanceReason =
+  SocialBlockReason | 'no_precise_start' | 'too_late' | 'out_of_window' | 'too_far';
+
+/**
+ * Засчитывается ли заезд в явку райда (K2, P5, RC-P5-3): участник «Иду» или организатор, райд не отменён и не скрыт
+ * (`attendanceCheck` по треку), уже начался (RC-P5-4), с точным стартом, обработан не позже `attendanceWindowMs`
+ * после старта райда (`now` — часы задачи), старт заезда в `[старт − beforeMs; старт + afterMs]` (включительно) и не
+ * дальше `radiusM` от точки старта райда. Первая сработавшая проверка — причина; `null` — засчитывается. Вид спорта и
+ * «основная группы» — свойства заезда, их проверяет intake.
+ */
+export function autoAttendanceCheck(
+  facts: SocialRideFacts,
+  start: Pick<ActivityStart, 'startedAt' | 'startPoint'>,
+  userId: string,
+  now: Date,
+): AutoAttendanceReason | null {
+  const blocked = attendanceCheck(facts, userId, now, 'track');
+  if (blocked) return blocked;
+  if (facts.phase !== 'past') return 'attendance_window';
+  if (facts.preciseStart === null) return 'no_precise_start';
+  const startsAt = facts.startsAt.getTime();
+  if (now.getTime() > startsAt + SOCIAL_POLICY.attendanceWindowMs) return 'too_late';
+  const { beforeMs, afterMs, radiusM } = SOCIAL_POLICY.autoAttendance;
+  const startedAt = start.startedAt.getTime();
+  if (startedAt < startsAt - beforeMs || startedAt > startsAt + afterMs) return 'out_of_window';
+  const [lon, lat] = start.startPoint;
+  const [rideLon, rideLat] = facts.preciseStart;
+  if (haversineMeters({ lon, lat }, { lon: rideLon, lat: rideLat }) > radiusM) return 'too_far';
+  return null;
+}
+
+/**
+ * Адресаты «Как прошёл райд?» (K10, P5, RC-P5-12): участники без записи явки — ни явки, ни «Меня не было»; порядок
+ * участников сохраняется.
+ */
+export function rideAskRecipients(
+  participantIds: readonly string[],
+  entries: readonly { userId: string }[],
+): string[] {
+  const recorded = new Set(entries.map((entry) => entry.userId));
+  return participantIds.filter((userId) => !recorded.has(userId));
 }
 
 export interface ConnectionPair {

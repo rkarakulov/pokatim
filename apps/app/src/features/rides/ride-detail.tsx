@@ -34,6 +34,7 @@ import { PushSoftPrompt } from '@/features/notifications/push-soft-prompt';
 import { useScrubScrollEnabled } from '@/features/routes/use-scrub-scroll-lock';
 import { useShareChoice } from '@/features/sharing/share-choice-sheet';
 import { useShareImage } from '@/features/sharing/use-share-image';
+import { api } from '@/lib/api';
 import { domainLabel, formatMinskDateTime } from '@/lib/minsk-format';
 import { shareOrigin } from '@/lib/share-link';
 import { useMinskClockAfterMount } from '@/lib/use-minsk-clock';
@@ -41,6 +42,7 @@ import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
 
 import { cityLabel, goingCaption, organizerLine, paceRange, rideShareText } from './format';
 import { rideActionErrorText, useRide, useRideForViewer, useRideRsvp } from './queries';
+import { RidePhotoDelete } from './ride-photo-delete';
 import { rideInvitePath } from './invite/ride-invite';
 import { useRideAttendance, useRideParticipants } from './participants-queries';
 import { RideParticipantsBlock } from './ride-participants-block';
@@ -83,8 +85,12 @@ function ShareAction({ ride, signedIn }: { ride: RideDetail; signedIn: boolean }
  * Поля и действия карточки (§3): метка «Кофе-райд» / «… · вы организатор», подпись организатора (D2), типографская
  * шапка (дата всегда с годом), «Старт: город, место», `StatBlock` дистанции и темпа, стопка, действия по `viewer`
  * сервера, баннеры отмены / прошедшего / переноса, «Об этом райде» как текст. Гостю имён и фото нет (§4); вошедшему —
- * участники и явка («Свои» P2, `RideParticipantsBlock`), «Я иду» — с источником `ride_card` (K12). 05c: маршрут,
+ * участники и явка («Свои» P2, `RideParticipantsBlock`), «Я иду» — с источником `ride_card` (K12; переход из
+ * уведомления — `notification`, social-p7). 05c: маршрут,
  * видимый зрителю, — карта и профиль под шапкой (`RideRouteBlock`), «Набор» в `StatBlock`.
+ * Фото организатора (ride-photo-followups AC1) — в шапке, как герой ленты: `SectionHero photo` по `api.ridePhotoUrl`
+ * (абсолютный адрес из `EXPO_PUBLIC_API_URL` — SSR и клиент совпадают); нет фото, скрытый (`photo: null`) или ошибка
+ * картинки — типографская шапка.
  * 05b: «Пожаловаться» — по `viewer.canReport`, строка «Вы пожаловались…» — по `viewer.reported`; скрытый
  * (`phase: 'hidden'`, видит только организатор) — баннер, действий нет (права сервера выключены).
  */
@@ -96,6 +102,7 @@ function RideDetailView({
   mounted,
   scrub,
   participants,
+  fromNotification,
 }: {
   ride: RideDetail;
   /** «Свои» P2: участники и явка — только вошедшему после `me` (гостю — `null`, только число) */
@@ -107,10 +114,12 @@ function RideDetailView({
   signedIn: boolean;
   published: boolean;
   mounted: boolean;
+  /** переход из уведомления (`?from=notification`): источник «Я иду» K12 — `notification` (social-p7) */
+  fromNotification: boolean;
 }) {
   const theme = useTheme();
   const router = useRouter();
-  const rsvp = useRideRsvp(ride.id, 'ride_card');
+  const rsvp = useRideRsvp(ride.id, fromNotification ? 'notification' : 'ride_card');
   const attendance = useRideAttendance(ride.id);
   const when = formatMinskDateTime(ride.startsAt, null);
   const city = cityLabel(ride.city);
@@ -160,6 +169,7 @@ function RideDetailView({
         kicker={organizerLine(ride.organizerName)}
         date={{ value: when.full }}
         title={ride.title}
+        photo={ride.photo ? api.ridePhotoUrl(ride.photo.id) : null}
       />
       {ride.route ? <RideRouteBlock route={ride.route} scrub={scrub} /> : null}
       <Text style={[textStyle('body'), { color: theme.text.primary }]}>
@@ -236,6 +246,7 @@ function RideDetailView({
           </View>
         </View>
       ) : null}
+      {organizer && !viewer?.canManage && ride.photo ? <RidePhotoDelete rideId={ride.id} /> : null}
       {canShare ? <ShareAction ride={ride} signedIn={signedIn} /> : null}
       {ride.phase === 'past' ? (
         <View style={styles.start}>
@@ -291,10 +302,12 @@ export function RideDetailScreen({
   id,
   seed,
   published = false,
+  fromNotification = false,
 }: {
   id: string;
   seed: RideDetail | undefined;
   published?: boolean;
+  fromNotification?: boolean;
 }) {
   const theme = useTheme();
   const router = useRouter();
@@ -387,6 +400,7 @@ export function RideDetailScreen({
                   viewer={viewer}
                   signedIn={signedIn}
                   published={published}
+                  fromNotification={fromNotification}
                   mounted={mounted}
                   scrub={scrub}
                   participants={signedIn && viewer !== undefined ? participants : null}

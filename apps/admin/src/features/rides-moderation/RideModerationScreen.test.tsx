@@ -16,7 +16,7 @@ vi.mock('../../api', () => ({
     restoreRide: vi.fn(),
     dismissRideReports: vi.fn(),
     resetRidePhoto: vi.fn(),
-    ridePhotoUrl: vi.fn(),
+    moderationRidePhotoUrl: vi.fn(),
   },
 }));
 
@@ -25,7 +25,9 @@ const ID = '01890a5d-ac96-774b-bcce-b302099a8080';
 const REPORT = '01890a5d-ac96-774b-bcce-b302099a8081';
 const LAST = '2026-10-01T10:00:00.000Z';
 const PHOTO = 'p'.repeat(43);
-const PHOTO_URL = `https://api.test/v1/ride-photos/${PHOTO}`;
+const photoUrl = (photoId: string) =>
+  `https://api.test/v1/admin/rides/${ID}/photo?photoId=${photoId}`;
+const PHOTO_URL = photoUrl(PHOTO);
 
 const detail = (overrides: Partial<ModerationRideDetail> = {}): ModerationRideDetail => ({
   id: ID,
@@ -73,7 +75,9 @@ const confirmWith = async (button: string, reason: string, confirm: string) => {
 beforeEach(() => {
   mocked.me.mockResolvedValue(ME.moderator);
   mocked.getModerationRide.mockResolvedValue(detail());
-  mocked.ridePhotoUrl.mockImplementation((id) => `https://api.test/v1/ride-photos/${id}`);
+  mocked.moderationRidePhotoUrl.mockImplementation(
+    (rideId, photoId) => `https://api.test/v1/admin/rides/${rideId}/photo?photoId=${photoId}`,
+  );
 });
 afterEach(() => {
   cleanup();
@@ -222,9 +226,10 @@ describe('карточка модерации (05b, AC4–AC6, AC8)', () => {
   });
 });
 
-describe('фото организатора в карточке (ride-photo, P7, AC8, R10, R11)', () => {
+describe('фото организатора в карточке (ride-photo, P7, AC8, R10, R11; followups AC6)', () => {
   const HIDDEN = { status: 'hidden', phase: 'hidden', hiddenAt: LAST } as const;
   const resetPhotoButton = () => screen.queryByRole('button', { name: 'Удалить фото' });
+  const HIDDEN_NOTE = 'Райд скрыт — райдеры это фото не видят';
 
   it('без фото — «Нет фото», кнопки «Удалить фото» нет', async () => {
     await open();
@@ -234,26 +239,40 @@ describe('фото организатора в карточке (ride-photo, P7,
     expect(resetPhotoButton()).toBeNull();
   });
 
-  it('видимый райд с фото — картинка по ridePhotoUrl и кнопка «Удалить фото»', async () => {
+  it('видимый райд с фото — картинка по админскому адресу с photoId, без пометки; «Удалить фото»', async () => {
     mocked.getModerationRide.mockResolvedValue(detail({ photo: { id: PHOTO } }));
     await open();
     const img = await screen.findByAltText('Фото организатора «Кофе-райд на море»');
     expect(img.getAttribute('src')).toBe(PHOTO_URL);
-    expect(mocked.ridePhotoUrl).toHaveBeenCalledWith(PHOTO);
+    expect(mocked.moderationRidePhotoUrl).toHaveBeenCalledWith(ID, PHOTO);
     expect(resetPhotoButton()).toBeTruthy();
-    expect(screen.queryByText('Фото скрыто вместе с райдом')).toBeNull();
+    expect(screen.queryByText(HIDDEN_NOTE)).toBeNull();
   });
 
-  it('скрытый райд с фото — плашка вместо картинки (отдача 404), «Удалить фото» доступна (R11)', async () => {
+  it('скрытый райд с фото — та же картинка по админскому адресу и пометка; «Удалить фото» доступна (R11 b)', async () => {
     mocked.getModerationRide.mockResolvedValue(
       detail({ ...HIDDEN, openReportCount: 0, photo: { id: PHOTO } }),
     );
     await open();
-    expect(await screen.findByText('Фото скрыто вместе с райдом')).toBeTruthy();
-    expect(screen.queryByRole('img', { hidden: true })).toBeNull();
-    expect(mocked.ridePhotoUrl).not.toHaveBeenCalled();
+    const img = await screen.findByAltText('Фото организатора «Кофе-райд на море»');
+    expect(img.getAttribute('src')).toBe(PHOTO_URL);
+    expect(mocked.moderationRidePhotoUrl).toHaveBeenCalledWith(ID, PHOTO);
+    expect(screen.getByText(HIDDEN_NOTE)).toBeTruthy();
     expect(resetPhotoButton()).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Вернуть' })).toBeTruthy();
+  });
+
+  it('скрытый райд: картинка не загрузилась — «Фото недоступно» с повтором, пометка остаётся', async () => {
+    mocked.getModerationRide.mockResolvedValue(
+      detail({ ...HIDDEN, openReportCount: 0, photo: { id: PHOTO } }),
+    );
+    await open();
+    await screen.findByTestId('ride-photo-skeleton');
+    fireEvent.error(screen.getByAltText('Фото организатора «Кофе-райд на море»'));
+    expect(screen.getByText(/Фото недоступно/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Повторить' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Обновить карточку' })).toBeTruthy();
+    expect(screen.getByText(HIDDEN_NOTE)).toBeTruthy();
   });
 
   it('«Удалить фото» — ReasonDialog с предупреждением; запрос с photoId карточки и причиной; карточка перечитана', async () => {
@@ -297,9 +316,7 @@ describe('фото организатора в карточке (ride-photo, P7,
     mocked.getModerationRide.mockResolvedValue(detail({ photo: { id: NEXT } }));
     fireEvent.click(screen.getByRole('button', { name: 'Обновить' }));
     await waitFor(() =>
-      expect(screen.getByRole('img', { hidden: true }).getAttribute('src')).toBe(
-        `https://api.test/v1/ride-photos/${NEXT}`,
-      ),
+      expect(screen.getByRole('img', { hidden: true }).getAttribute('src')).toBe(photoUrl(NEXT)),
     );
     expect(screen.queryByText('Фото уже изменилось — обновите карточку')).toBeNull();
   });
@@ -357,9 +374,7 @@ describe('фото организатора в карточке (ride-photo, P7,
       fireEvent.error(photoImg());
       mocked.getModerationRide.mockResolvedValue(detail({ photo: { id: NEXT } }));
       fireEvent.click(screen.getByRole('button', { name: 'Обновить карточку' }));
-      await waitFor(() =>
-        expect(photoImg().getAttribute('src')).toBe(`https://api.test/v1/ride-photos/${NEXT}`),
-      );
+      await waitFor(() => expect(photoImg().getAttribute('src')).toBe(photoUrl(NEXT)));
       expect(screen.queryByText(/Фото недоступно/)).toBeNull();
       expect(screen.getByTestId('ride-photo-skeleton')).toBeTruthy();
     });
