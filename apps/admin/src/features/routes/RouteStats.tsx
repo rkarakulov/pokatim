@@ -19,10 +19,10 @@ export function RouteStats({ items }: { items: readonly RouteStat[] }) {
           role="group"
           aria-labelledby={`${id}-${index}`}
         >
-          <span id={`${id}-${index}`} className="route-stats__label t-meta-xs">
+          <span id={`${id}-${index}`} className="route-stats__label t-meta">
             {item.label}
           </span>
-          <span className="route-stats__value t-title-sm">{item.value}</span>
+          <span className="route-stats__value t-panel-title-sm">{item.value}</span>
           {item.hint ? <span className="route-stats__hint t-meta-xs">{item.hint}</span> : null}
         </div>
       ))}

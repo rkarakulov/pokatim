@@ -1221,7 +1221,7 @@ select.field__control option:disabled {
 .route-stats {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-s2) var(--space-s5);
+  gap: var(--space-s3) var(--space-s6);
   margin-top: var(--space-s3);
 }
 
