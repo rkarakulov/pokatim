@@ -186,11 +186,11 @@ jest.mock('expo-image', () => {
   return { Image };
 });
 
-// выбор фото профиля (rider-profile): модуль «установлен», ленивый загрузчик — мок пакета; тесты задают ответ галереи
-jest.mock('./src/features/profile/image-picker-support', () => ({
+// выбор фото (профиль, фото райда): модуль «установлен», ленивый загрузчик — мок пакета; тесты задают ответ галереи
+jest.mock('./src/features/media/image-picker-support', () => ({
   imagePickerSupported: jest.fn(() => true),
 }));
-jest.mock('./src/features/profile/load-image-picker', () => ({
+jest.mock('./src/features/media/load-image-picker', () => ({
   loadImagePicker: jest.fn(async () => ({ launchImageLibraryAsync: jest.fn() })),
 }));
 

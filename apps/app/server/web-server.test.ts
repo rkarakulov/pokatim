@@ -190,7 +190,7 @@ describe('политика CSP web приложения (ADR-0025)', () => {
     expect(directive(csp, 'style-src')).toEqual(["'self'", "'unsafe-inline'"]);
   });
 
-  it('API — origin EXPO_PUBLIC_API_URL в connect-src и img-src (аватары); карты — в connect-src', () => {
+  it('API — origin EXPO_PUBLIC_API_URL в connect-src и img-src (аватары, фото райдов); карты — в connect-src', () => {
     expect(directive(csp, 'connect-src')).toEqual([
       "'self'",
       'https://api.example.test',

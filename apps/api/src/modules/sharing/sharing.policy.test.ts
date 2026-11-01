@@ -15,8 +15,9 @@ describe('OG_CARD_POLICY (вариант A R-A1)', () => {
     expect(OG_CARD_POLICY.jobPriority).toBeGreaterThan(0);
   });
 
-  it('renderVersion 3 (тёмная схема, новые виды)', () => {
-    expect(OG_CARD_POLICY.renderVersion).toBe(3);
+  it('renderVersion 4 (фото райда на OG, ride-photo-followups); предел PNG с фото — 600 КБ', () => {
+    expect(OG_CARD_POLICY.renderVersion).toBe(4);
+    expect(OG_CARD_POLICY.maxPhotoPngBytes).toBe(600_000);
   });
 
   it('схема по виду: гонка, сезон, райдер — тёмная; остальные и бренд — светлая; таблица покрывает все виды', () => {

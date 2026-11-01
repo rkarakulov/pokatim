@@ -62,4 +62,5 @@ export {
   type RaceEntryRespectTarget,
   RESULTS_FOR_SOCIAL,
   type ResultsForSocial,
+  type SocialRaceResult,
 } from './results-for-social.port';

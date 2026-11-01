@@ -80,6 +80,10 @@ export class RidesForSharingService implements RidesForSharing {
     return doc.bytes.buffer;
   }
 
+  inviteCardLive(rideId: string, photoId: string | null): Promise<boolean> {
+    return this.repository.isShareable(rideId, photoId);
+  }
+
   inviteLine(routeId: string): Promise<LonLat[] | null> {
     return this.routes.catalogLine(routeId);
   }

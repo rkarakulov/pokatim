@@ -57,4 +57,58 @@ describe('SectionHero (типографский герой раздела)', () 
     await fireEvent.press(link);
     expect(onPress).toHaveBeenCalledTimes(1);
   });
+
+  describe('с фото (ride-photo P4)', () => {
+    const URI = 'https://api.test/v1/ride-photos/PhOtO';
+
+    it('фото cover под затемнением, текст и линия — onPhoto; фото декоративное, метка блока та же', async () => {
+      await render(
+        <SectionHero
+          kicker="Ближайший райд"
+          date={{ value: 'Сб 3 октября, 9:00' }}
+          title="Кофе-райд"
+          meta={['42 км']}
+          photo={URI}
+        />,
+      );
+
+      const hero = screen.getByLabelText('Ближайший райд. Кофе-райд. Сб 3 октября, 9:00');
+      expect(hero).toHaveProp('accessible', true);
+      const photo = screen.getByTestId('section-hero-photo', { includeHiddenElements: true });
+      expect(photo.props.source).toEqual({ uri: URI });
+      expect(photo.props.contentFit).toBe('cover');
+      expect(photo.props.accessible).toBe(false);
+      expect(photo.props.accessibilityLabel).toBe('');
+      expect(screen.getByTestId('photo-scrim', { includeHiddenElements: true })).toBeTruthy();
+      expect(screen.getByText('Кофе-райд')).toHaveStyle({ color: light.text.onPhoto });
+      expect(screen.getByText('Ближайший райд')).toHaveStyle({ color: light.text.onPhoto });
+      expect(screen.getByText('Сб 3 октября, 9:00')).toHaveStyle({ color: light.text.onPhoto });
+      expect(screen.getByTestId('section-hero-rule')).toHaveStyle({
+        backgroundColor: light.text.onPhoto,
+      });
+      // мета — под героем на поверхности экрана, как без фото
+      expect(screen.getByText('42 км')).toHaveStyle({ color: light.text.secondary });
+    });
+
+    it('фото не загрузилось — типографский герой', async () => {
+      await render(<SectionHero kicker="Райд" date={{ value: '3' }} title="Кофе" photo={URI} />);
+      await fireEvent(
+        screen.getByTestId('section-hero-photo', { includeHiddenElements: true }),
+        'error',
+      );
+      expect(
+        screen.queryByTestId('section-hero-photo', { includeHiddenElements: true }),
+      ).toBeNull();
+      expect(screen.queryByTestId('photo-scrim', { includeHiddenElements: true })).toBeNull();
+      expect(screen.getByText('Кофе')).toHaveStyle({ color: light.text.primary });
+    });
+
+    it('без фото (null) — типографский герой без затемнения', async () => {
+      await render(<SectionHero kicker="Райд" date={{ value: '3' }} title="Кофе" photo={null} />);
+      expect(screen.queryByTestId('photo-scrim', { includeHiddenElements: true })).toBeNull();
+      expect(screen.getByLabelText('Райд. Кофе. 3')).toHaveStyle({
+        backgroundColor: light.surface.raised,
+      });
+    });
+  });
 });

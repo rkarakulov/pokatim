@@ -4,10 +4,12 @@ export { RideErasure, type RideErasureResult } from './ride-erasure';
 export { RIDE_NOTICES, type RideNotice, type RideNotices } from './ride-notices.port';
 export {
   RIDES_PARTICIPANT_JOINED,
+  RIDES_PHOTO_RESET,
   RIDES_REPORTS_RESOLVED,
   RIDES_RIDE_CANCELLED,
   RIDES_RIDE_RESCHEDULED,
   RideEventPayload,
+  RidesPhotoReset,
   RidesReportsResolved,
 } from './rides.events';
 /** Порт карточки-приглашения для `sharing` (ADR-0018): публичные факты будущего райда и линия маршрута каталога. */
@@ -26,9 +28,14 @@ export {
 } from './rider-rides.port';
 /** Порт «Обзора» панели (admin-overview): райды с открытыми жалобами и активные райды. */
 export { RidesOverview } from './rides-overview';
-/** Порт для `social` («Свои», ADR-0027): факты райда для явки — фаза, старт, участники, точная точка старта. */
+/**
+ * Порт для `social` («Свои», ADR-0027): факты райда для явки — фаза, старт, участники, точная точка старта; P5 — райды
+ * участника по окну старта и начавшиеся райды для «Как прошёл райд?»; P7 — ближайшие райды «своих» (Главная).
+ */
 export {
   RIDES_FOR_SOCIAL,
   type RidesForSocial,
   type SocialRideFacts,
+  type SocialStartedRide,
+  type SocialUpcomingRide,
 } from './rides-for-social.port';

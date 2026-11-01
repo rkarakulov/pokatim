@@ -170,11 +170,20 @@ export class StoryCardProcessor extends WorkerHost {
   /**
    * Рендер приглашения кофе-райда — вызывается и тестами напрямую. Райд скрыт/удалён — 404 порта: тоже `skipped`
    * (картинка не нужна, ретраить нечего). Линия — только пока маршрут в каталоге (`inviteLine` перепроверяет); фото
-   * 4a — только текущее фото нескрытого райда (`invitePhoto` перепроверяет, иначе `skipped`).
+   * 4a — только текущее фото нескрытого райда (`invitePhoto` перепроверяет, иначе `skipped`). PNG пишется с привязкой
+   * `{ rideId, photoId нарисованного }` (ride-photo-followups): фото снято после `invitePhoto` — токен всё равно 404.
    */
   buildRideInvite(job: RideInviteJob, options: BuildOptions = {}): Promise<StoryCardOutcome> {
     const label = () => `ride ${job.rideId} ${job.template}`;
-    return this.run(this.cache, job.hash, label, options, 'name-only', async () => {
+    // привязка токена к райду и нарисованному фото (ride-photo-followups): отдача PNG сверяет её с текущим райдом
+    let drawnPhotoId: string | null = null;
+    const sink: OutcomeSink = {
+      release: (hash) => this.cache.release(hash),
+      storeReady: (hash, png) =>
+        this.cache.storeReady(hash, png, { rideId: job.rideId, photoId: drawnPhotoId }),
+      storeFailed: (hash) => this.cache.storeFailed(hash),
+    };
+    return this.run(sink, job.hash, label, options, 'name-only', async () => {
       const resolved = await this.invites
         .resolve(job.userId, job.rideId, job.template, job.address)
         .catch((error: unknown) => {
@@ -189,6 +198,7 @@ export class StoryCardProcessor extends WorkerHost {
           ? await this.rides.invitePhoto(job.rideId, photoId)
           : null;
       if (resolved.input.template === 'night' && photoId && !photo) return null;
+      drawnPhotoId = photo ? photoId : null;
       const line = routeId ? await this.rides.inviteLine(routeId) : null;
       return {
         png: await renderRideInvite(resolved.input, line, photo),
@@ -247,7 +257,7 @@ export class StoryCardProcessor extends WorkerHost {
    * Рендер OG-картинки публичной страницы (og-images) — вызывается и тестами напрямую. Входы перечитываются (объект
    * больше не публичный или хэш устарел — `skipped`, PNG не пишется). Линия: гонка — линия показа маршрута коридора
    * (`ROUTE_GEOMETRY`, как на странице), райд — только маршрут каталога (`inviteLine`), маршрут — линия каталога.
-   * Сезон и райдер — без линии. Провал на последней попытке — ключ постановки удерживается `failedHoldSec`. В логе —
+   * Сезон и райдер — без линии. Райд с фото — байты `invitePhoto` (снято — `skipped`). Провал на последней попытке — ключ постановки удерживается `failedHoldSec`. В логе —
    * вид и id, без названия; райдер — префикс хэша вместо `publicId`.
    */
   buildOgCard(job: OgCardJob, options: BuildOptions = {}): Promise<StoryCardOutcome> {
@@ -269,8 +279,15 @@ export class StoryCardProcessor extends WorkerHost {
       ttlSec = ogPrerenderable(resolved.input, this.clock.now())
         ? OG_CARD_POLICY.pngTtlSec
         : OG_CARD_POLICY.pngShortTtlSec;
+      // фото райда (ride-photo-followups): снято или заменено между постановкой и рендером — вход устарел
+      const photoId = resolved.input.kind === 'ride' ? resolved.input.facts.photoId : null;
+      const photo = photoId ? await this.rides.invitePhoto(job.id, photoId) : null;
+      if (photoId && !photo) return null;
       const line = await this.ogLine(resolved.input);
-      return { png: await renderOgCard(resolved.input, line), note: line ? 'line' : 'no line' };
+      return {
+        png: await renderOgCard(resolved.input, line, photo),
+        note: `${line ? 'line' : 'no line'}${photo ? ' photo' : ''}`,
+      };
     });
   }
 

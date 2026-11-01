@@ -60,8 +60,11 @@ describe('workerOutboxRoutes', () => {
     }
   });
 
-  it('активность: activity-ready — только results-intake, activity-group-created — только route-ride-auto (route-rides-03, AC4)', () => {
-    expect(queuesOf(workerOutboxRoutes['tracks.activity-ready'])).toEqual(['results-intake']);
+  it('активность: activity-ready — results-intake и social-intake (не route-rides), activity-group-created — только route-ride-auto (route-rides-03, AC4)', () => {
+    expect(queuesOf(workerOutboxRoutes['tracks.activity-ready'])).toEqual([
+      'results-intake',
+      'social-intake',
+    ]);
     expect(queuesOf(workerOutboxRoutes['tracks.activity-group-created'])).toEqual([
       'route-ride-auto',
     ]);
@@ -75,5 +78,9 @@ describe('workerOutboxRoutes', () => {
 
   it('identity.account-confirmed — в social-intake (приглашения, P6)', () => {
     expect(queuesOf(workerOutboxRoutes['identity.account-confirmed'])).toEqual(['social-intake']);
+  });
+
+  it('tracks.activity-ready — и в social-intake (автоявка, P5)', () => {
+    expect(queuesOf(workerOutboxRoutes['tracks.activity-ready'])).toContain('social-intake');
   });
 });

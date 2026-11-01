@@ -7,9 +7,11 @@ import type { z } from 'zod';
 
 import { QUEUE } from '../../queues';
 import { IDENTITY_ACCOUNT_CONFIRMED, IdentityAccountConfirmed } from '../identity';
+import { TRACK_ACTIVITY_READY, TrackActivityReady } from '../tracks';
+import { AutoAttendanceIntake, type AutoAttendanceOutcome } from './auto-attendance-intake';
 import { InviteIntake, type InviteIntakeOutcome } from './invite-intake';
 
-type IntakeOutcome = InviteIntakeOutcome | 'skipped';
+type IntakeOutcome = InviteIntakeOutcome | AutoAttendanceOutcome | 'skipped';
 
 interface IntakeHandler<S extends z.ZodType> {
   schema: S;
@@ -17,10 +19,10 @@ interface IntakeHandler<S extends z.ZodType> {
 }
 
 /**
- * Очередь `social-intake` (ADR-0027 п. 5): события других модулей по `socialOutboxRoutes`, имя задачи = тип, jobId =
- * id события outbox (идемпотентность — состояние связи). Таблица `тип → { схема, обработчик }` — новые типы в конец.
- * Неизвестное имя — бросок; payload не по схеме — `skipped` с логом. Отказ — ретраи публикатора, затем failed-набор
- * (RC-P6-10). Логи — id события и итог, без кода приглашения.
+ * Очередь `social-intake` (ADR-0027 п. 5): события других модулей по `socialOutboxRoutes` — приглашения (P6),
+ * автоявка (P5); имя задачи = тип, jobId = id события outbox (идемпотентность — состояние связи и явки). Таблица
+ * `тип → { схема, обработчик }` — новые типы в конец. Неизвестное имя — бросок; payload не по схеме — `skipped` с
+ * логом. Отказ — ретраи публикатора, затем failed-набор (RC-P6-10). Логи — id события и итог, без кода приглашения.
  */
 @Processor(QUEUE.socialIntake)
 export class SocialIntakeProcessor extends WorkerHost {
@@ -29,6 +31,7 @@ export class SocialIntakeProcessor extends WorkerHost {
 
   constructor(
     invites: InviteIntake,
+    autoAttendance: AutoAttendanceIntake,
     private readonly outbox: MongoOutboxReader,
   ) {
     super();
@@ -36,6 +39,7 @@ export class SocialIntakeProcessor extends WorkerHost {
       [IDENTITY_ACCOUNT_CONFIRMED]: handler(IdentityAccountConfirmed, (event) =>
         invites.handle(event),
       ),
+      [TRACK_ACTIVITY_READY]: handler(TrackActivityReady, (event) => autoAttendance.handle(event)),
     };
   }
 
@@ -53,7 +57,7 @@ export class SocialIntakeProcessor extends WorkerHost {
       this.logger.log(`social.intake type=${job.name} event=${outboxEventId} outcome=${outcome}`);
       return outcome;
     } catch (error) {
-      this.logger.warn(`social.invite_failed type=${job.name} event=${outboxEventId}`);
+      this.logger.warn(`social.intake_failed type=${job.name} event=${outboxEventId}`);
       throw error;
     }
   }

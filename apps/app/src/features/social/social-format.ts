@@ -8,6 +8,9 @@ import { minskDateTime } from '@/lib/minsk-format';
  * `null` — год всегда).
  */
 
+/** Подписи обоих состояний кнопки «В свои» — `reserveLabels`: ширина по длинной, смена состояния не двигает строку. */
+export const CONNECT_LABELS = [t('social.connect'), t('social.connected')] as const;
+
 /** «Вместе ехали 3 раза · последний — 10 октября» на чужом профиле; не ехали — `null` (строки нет). */
 export function togetherText(together: RiderTogether, now: Date | null): string | null {
   if (together.rideCount <= 0 || together.lastRideAt === null) return null;
