@@ -68,3 +68,12 @@ export function uuidv7Floor(at: Date): string {
   const hex = at.getTime().toString(16).padStart(12, '0');
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-7000-8000-000000000000`;
 }
+
+/**
+ * Keyset по стабильному ключу `_id` ↑ (карта сайта, sitemap-index): строго после `afterId`; `null` — с начала. uuidv7 —
+ * новые строки в конце, правка строки её не переносит.
+ */
+export const idAfter = (afterId: string | null): Filter<{ _id: string }> =>
+  afterId === null ? {} : { _id: { $gt: afterId } };
+
+export const ID_SORT = { _id: 1 } as const;

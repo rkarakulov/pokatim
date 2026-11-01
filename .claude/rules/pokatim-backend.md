@@ -513,6 +513,12 @@ paths:
   `OG_CARD_POLICY.scheme` (гонка, сезон, райдер — `dark`, остальные — `light`), входит в хэш; смена таблицы без подъёма
   `renderVersion` полный проход не запускает. **Изменил разметку, тексты или токены `ogCard`
   — подними `OG_CARD_POLICY.renderVersion`** (новые URL, полный проход `og.sync`; сейчас 4 — фото райда).
+- Карта сайта (landing-seo, sitemap-index): `GET /v1/sitemap` — индекс страниц видов, `GET /v1/sitemap/:kind/:page` —
+  объекты страницы (`PublicReadGuard`, `404` вне индекса, `400` неверные параметры) → `SitemapService` → порты владельцев
+  `sitemapAfter` / `sitemapSeasonsAfter` (`idAfter`, `ID_SORT` из `changed-since.ts`). Ключ страниц — `_id` ↑ (uuidv7:
+  стабилен), **не** `(updatedAt, _id)` и не «первые N»: индекс — полный проход, в памяти только границы страниц
+  (`SITEMAP_POLICY.pageSize`), страница — `(after, last]` (потолок `fileUrlMax`), последняя — открыта до `pageSize`.
+  Индексы `*_sitemap_idx` `(status, _id, updatedAt)` (`0051_sitemap_indexes`): гонки и старты — покрывающие.
 - OG райда с фото (ride-photo-followups): `photoId` — в канонических фактах `ride`; `buildOgCard` берёт байты
   `invitePhoto` (снято — `skipped`), `renderOgCard(input, line, photo)` → `composeWithPhoto` (`sharing/photo-card.png.ts`
   — общая с 4a композиция: `onPhotoColors`, `scrimSvg`, `encodePhotoCard`, `PHOTO_CARD_PALETTES`; вторых скрима и

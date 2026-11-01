@@ -43,10 +43,11 @@ export class RacesForSharingService implements RacesForSharing {
     return (await this.repository.liveSeasons(sinceLocalDate)).map((season) => season._id);
   }
 
-  async sitemapSeasons(): Promise<ChangedRow[]> {
-    return (await this.repository.listSeasons()).map((season) => ({
-      id: season._id,
-      updatedAt: season.updatedAt,
-    }));
+  sitemapAfter(afterId: string | null, limit: number): Promise<ChangedRow[]> {
+    return this.repository.sitemapAfter(afterId, limit);
+  }
+
+  sitemapSeasonsAfter(afterId: string | null, limit: number): Promise<ChangedRow[]> {
+    return this.repository.sitemapSeasonsAfter(afterId, limit);
   }
 }

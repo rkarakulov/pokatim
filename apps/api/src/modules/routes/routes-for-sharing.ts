@@ -37,4 +37,8 @@ export class RoutesForSharingService implements RoutesForSharing {
   ogChanged(after: ChangedCursor | null, limit: number): Promise<ChangedRow[]> {
     return this.repository.changedForOg(after, limit);
   }
+
+  sitemapAfter(afterId: string | null, limit: number): Promise<ChangedRow[]> {
+    return this.repository.sitemapAfter(afterId, limit);
+  }
 }

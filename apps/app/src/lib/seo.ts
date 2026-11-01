@@ -1,7 +1,12 @@
-import type { SitemapEntry, SitemapKind } from '@pokatim/contracts';
+import {
+  SITEMAP_KINDS,
+  type SitemapIndexPage,
+  type SitemapKind,
+  type SitemapPageEntry,
+} from '@pokatim/contracts';
 
 /*
- * robots.txt и sitemap.xml гостевого веба (landing-seo) — только web-сервер (API-маршруты `src/app/*+api.ts`).
+ * robots.txt и sitemap.xml гостевого веба (landing-seo; индекс и дочерние карты — sitemap-index) — только web-сервер (API-маршруты `src/app/*+api.ts`).
  * Публичные страницы открыты; закрыты экраны только для вошедших, онбординг, ссылки с токеном, билеты и панель.
  * Карточки с `noindex` в мета (профиль райдера, кофе-райд) не закрываются: краулер должен увидеть `noindex`; кроме
  * ссылок с токеном (`/auth/`, `/tickets/`) — по капабилити-URL краулер не ходит, и экранов только для вошедших
@@ -87,22 +92,71 @@ const xml = (value: string) => value.replace(/[&<>"']/g, (char) => XML_ESCAPES[c
 const url = (loc: string, lastmod?: string) =>
   `<url><loc>${xml(loc)}</loc>${lastmod ? `<lastmod>${lastmod}</lastmod>` : ''}</url>`;
 
+const XML_HEADER = '<?xml version="1.0" encoding="UTF-8"?>';
+const SITEMAP_NS = 'http://www.sitemaps.org/schemas/sitemap/0.9';
+
+const xmlDocument = (root: 'urlset' | 'sitemapindex', entries: readonly string[]) =>
+  `${[XML_HEADER, `<${root} xmlns="${SITEMAP_NS}">`, ...entries, `</${root}>`].join('\n')}\n`;
+
+/** Дочерняя карта статических страниц. */
+export const STATIC_SITEMAP_PATH = '/sitemap/static.xml';
+
+/** Путь дочерней карты страницы вида: `/sitemap/<kind>/<n>.xml` (маршрут `src/app/sitemap/[kind]/[page]+api.ts`). */
+export const sitemapPagePath = (kind: SitemapKind, page: number) => `/sitemap/${kind}/${page}.xml`;
+
+/** Сегменты пути дочерней карты → вид и номер (с 1, без ведущих нулей); иначе `null` (без запроса к API). */
+export function parseSitemapPagePath(
+  kind: unknown,
+  file: unknown,
+): { kind: SitemapKind; page: number } | null {
+  if (typeof kind !== 'string' || typeof file !== 'string') return null;
+  if (!(SITEMAP_KINDS as readonly string[]).includes(kind)) return null;
+  const match = /^([1-9]\d{0,5})\.xml$/.exec(file);
+  return match ? { kind: kind as SitemapKind, page: Number(match[1]) } : null;
+}
+
+/** `lastmod` вида (дата UTC); у сезона нет — таблица сезона меняется с результатами, дата сезона её не отражает. */
+const lastmodOf = (kind: SitemapKind, updatedAt: string) =>
+  kind === 'season' ? undefined : updatedAt.slice(0, 10);
+
 /**
- * `sitemap.xml`: статические страницы и объекты API. `lastmod` — дата изменения (UTC); у сезона нет — таблица сезона
- * меняется с результатами, дата сезона её не отражает.
+ * `sitemap.xml` — индекс (протокол sitemaps.org): статические страницы и страницы видов API, `lastmod` страницы —
+ * последнее изменение её объектов (кроме сезонов).
  */
-export function sitemapXml(origin: string, items: readonly SitemapEntry[]): string {
-  const lines = [
-    '<?xml version="1.0" encoding="UTF-8"?>',
-    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
-    ...STATIC_PATHS.map((path) => url(`${origin}${path}`)),
-    ...items.map((item) =>
-      url(
-        `${origin}${PAGE_PREFIX[item.kind]}/${encodeURIComponent(item.id)}`,
-        item.kind === 'season' ? undefined : item.updatedAt.slice(0, 10),
+export function sitemapIndexXml(origin: string, pages: readonly SitemapIndexPage[]): string {
+  const sitemap = (loc: string, lastmod?: string) =>
+    `<sitemap><loc>${xml(loc)}</loc>${lastmod ? `<lastmod>${lastmod}</lastmod>` : ''}</sitemap>`;
+  return xmlDocument('sitemapindex', [
+    sitemap(`${origin}${STATIC_SITEMAP_PATH}`),
+    ...pages.map((page) =>
+      sitemap(
+        `${origin}${sitemapPagePath(page.kind, page.page)}`,
+        lastmodOf(page.kind, page.updatedAt),
       ),
     ),
-    '</urlset>',
-  ];
-  return `${lines.join('\n')}\n`;
+  ]);
+}
+
+/** Дочерняя карта статических страниц. */
+export const staticSitemapXml = (origin: string): string =>
+  xmlDocument(
+    'urlset',
+    STATIC_PATHS.map((path) => url(`${origin}${path}`)),
+  );
+
+/** Дочерняя карта страницы вида: URL объектов, `lastmod` — дата изменения (кроме сезона). */
+export function sitemapPageXml(
+  origin: string,
+  kind: SitemapKind,
+  items: readonly SitemapPageEntry[],
+): string {
+  return xmlDocument(
+    'urlset',
+    items.map((item) =>
+      url(
+        `${origin}${PAGE_PREFIX[kind]}/${encodeURIComponent(item.id)}`,
+        lastmodOf(kind, item.updatedAt),
+      ),
+    ),
+  );
 }

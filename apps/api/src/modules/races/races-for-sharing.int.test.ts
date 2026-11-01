@@ -67,11 +67,26 @@ describe('ogChanged', () => {
   });
 });
 
-describe('sitemapSeasons (landing-seo)', () => {
-  it('все сезоны: id и дата изменения; нет сезонов — пусто', async () => {
-    expect(await port().sitemapSeasons()).toEqual([]);
-    const id = await seedSeason(h);
-    expect(await port().sitemapSeasons()).toEqual([{ id, updatedAt: h.clock.now() }]);
+describe('sitemapAfter, sitemapSeasonsAfter (sitemap-index)', () => {
+  it('опубликованные гонки по _id ↑ строго после курсора, не больше limit; черновик и отменённая — нет', async () => {
+    const ids = [await seedRace(h), await seedRace(h), await seedRace(h)].sort();
+    await seedRace(h, { status: 'draft' });
+    await seedRace(h, { status: 'cancelled' });
+    const now = h.clock.now();
+    expect(await port().sitemapAfter(null, 10)).toEqual(ids.map((id) => ({ id, updatedAt: now })));
+    expect((await port().sitemapAfter(null, 2)).map((row) => row.id)).toEqual(ids.slice(0, 2));
+    expect((await port().sitemapAfter(ids[1]!, 10)).map((row) => row.id)).toEqual([ids[2]]);
+    expect(await port().sitemapAfter(ids[2]!, 10)).toEqual([]);
+  });
+
+  it('все сезоны по _id ↑ после курсора: id и дата изменения; нет сезонов — пусто', async () => {
+    expect(await port().sitemapSeasonsAfter(null, 10)).toEqual([]);
+    const ids = [await seedSeason(h), await seedSeason(h, 'Сезон 2027', { year: 2027 })].sort();
+    const now = h.clock.now();
+    expect(await port().sitemapSeasonsAfter(null, 10)).toEqual(
+      ids.map((id) => ({ id, updatedAt: now })),
+    );
+    expect((await port().sitemapSeasonsAfter(ids[0]!, 1)).map((row) => row.id)).toEqual([ids[1]]);
   });
 });
 

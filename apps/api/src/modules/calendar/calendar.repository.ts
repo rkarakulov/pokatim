@@ -8,6 +8,8 @@ import {
   type ChangedCursor,
   changedAfter,
   type ChangedRow,
+  ID_SORT,
+  idAfter,
 } from '../../changed-since';
 import type { DbSession } from '../../db';
 import { calendarCollections, type CalendarStartDoc } from './calendar.collection';
@@ -136,6 +138,19 @@ export class CalendarRepository {
         { projection: { _id: 1, updatedAt: 1 } },
       )
       .sort(CHANGED_SORT)
+      .limit(limit)
+      .toArray();
+    return docs.map((doc) => ({ id: doc._id, updatedAt: doc.updatedAt }));
+  }
+
+  /**
+   * Опубликованные старты строго после `afterId` по `_id` ↑ (карта сайта, sitemap-index) — покрывающий индекс
+   * `calendar_starts_sitemap_idx`.
+   */
+  async sitemapAfter(afterId: string | null, limit: number): Promise<ChangedRow[]> {
+    const docs = await this.starts
+      .find({ status: 'published', ...idAfter(afterId) }, { projection: { _id: 1, updatedAt: 1 } })
+      .sort(ID_SORT)
       .limit(limit)
       .toArray();
     return docs.map((doc) => ({ id: doc._id, updatedAt: doc.updatedAt }));

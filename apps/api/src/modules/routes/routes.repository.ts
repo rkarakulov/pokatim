@@ -18,6 +18,8 @@ import {
   type ChangedCursor,
   changedAfter,
   type ChangedRow,
+  ID_SORT,
+  idAfter,
 } from '../../changed-since';
 import type { DbSession } from '../../db';
 import { ROUTE_DISTANCE_RANGES_M } from './routes.policy';
@@ -335,6 +337,22 @@ export class RoutesRepository {
         { projection: { _id: 1, updatedAt: 1 } },
       )
       .sort(CHANGED_SORT)
+      .limit(limit)
+      .toArray();
+    return docs.map((doc) => ({ id: doc._id, updatedAt: doc.updatedAt }));
+  }
+
+  /**
+   * Маршруты каталога строго после `afterId` по `_id` ↑ (карта сайта, sitemap-index) — индекс `routes_sitemap_idx`
+   * по `(status, _id)`, условия каталога — по документу.
+   */
+  async sitemapAfter(afterId: string | null, limit: number): Promise<ChangedRow[]> {
+    const docs = await this.c.routes
+      .find(
+        { $and: [{ status: 'ready', ...IN_CATALOG }, idAfter(afterId) as Filter<RouteDoc>] },
+        { projection: { _id: 1, updatedAt: 1 } },
+      )
+      .sort(ID_SORT)
       .limit(limit)
       .toArray();
     return docs.map((doc) => ({ id: doc._id, updatedAt: doc.updatedAt }));

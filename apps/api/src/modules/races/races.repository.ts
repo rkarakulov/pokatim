@@ -8,6 +8,8 @@ import {
   type ChangedCursor,
   changedAfter,
   type ChangedRow,
+  ID_SORT,
+  idAfter,
 } from '../../changed-since';
 import type { DbSession } from '../../db';
 import {
@@ -425,6 +427,29 @@ export class RacesRepository {
         { projection: { _id: 1, updatedAt: 1 } },
       )
       .sort(CHANGED_SORT)
+      .limit(limit)
+      .toArray();
+    return docs.map((doc) => ({ id: doc._id, updatedAt: doc.updatedAt }));
+  }
+
+  /**
+   * Опубликованные гонки строго после `afterId` по `_id` ↑ (карта сайта, sitemap-index) — покрывающий индекс
+   * `races_sitemap_idx`.
+   */
+  async sitemapAfter(afterId: string | null, limit: number): Promise<ChangedRow[]> {
+    const docs = await this.c.races
+      .find({ status: 'published', ...idAfter(afterId) }, { projection: { _id: 1, updatedAt: 1 } })
+      .sort(ID_SORT)
+      .limit(limit)
+      .toArray();
+    return docs.map((doc) => ({ id: doc._id, updatedAt: doc.updatedAt }));
+  }
+
+  /** Сезоны (все публичны) строго после `afterId` по `_id` ↑ (карта сайта, sitemap-index) — индекс `_id_`. */
+  async sitemapSeasonsAfter(afterId: string | null, limit: number): Promise<ChangedRow[]> {
+    const docs = await this.c.seasons
+      .find(idAfter(afterId), { projection: { _id: 1, updatedAt: 1 } })
+      .sort(ID_SORT)
       .limit(limit)
       .toArray();
     return docs.map((doc) => ({ id: doc._id, updatedAt: doc.updatedAt }));
