@@ -18,7 +18,8 @@ paths:
   `matchCorridorDetailed`), — отдельной функцией вне `CorridorMatch`: golden и AC16 (ключи результата) не меняются,
   тест `match` = `matchCorridor` на всех фикстурах.
 - Участки маршрута (route-rides-05) — `routeSections`/`sectionLine` unit на синтетике (`corridor/sections.test.ts`:
-  границы 15/25/305 км, хвост, петля, «туда-обратно» и «шпилька» — без участков/слияние, детерминизм), `analyzeSections` unit на синтетическом потоке
+  границы 15/25/305 км, хвост, петля, «туда-обратно» — граница в развороте (06), «шпилька» и разворот < 5 км — слияние,
+  детерминизм), `analyzeSections` unit на синтетическом потоке (в т. ч. проезд «туда-обратно» 2 × 17 км)
   (`corridor/analyze-sections.test.ts`), бенч 200 км × 50 000 точек (`bench.test.ts`); golden коридора и
   `CORRIDOR_ENGINE_VERSION` не меняются (участки — неизменённый движок на подлиниях). Int — длинный маршрут
   `longCorridorRoute(h, owner, 'line' | 'outAndBack')` и синтетический GPX `longRideGpx(kind, startAt, { stopAtM })`

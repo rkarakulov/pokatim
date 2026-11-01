@@ -1,6 +1,7 @@
 import { rm } from 'node:fs/promises';
 
 import { RouteRideDetail, RouteRideTrack } from '@pokatim/contracts';
+import { ROUTE_SECTIONS_VERSION } from '@pokatim/tracks/parse';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createHarness, MINUTE, type Harness } from '../../../test/harness';
@@ -217,11 +218,11 @@ describe('сверка заезда (worker)', () => {
 });
 
 describe('участки маршрута (route-rides-05)', () => {
-  it('длинный маршрут, полный проезд — passed, все участки passed со временем, версия 1', async () => {
+  it('длинный маршрут, полный проезд — passed, все участки passed со временем, текущая версия', async () => {
     const w = await queuedRide({ kind: 'line' });
     expect(await processor().check(w.rideId, 1)).toBe('passed');
     const { sections } = await docOf(w.rideId);
-    expect(sections).toMatchObject({ version: 1, failure: null });
+    expect(sections).toMatchObject({ version: ROUTE_SECTIONS_VERSION, failure: null });
     expect(sections!.items.map(({ fromM, toM, status }) => [fromM, toM, status])).toEqual([
       [0, 10_000, 'passed'],
       [10_000, 20_000, 'passed'],
@@ -241,10 +242,17 @@ describe('участки маршрута (route-rides-05)', () => {
     ]);
   });
 
-  it('«туда-обратно» 2 × 15 км по одной дороге — участков нет (§8.2 Q1), маршрут passed', async () => {
+  it('«туда-обратно» 2 × 15 км по одной дороге — граница в развороте, 4 участка passed (route-rides-06)', async () => {
     const w = await queuedRide({ kind: 'outAndBack' });
     expect(await processor().check(w.rideId, 1)).toBe('passed');
-    expect((await docOf(w.rideId)).sections).toEqual({ version: 1, failure: null, items: [] });
+    const { sections } = await docOf(w.rideId);
+    expect(sections).toMatchObject({ version: ROUTE_SECTIONS_VERSION, failure: null });
+    expect(sections!.items.map(({ fromM, toM, status }) => [fromM, toM, status])).toEqual([
+      [0, 10_000, 'passed'],
+      [10_000, 15_000, 'passed'],
+      [15_000, 25_000, 'passed'],
+      [25_000, 30_000, 'passed'],
+    ]);
   });
 
   it('маршрут 8 км — участков нет, второго потока нет', async () => {
@@ -252,7 +260,11 @@ describe('участки маршрута (route-rides-05)', () => {
     const analyzeSections = vi.spyOn(evaluator(), 'analyzeSections');
     expect(await processor().check(w.rideId, 1)).toBe('passed');
     expect(analyzeSections).not.toHaveBeenCalled();
-    expect((await docOf(w.rideId)).sections).toEqual({ version: 1, failure: null, items: [] });
+    expect((await docOf(w.rideId)).sections).toEqual({
+      version: ROUTE_SECTIONS_VERSION,
+      failure: null,
+      items: [],
+    });
   });
 
   it('таймаут потока участков — failure timeout, вердикт маршрута записан', async () => {
@@ -261,7 +273,7 @@ describe('участки маршрута (route-rides-05)', () => {
     expect(await processor().check(w.rideId, 1)).toBe('passed');
     expect(await docOf(w.rideId)).toMatchObject({
       status: 'passed',
-      sections: { version: 1, failure: 'timeout', items: [] },
+      sections: { version: ROUTE_SECTIONS_VERSION, failure: 'timeout', items: [] },
     });
   });
 
@@ -272,7 +284,7 @@ describe('участки маршрута (route-rides-05)', () => {
     expect(await docOf(w.rideId)).toMatchObject({
       status: 'passed',
       checkAttempts: 1,
-      sections: { version: 1, failure: 'error', items: [] },
+      sections: { version: ROUTE_SECTIONS_VERSION, failure: 'error', items: [] },
     });
   });
 

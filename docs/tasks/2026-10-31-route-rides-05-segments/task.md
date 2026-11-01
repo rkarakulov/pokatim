@@ -400,6 +400,7 @@ PR A реализован (ветка `feature/route-rides-sections-api`, не �
 - После ревью (findings.md): `@pokatim/tracks` — 402 теста (бенч 300 км × 50k ≈ 0,56 с), tsc 0; `@pokatim/api`
   `src/modules/route-rides` + `parse-thread` — 8 файлов / 111 тестов; eslint 0, `format:check` чисто.
 
-Follow-up (ревью LOW-2, не исправлялось): `routeSections` пересчитывает chainage всей линии в каждом `sectionLine`
+Follow-up (ревью LOW-2) — исправлен в route-rides-06 (`docs/tasks/2026-11-01-route-rides-06-turnaround/`), там же
+граница в точке разворота. Исходная запись: `routeSections` пересчитывает chainage всей линии в каждом `sectionLine`
 внутри проверки слияния (`ungated`) — O(участков² · точек) в худшем случае (≤ 30 × 30 × 20 000); на бенче незаметно.
 Вынести общий chainage в `sectionLine` (внутренний вариант с готовым chainage) — при следующей правке `sections.ts`.

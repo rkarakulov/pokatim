@@ -7,16 +7,16 @@ import { corridorGateRadiusM } from '../track.ts';
  * `ROUTE_SECTION_POLICY` или `routeSections`/`sectionLine` → +1 (участки разных версий не сравниваются). Смена ширины
  * коридора заезда (`ROUTE_RIDE_POLICY.corridorWidthM` API) меняет порог слияния и границы → тоже +1.
  */
-export const ROUTE_SECTIONS_VERSION = 1;
+export const ROUTE_SECTIONS_VERSION = 2;
 
 /**
- * Пороги разбиения (часть версии 1). Расстояния — м по chainage линии сверки. Порог слияния зависит и от ширины
+ * Пороги разбиения (часть версии 2). Расстояния — м по chainage линии сверки. Порог слияния зависит и от ширины
  * коридора (`widthM`): смена `ROUTE_RIDE_POLICY.corridorWidthM` → +1 `ROUTE_SECTIONS_VERSION`.
  */
 export const ROUTE_SECTION_POLICY = {
   /** границы участков — через каждые `stepM` от старта */
   stepM: 10_000,
-  /** хвост короче — сливается с последним участком */
+  /** хвост плеча короче — сливается с последним участком плеча; разворот ближе к опорной границе — не граница */
   minTailM: 5_000,
   /** маршрут короче — участков нет */
   minRouteM: 15_000,
@@ -75,11 +75,12 @@ function pointAtChainage(
 }
 
 /**
- * Линия, пройденная от `points[0]`, после выхода из радиуса `radiusM` вокруг него снова подходит к нему ближе
- * `radiusM` (расстояние до отрезков, локальная проекция вокруг точки). Ворота линейного коридора: движок завершает
- * попытку на повторном входе в ворота старта — такой участок не засчитывается честным проездом.
+ * Индекс точки, на отрезке к которой линия, пройденная от `points[0]`, после выхода из радиуса `radiusM` вокруг него
+ * снова подходит к нему ближе `radiusM` (расстояние до отрезков, локальная проекция вокруг точки); нет возврата — `-1`.
+ * Ворота линейного коридора: движок завершает попытку на повторном входе в ворота старта — такой участок не
+ * засчитывается честным проездом.
  */
-function returnsTo(points: readonly LonLat[], radiusM: number): boolean {
+function returnIndex(points: readonly LonLat[], radiusM: number): number {
   const [lon0, lat0] = points[0]!;
   const { kx, ky } = localProjection(lat0);
   const x = (i: number) => (points[i]![0] - lon0) * kx;
@@ -97,49 +98,102 @@ function returnsTo(points: readonly LonLat[], radiusM: number): boolean {
     const dy = y(i) - ay;
     const length2 = dx * dx + dy * dy;
     const t = length2 > 0 ? Math.min(1, Math.max(0, -(ax * dx + ay * dy) / length2)) : 0;
-    if (Math.hypot(ax + dx * t, ay + dy * t) <= radiusM) return true;
+    if (Math.hypot(ax + dx * t, ay + dy * t) <= radiusM) return i;
   }
-  return false;
+  return -1;
+}
+
+const distance = ([aLon, aLat]: LonLat, [bLon, bLat]: LonLat): number =>
+  haversineMeters({ lon: aLon, lat: aLat }, { lon: bLon, lat: bLat });
+
+/** Метры по линии от начала подлинии до точки `last` с наибольшим `distance` от `points[0]` среди `0…last`. */
+function farthestAlong(points: readonly LonLat[], last: number): number {
+  let along = 0;
+  let best = 0;
+  let bestAlong = 0;
+  for (let i = 1; i <= last; i += 1) {
+    along += distance(points[i - 1]!, points[i]!);
+    const d = distance(points[0]!, points[i]!);
+    if (d > best) {
+      best = d;
+      bestAlong = along;
+    }
+  }
+  return bestAlong;
+}
+
+/** Границы плеч: в каждом `[anchors[k], anchors[k + 1]]` — через `stepM`, хвост < `minTailM` — к последнему участку. */
+function layout(anchors: readonly number[]): number[] {
+  const { stepM, minTailM } = ROUTE_SECTION_POLICY;
+  const bounds: number[] = [];
+  for (let k = 0; k + 1 < anchors.length; k += 1) {
+    const from = anchors[k]!;
+    const length = anchors[k + 1]! - from;
+    bounds.push(from);
+    for (let j = 1; length - j * stepM >= minTailM; j += 1) bounds.push(from + j * stepM);
+  }
+  bounds.push(anchors[anchors.length - 1]!);
+  return bounds;
 }
 
 /**
- * Участки маршрута (route-rides-05, U1): границы через каждые `stepM` по chainage линии сверки, хвост < `minTailM`
- * — к последнему участку; маршрут < `minRouteM` — `[]`. Участок, концы которого ближе `2 · corridorGateRadiusM(widthM)
- * + gateMarginM` (разворот «туда-обратно»: ворота линейного коридора перекрылись бы) или линия которого после выхода
- * из этого радиуса снова подходит к своему началу или концу (§8.2 Q1: движок не засчитывает повторный вход в ворота),
- * сливается со следующим (последний — с предыдущим) до устойчивости. Участков нет, только если последовательные
- * слияния оставляют меньше двух участков (типично — «туда-обратно» по одной дороге с разворотом внутри участка);
- * разворот ровно на границе участка — участки есть (ни один не проходит у своих ворот). Итог < 2 или > `maxSections`
- * — `[]`. Чистая и детерминированная: считает на неокруглённом chainage, округляет только выход (`toM` последнего =
- * `round(L)`, без зазоров).
+ * Участки маршрута (route-rides-05 U1, route-rides-06): границы через каждые `stepM` по chainage линии сверки, хвост
+ * < `minTailM` — к последнему участку; маршрут < `minRouteM` — `[]`. Участок «у ворот» — концы ближе
+ * `2 · corridorGateRadiusM(widthM) + gateMarginM` или линия после выхода из этого радиуса снова подходит к своему
+ * началу или концу (движок не засчитывает повторный вход в ворота): его точка разворота — самая дальняя от
+ * возвращаемых ворот вершина до возврата (концы близко без возврата — самая дальняя от начала) — становится опорной
+ * границей, если она дальше `minTailM` от всех опорных (старт, финиш, найденные развороты) и участков с ней не больше
+ * `maxSections`; шаг и хвост раскладываются
+ * в каждом плече между опорными отдельно, до устойчивости. «Туда-обратно» 2 × 17 км → 0–10, 10–17, 17–27, 27–34 км.
+ * Оставшийся участок «у ворот» (разворот ближе `minTailM` к опорной) сливается со следующим (последний — с
+ * предыдущим) до устойчивости. Итог < 2 или > `maxSections` — `[]`. Чистая и детерминированная: chainage линии — один
+ * раз, считает на неокруглённом chainage, округляет только выход (`toM` последнего = `round(L)`, без зазоров).
  */
 export function routeSections(line: readonly LonLat[], widthM: number): RouteSection[] {
   if (line.length < 2) return [];
   const chainage = chainageOf(line);
   const total = chainage[chainage.length - 1]!;
-  const { stepM, minTailM, minRouteM, maxSections, gateMarginM } = ROUTE_SECTION_POLICY;
+  const { minTailM, minRouteM, maxSections, gateMarginM } = ROUTE_SECTION_POLICY;
   if (total < minRouteM) return [];
 
-  const bounds = [0];
-  for (let k = 1; total - k * stepM >= minTailM; k += 1) bounds.push(k * stepM);
-  bounds.push(total);
-
   const minEndsM = 2 * corridorGateRadiusM(widthM) + gateMarginM;
-  const ungated = (fromM: number, toM: number) => {
-    const sub = sectionLine(line, fromM, toM);
-    const [aLon, aLat] = sub[0]!;
-    const [bLon, bLat] = sub[sub.length - 1]!;
-    return (
-      haversineMeters({ lon: aLon, lat: aLat }, { lon: bLon, lat: bLat }) <= minEndsM ||
-      returnsTo(sub, minEndsM) ||
-      returnsTo([...sub].reverse(), minEndsM)
-    );
+  /** Точка разворота участка «у ворот» (м по chainage линии); участок проходим — `null`. */
+  const turnOf = (fromM: number, toM: number): number | null => {
+    const sub = sectionLineOn(line, chainage, fromM, toM);
+    const toStart = returnIndex(sub, minEndsM);
+    // разворот — до отрезка, на котором линия вернулась к воротам: его конец может быть уже за ними
+    if (toStart >= 0) return fromM + farthestAlong(sub, toStart - 1);
+    const back = [...sub].reverse();
+    const toEnd = returnIndex(back, minEndsM);
+    if (toEnd >= 0) return toM - farthestAlong(back, toEnd - 1);
+    if (distance(sub[0]!, sub[sub.length - 1]!) <= minEndsM) {
+      return fromM + farthestAlong(sub, sub.length - 1);
+    }
+    return null;
   };
+
+  const anchors = [0, total];
+  for (let pass = 0; pass < maxSections; pass += 1) {
+    const bounds = layout(anchors);
+    let added = false;
+    for (let i = 0; i + 1 < bounds.length; i += 1) {
+      const turn = turnOf(bounds[i]!, bounds[i + 1]!);
+      if (turn === null || anchors.some((anchor) => Math.abs(anchor - turn) < minTailM)) continue;
+      const next = [...anchors, turn].sort((a, b) => a - b);
+      // граница, после которой участков больше предела, не нужна: прежнее слияние даёт участки
+      if (layout(next).length - 1 > maxSections) continue;
+      anchors.splice(0, anchors.length, ...next);
+      added = true;
+    }
+    if (!added) break;
+  }
+
+  const bounds = layout(anchors);
   let merged = true;
   while (merged && bounds.length > 2) {
     merged = false;
     for (let i = 0; i + 1 < bounds.length; i += 1) {
-      if (!ungated(bounds[i]!, bounds[i + 1]!)) continue;
+      if (turnOf(bounds[i]!, bounds[i + 1]!) === null) continue;
       // слияние со следующим участком — убрать его левую границу; последний — с предыдущим
       bounds.splice(i + 2 < bounds.length ? i + 1 : i, 1);
       merged = true;
@@ -164,7 +218,16 @@ export function sectionLine(
   fromM: number,
   toM: number,
 ): [number, number][] {
-  const chainage = chainageOf(line);
+  return sectionLineOn(line, chainageOf(line), fromM, toM);
+}
+
+/** `sectionLine` на готовом chainage линии (разбиение считает его один раз). */
+function sectionLineOn(
+  line: readonly LonLat[],
+  chainage: Float64Array,
+  fromM: number,
+  toM: number,
+): [number, number][] {
   const result: [number, number][] = [pointAtChainage(line, chainage, fromM)];
   for (let i = segmentAt(chainage, fromM) + 1; i < line.length && chainage[i]! < toM; i += 1) {
     if (chainage[i]! > fromM) result.push([line[i]![0], line[i]![1]]);
