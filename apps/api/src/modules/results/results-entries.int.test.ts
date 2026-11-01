@@ -1,7 +1,7 @@
 import { rm } from 'node:fs/promises';
 
 import { MyRaceEntry, PanelRace } from '@pokatim/contracts';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { createHarness, DAY, HOUR, type Harness } from '../../../test/harness';
 import { call, gate, holdTransaction, retried, untilBlocked } from '../../../test/identity';
@@ -146,7 +146,7 @@ describe('заявка (AC1)', () => {
       const original = races.admitEntry.bind(races);
       const g = gate();
       let calls = 0;
-      vi.spyOn(races, 'admitEntry').mockImplementation(async (session, id, now) => {
+      const spy = vi.spyOn(races, 'admitEntry').mockImplementation(async (session, id, now) => {
         calls += 1;
         // отрицательное доказательство: счётчик только читается (номер = прочитанный + 1), записи нет
         const doc = readOnly
@@ -154,6 +154,11 @@ describe('заявка (AC1)', () => {
           : await original(session, id, now);
         if (calls === 1) await g.wait();
         return readOnly && doc ? { ...doc, entryAdmissions: (doc.entryAdmissions ?? 0) + 1 } : doc;
+      });
+      // подмена — только на этот тест: следующие идут с настоящим `admitEntry`; ворота открыты и при сбое
+      onTestFinished(() => {
+        g.open();
+        spy.mockRestore();
       });
       const first = enterRace(h, a.auth, raceId);
       await g.reached;

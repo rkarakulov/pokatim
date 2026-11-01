@@ -42,8 +42,8 @@ import { VERIFIED_PROFILES } from './verified-profiles.port';
  * `RiderNameDirectory` и `VerifiedProfiles` (race-results-07) для `results` (через `index.ts`), `RiderProfileDirectory`
  * (rider-profile) для `riders`, `RiderThemes` (user-theme) для `sharing`, единственный писатель жалоб на профиль
  * (profile-moderation) и порт стирания `ProfileErasure` (`account`), очередь жалоб для «Обзора» панели
- * (`ProfilesOverview`, admin-overview), разовая выборка служебных подписей (`ReservedRiderLines`, CLI) — без контроллеров и без импортов. Репозитории объявлены только здесь (один
- * экземпляр).
+ * (`ProfilesOverview`, admin-overview), разовая выборка служебных подписей (`ReservedRiderLines`, CLI) — без
+ * контроллеров и без импортов. Репозитории объявлены только здесь (один экземпляр).
  */
 @Module({
   providers: [
