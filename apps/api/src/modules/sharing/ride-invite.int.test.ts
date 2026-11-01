@@ -1,8 +1,10 @@
 import { getQueueToken } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { StoryCardStatus } from '@pokatim/contracts';
+import { REDIS } from '@rkarakulov/api-kit/core';
 import { uuidv7 } from '@rkarakulov/api-kit/mongo';
 import type { Job, Queue } from 'bullmq';
+import type { Command, Redis } from 'ioredis';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { twoToneImage } from '../../../test/avatars';
@@ -475,6 +477,39 @@ describe('отзыв выданной картинки приглашения (r
     await h.redis.del(`story-card:ride:${token}`);
     await hideInDb(h, ride.id);
     await expectServed(token);
+  });
+
+  it('гонка отдачи: revoke параллельного запроса между чтением PNG и привязки — 404 (ревью PR A, HIGH)', async () => {
+    const ride = await createRide(h, organizer);
+    const token = await cardToken(ride.id);
+    await hideInDb(h, ride.id);
+    const pngKey = `story-card:png:${token}`;
+    const bindingKey = `story-card:ride:${token}`;
+    // клиент Redis приложения; отзыв «другого запроса» — отдельным соединением
+    const redis = h.app.get<Redis>(REDIS, { strict: false });
+    const other = redis.duplicate();
+    const send = redis.sendCommand.bind(redis);
+    let revoked = false;
+    // ответ на чтение PNG доходит до сервиса только после того, как другой запрос удалил PNG и привязку
+    vi.spyOn(redis, 'sendCommand').mockImplementation(((command: Command, ...rest: unknown[]) => {
+      if (!revoked && command.name === 'get' && String(command.args[0]) === pngKey) {
+        revoked = true;
+        const resolve = command.resolve;
+        command.resolve = (value: unknown) => {
+          void other.del(pngKey, bindingKey).then(() => resolve(value));
+        };
+      }
+      return (send as (...args: unknown[]) => unknown)(command, ...rest);
+    }) as typeof redis.sendCommand);
+    try {
+      const res = await image(`${token}.png`);
+      expect(revoked).toBe(true);
+      expect(res.statusCode).toBe(404);
+      expect(res.headers['content-type']).toContain('application/json');
+    } finally {
+      vi.restoreAllMocks();
+      await other.quit();
+    }
   });
 
   it('гонка «рендер ↔ сброс»: фото снято после invitePhoto, до записи PNG — токен 404', async () => {

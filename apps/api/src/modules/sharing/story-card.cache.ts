@@ -81,6 +81,17 @@ const InviteCardBindingSchema = z.strictObject({
   photoId: z.string().min(1).max(64).nullable(),
 });
 
+/** Привязка из Redis: нет — `null`; не JSON или не по схеме — `'invalid'`. */
+function parseBinding(raw: string | null): InviteCardBinding | 'invalid' | null {
+  if (raw === null) return null;
+  try {
+    const parsed = InviteCardBindingSchema.safeParse(JSON.parse(raw));
+    return parsed.success ? parsed.data : 'invalid';
+  } catch {
+    return 'invalid';
+  }
+}
+
 /**
  * Кэш карточек (сторис гонки, приглашение райда, достижение, маршрут каталога — ADR-0018; хэш входов включает вид карточки): PNG по капабилити-токену и ключ «хэш входов → токен» — Redis с TTL 24 ч, не
  * MongoDB; ключ постановки рендера (NX) и отметка провала. Ключи — хэш и токен, без `userId` и имени.
@@ -135,18 +146,22 @@ export class StoryCardCache {
   }
 
   /**
-   * Привязка токена: нет — `null` (не приглашение или выдано до привязок); не разбирается — `'invalid'` (отказ).
-   * Токен уже проверен `png`.
+   * PNG и привязка токена **одним снимком** (`MULTI`, ревью PR A): параллельный `revoke` не попадает между чтениями.
+   * Нет PNG — `null`; привязки нет — `binding: null` (не приглашение или выдано до привязок); не разбирается —
+   * `'invalid'` (отказ). Кривой токен — `null` без запроса в Redis.
    */
-  async binding(token: string): Promise<InviteCardBinding | 'invalid' | null> {
-    const raw = await this.redis.get(bindingKey(token));
-    if (raw === null) return null;
-    try {
-      const parsed = InviteCardBindingSchema.safeParse(JSON.parse(raw));
-      return parsed.success ? parsed.data : 'invalid';
-    } catch {
-      return 'invalid';
-    }
+  async card(
+    token: string,
+  ): Promise<{ png: Buffer; binding: InviteCardBinding | 'invalid' | null } | null> {
+    if (!StoryCardToken.safeParse(token).success) return null;
+    const results = await this.redis.multi().getBuffer(pngKey(token)).get(bindingKey(token)).exec();
+    const [pngReply, bindingReply] = results ?? [];
+    if (!pngReply || !bindingReply) throw new Error('story-card read aborted');
+    if (pngReply[0]) throw pngReply[0];
+    if (bindingReply[0]) throw bindingReply[0];
+    const png = pngReply[1] as Buffer | null;
+    if (!png) return null;
+    return { png, binding: parseBinding(bindingReply[1] as string | null) };
   }
 
   /** Отозвать картинку: PNG и привязка; ключ хэша без PNG `readyToken` не отдаёт (перерендер). */
@@ -160,11 +175,5 @@ export class StoryCardCache {
       .set(failedKey(hash), '1', 'EX', STORY_CARD_POLICY.failedTtlSec)
       .del(pendingKey(hash))
       .exec();
-  }
-
-  /** PNG по токену; кривой токен — `null` без запроса в Redis. */
-  async png(token: string): Promise<Buffer | null> {
-    if (!StoryCardToken.safeParse(token).success) return null;
-    return this.redis.getBuffer(pngKey(token));
   }
 }

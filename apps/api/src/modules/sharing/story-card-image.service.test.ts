@@ -15,9 +15,9 @@ function setup(options: {
   binding?: InviteCardBinding | 'invalid' | null;
   live?: boolean;
 }) {
+  const png = options.png === undefined ? PNG : options.png;
   const cache = {
-    png: vi.fn(async () => (options.png === undefined ? PNG : options.png)),
-    binding: vi.fn(async () => options.binding ?? null),
+    card: vi.fn(async () => (png ? { png, binding: options.binding ?? null } : null)),
     revoke: vi.fn(async () => undefined),
   };
   const rides = { inviteCardLive: vi.fn(async () => options.live ?? true) };
@@ -33,10 +33,10 @@ afterEach(() => {
 });
 
 describe('StoryCardImageService.png', () => {
-  it('нет PNG — null, привязка и порт не читаются', async () => {
+  it('нет PNG — null, порт не зовётся; PNG и привязка — одним чтением кэша', async () => {
     const { service, cache, rides } = setup({ png: null });
     expect(await service.png(TOKEN)).toBeNull();
-    expect(cache.binding).not.toHaveBeenCalled();
+    expect(cache.card).toHaveBeenCalledTimes(1);
     expect(rides.inviteCardLive).not.toHaveBeenCalled();
   });
 

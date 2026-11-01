@@ -19,9 +19,10 @@ export class StoryCardImageService {
   ) {}
 
   async png(token: string): Promise<Buffer | null> {
-    const png = await this.cache.png(token);
-    if (!png) return null;
-    const binding = await this.cache.binding(token);
+    // один снимок PNG и привязки: раздельные чтения отдали бы PNG, отозванный между ними (fail open)
+    const card = await this.cache.card(token);
+    if (!card) return null;
+    const { png, binding } = card;
     if (binding === null) return png;
     if (binding === 'invalid') return null;
     if (await this.rides.inviteCardLive(binding.rideId, binding.photoId)) return png;

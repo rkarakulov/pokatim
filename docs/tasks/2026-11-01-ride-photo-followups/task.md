@@ -518,4 +518,8 @@ ModerationRidePhotoQuery = z.strictObject({ photoId: RidePhotoId })
 **Полный `TURBO_CONCURRENCY=4 pnpm check`** на `9d84ae3b` (`MONGO_URL_TEST=…/ride_photo_fu_test`, `REDIS_URL_TEST=…/10`):
 `Tasks: 15 successful, 15 total` (6 из кэша turbo), api — `Test Files 262 passed`, `Tests 2993 passed`; EXIT=0.
 
+**Фиксы ревью PR A** (`findings-a.md`, `findings-a-codex.md`): HIGH — PNG и привязка читаются одним `MULTI`
+(`StoryCardCache.card`), регрессия «revoke между чтениями» в `ride-invite.int` (отр. доказательство — с раздельным
+чтением `expected 200 to be 404`); LOW — текст последствий упоминает превью соцсетей.
+
 **NOT VERIFIED:** визуальная проверка OG с фото (превью `preview:story-cards` не запускалось); e2e — не нужен (§9).
