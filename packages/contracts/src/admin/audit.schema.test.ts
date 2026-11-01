@@ -196,6 +196,26 @@ describe('AuditEntry — модерация райдов (05b)', () => {
       }).success,
     ).toBe(false);
   });
+
+  it('код причины сброса профиля (profile-moderation-d11): справочник причин жалоб, текст — только у «Другое»', () => {
+    const entry = {
+      id: ID,
+      at: '2026-11-01T10:00:00.000Z',
+      action: 'profile.club_reset',
+      actor: { kind: 'user', userId: ID, displayName: 'Ольга' },
+      target: null,
+      reason: null,
+      subject: { kind: 'rider', id: ID, label: 'Участник ·000001' },
+      details: { reportCount: 1, resetReason: 'club' },
+    };
+    expect(AuditPage.parse({ items: [entry], nextCursor: null }).items[0]).toEqual(entry);
+    expect(
+      AuditPage.safeParse({
+        items: [{ ...entry, details: { reportCount: 1, resetReason: 'boring' } }],
+        nextCursor: null,
+      }).success,
+    ).toBe(false);
+  });
 });
 
 describe('AuditEntry — решение по спору (06)', () => {

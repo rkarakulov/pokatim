@@ -106,17 +106,26 @@ function details(entry: AuditEntry): string {
   // 05b: модерация райдов — число закрытых действием жалоб
   const reportCount = entry.details?.reportCount;
   if (reportCount !== undefined) {
-    const reports = t('admin.audit.reportCount', { count: reportCount });
+    // profile-moderation-d11: сброс профиля — причина из справочника жалоб (текст «Другое» — в колонке «Причина»)
+    const resetReason = entry.details?.resetReason;
+    const parts = [
+      ...(resetReason
+        ? [
+            t('admin.audit.details.resetReason', {
+              reason: t(`domain.profileReportReason.${resetReason}`),
+            }),
+          ]
+        : []),
+      t('admin.audit.reportCount', { count: reportCount }),
+    ];
     // profile-moderation-followups: сброс фото, включивший запрет загрузки, — до какого момента (по Минску)
     const blockedUntil = entry.details?.avatarBlockedUntil;
-    return blockedUntil
-      ? t('admin.audit.details.join', {
-          head: reports,
-          next: t('admin.audit.details.avatarBlockedUntil', {
-            date: formatDateTimeLong(blockedUntil),
-          }),
-        })
-      : reports;
+    if (blockedUntil) {
+      parts.push(
+        t('admin.audit.details.avatarBlockedUntil', { date: formatDateTimeLong(blockedUntil) }),
+      );
+    }
+    return parts.reduce((head, next) => t('admin.audit.details.join', { head, next }));
   }
   return entry.details?.changedFields?.map((field) => fieldLabel(entry, field)).join(', ') ?? '';
 }

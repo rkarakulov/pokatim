@@ -7,6 +7,7 @@ import {
 } from '../achievements/achievement.schema.ts';
 import { AppDecorId, AppThemeId } from '../appearance/appearance.schema.ts';
 import { PageQuery, Uuid } from '../common.ts';
+import { ProfileReportReason } from '../profile/profile-report.schema.ts';
 import { RaceCancelReason } from '../races/race.schema.ts';
 import { RouteRejectionReason } from '../routes/route-publication.schema.ts';
 import { PanelRole } from './permissions.schema.ts';
@@ -194,6 +195,8 @@ export const AuditEntry = z.object({
       /** admin-failed-jobs: очередь и имя (тип) задачи */
       queue: z.string().optional(),
       jobName: z.string().optional(),
+      /** profile-moderation-d11: код причины сброса имени, фото или клуба (текст «Другое» — в `reason`) */
+      resetReason: ProfileReportReason.optional(),
     })
     .nullable(),
 });

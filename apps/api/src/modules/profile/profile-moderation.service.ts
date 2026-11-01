@@ -26,9 +26,12 @@ import { type AuditRecord, PanelAudit } from '../panel';
 import { AvatarReissue } from './avatar-reissue';
 import { ProfileAvatarRepository } from './profile-avatar.repository';
 import { ProfileReportsRepository } from './profile-reports.repository';
+import type { ProfileReportResolution } from './profile-reports.collection';
 import {
   PROFILE_FIELD_RESET,
+  PROFILE_REPORTS_RESOLVED,
   type ProfileFieldReset,
+  type ProfileReportsResolved,
   type ProfileResetField,
 } from './profile.events';
 import { activeBlock, avatarResetBan, isPublicProfile, resetsInWindow } from './profile.policy';
@@ -76,7 +79,8 @@ const nameOf = (doc: ProfileModerationDoc) =>
  * (жалоба пишет тот же документ — транзакции конфликтуют), затем побочное (удаление фото, перевыпуск id фото), закрытие
  * открытых жалоб и `PanelAudit.append`; откат — ничего. Сбрасывать нечего — `{ reset: false }` без журнала, жалобы
  * открыты (D2); профиля нет — 404. В журнале — подпись `Участник ·<id>` (D3), причина и число закрытых жалоб; ни имени,
- * ни клуба, ни id фото — ни в журнале, ни в логе (D14).
+ * ни клуба, ни id фото — ни в журнале, ни в логе (D14). Причина сброса — код справочника жалоб (`details.resetReason`),
+ * текст — только у «Другое» (D11-1); закрытые жалобы — событие `profile.reports-resolved` авторам (D11-2).
  */
 @Injectable()
 export class ProfileModerationService {
@@ -242,15 +246,11 @@ export class ProfileModerationService {
       if (!(await this.repository.clearReports(tx, userId, body.reportRevision))) {
         throw domainError('CONFLICT', 409);
       }
-      const closed = await this.reports.closeOpen(tx, userId, 'dismissed', actorUserId, now);
-      await this.appendAudit(
-        tx,
-        'profile.reports_dismissed',
-        actorUserId,
-        userId,
-        body.reason,
-        closed,
-      );
+      const closed = await this.closeReports(tx, userId, 'dismissed', actorUserId, now);
+      await this.appendAudit(tx, 'profile.reports_dismissed', actorUserId, userId, {
+        reason: body.reason,
+        reportCount: closed,
+      });
       return true;
     });
     this.logger.log(`profile reports dismissed by ${actorUserId} dismissed=${dismissed}`);
@@ -273,16 +273,14 @@ export class ProfileModerationService {
       const { outcome, seq, imposed = null } = await write(tx, now);
       if (outcome === 'not_found') throw domainError('NOT_FOUND', 404);
       if (outcome === 'empty') return false;
-      const closed = await this.reports.closeOpen(tx, userId, 'actioned', actorUserId, now);
-      await this.appendAudit(
-        tx,
-        RESET_AUDIT[kind],
-        actorUserId,
-        userId,
-        body.reason,
-        closed,
-        imposed,
-      );
+      const closed = await this.closeReports(tx, userId, 'actioned', actorUserId, now);
+      // код причины — в детали, текст — только у «Другое» (D11-1)
+      await this.appendAudit(tx, RESET_AUDIT[kind], actorUserId, userId, {
+        reason: body.comment ?? null,
+        reportCount: closed,
+        resetReason: body.reason,
+        avatarBlockedUntil: imposed,
+      });
       const payload: ProfileFieldReset = {
         userId,
         field: kind,
@@ -297,24 +295,49 @@ export class ProfileModerationService {
     return { reset };
   }
 
+  /**
+   * Закрыть открытые жалобы и, если закрыта хотя бы одна, — outbox `profile.reports-resolved` авторам (D11-2): авторы —
+   * открытых жалоб, прочитанные в той же транзакции до закрытия; число закрытых — для журнала.
+   */
+  private async closeReports(
+    tx: DbSession,
+    userId: string,
+    resolution: ProfileReportResolution,
+    actorUserId: string,
+    now: Date,
+  ): Promise<number> {
+    const reporterUserIds = await this.reports.openReporters(tx, userId);
+    const closed = await this.reports.closeOpen(tx, userId, resolution, actorUserId, now);
+    if (closed === 0 || reporterUserIds.length === 0) return closed;
+    const payload: ProfileReportsResolved = { targetUserId: userId, resolution, reporterUserIds };
+    await this.outbox.append(tx, { type: PROFILE_REPORTS_RESOLVED, payload });
+    return closed;
+  }
+
   private appendAudit(
     tx: DbSession,
     action: AuditRecord['action'],
     actorUserId: string,
     userId: string,
-    reason: string,
-    reportCount: number,
-    avatarBlockedUntil: Date | null = null,
+    entry: {
+      reason: string | null;
+      reportCount: number;
+      resetReason?: ProfileReportReason;
+      avatarBlockedUntil?: Date | null;
+    },
   ): Promise<unknown> {
+    const { reason, reportCount, resetReason, avatarBlockedUntil } = entry;
     return this.audit.append(tx, {
       action,
       actor: { kind: 'user', userId: actorUserId },
       // targetUserId не заполняется: читатель журнала ищет его среди членов команды (D3)
       subject: { kind: 'rider', id: userId, label: riderSubjectLabel(userId) },
       reason,
-      details: avatarBlockedUntil
-        ? { reportCount, avatarBlockedUntil: avatarBlockedUntil.toISOString() }
-        : { reportCount },
+      details: {
+        reportCount,
+        ...(avatarBlockedUntil ? { avatarBlockedUntil: avatarBlockedUntil.toISOString() } : {}),
+        ...(resetReason ? { resetReason } : {}),
+      },
     });
   }
 }

@@ -26,7 +26,13 @@ import {
   uuidv7At,
 } from '../../../test/notifications';
 import { panelCall } from '../../../test/panel';
-import { type PublicRider, publicRider, RIDER_PROFILES, seedAvatar } from '../../../test/profiles';
+import {
+  type PublicRider,
+  publicRider,
+  reportRider,
+  RIDER_PROFILES,
+  seedAvatar,
+} from '../../../test/profiles';
 import { createSeason, publishedRace, staff } from '../../../test/races';
 import { resultsDb } from '../../../test/results';
 import {
@@ -1255,7 +1261,10 @@ describe('сброс поля профиля модератором (profile-mod
     target = await publicRider(h, 'target@example.by', 'Анна К.', 'Секретный клуб');
   });
   const reset = async (path: string) => {
-    const res = await panelCall(h, moderator.token, 'POST', path, { reason: 'Мат после жалоб' });
+    const res = await panelCall(h, moderator.token, 'POST', path, {
+      reason: 'other',
+      comment: 'Мат после жалоб',
+    });
     expect(res.status, JSON.stringify(res.body)).toBe(200);
     return res.body;
   };
@@ -1358,6 +1367,96 @@ describe('сброс поля профиля модератором (profile-mod
     const bad = await appendEvent(h, RESET, { userId: target.userId, field: 'theme' });
     expect(await runIntake(h, RESET, bad)).toBe('skipped');
     expect(await total()).toBe(0);
+  });
+});
+
+describe('решение по жалобе на профиль (profile-moderation-d11, AC2)', () => {
+  const RESOLVED = 'profile.reports-resolved';
+  const ACTIONED = 'Модератор рассмотрел вашу жалобу на профиль райдера и принял меры. Спасибо.';
+  const DISMISSED =
+    'Модератор рассмотрел вашу жалобу на профиль райдера и нарушений не нашёл. Спасибо.';
+  let moderator: { userId: string; token: string };
+  let target: PublicRider;
+  beforeEach(async () => {
+    moderator = await staff(h, 'moderator@example.by', 'moderator');
+    target = await publicRider(h, 'target@example.by', 'Анна К.', 'Секретный клуб');
+    for (const who of [a, b]) {
+      const res = await reportRider(h, who.token, target.publicId, { reason: 'club' });
+      expect(res.status).toBe(200);
+    }
+  });
+  const resolvedOf = async (userId: string) =>
+    (await notificationsOf(h, userId))
+      .filter((doc) => doc.kind === 'profile_report_resolved')
+      .map((doc) => [doc.group, doc.title, doc.body, doc.target, doc.collapseKey ?? null]);
+
+  it('сброс — авторам закрытых жалоб «меры приняты», без цели и имени; райдеру — его T3; повтор задачи — без дублей', async () => {
+    const res = await panelCall(
+      h,
+      moderator.token,
+      'POST',
+      `${RIDER_PROFILES}/${target.userId}/club-reset`,
+      {
+        reason: 'club',
+      },
+    );
+    expect(res.body).toEqual({ reset: true });
+    await notificationsIntake(h).drain();
+    for (const who of [a, b])
+      expect(await resolvedOf(who.userId)).toEqual([
+        ['rides', 'Жалоба рассмотрена', ACTIONED, null, null],
+      ]);
+    expect((await notificationsOf(h, target.userId)).map((doc) => doc.kind)).toEqual([
+      'profile_club_reset',
+    ]);
+    for (const who of [organizer, stranger])
+      expect(await notificationsOf(h, who.userId)).toEqual([]);
+    expect(await notificationsOf(h, moderator.userId)).toEqual([]);
+    const json = JSON.stringify(await notificationsOf(h, a.userId));
+    expect(json).not.toContain('Анна К.');
+    expect(json).not.toContain('Секретный клуб');
+
+    const [event] = await eventsOfType(h, RESOLVED);
+    expect(await runIntake(h, RESOLVED, event!._id)).toBe('unchanged');
+    expect(await resolvedOf(a.userId)).toHaveLength(1);
+  });
+
+  it('«Отклонить жалобы» — «нарушений не нашли»; удалённый к приёму автор — без уведомления', async () => {
+    const detail = await panelCall(h, moderator.token, 'GET', `${RIDER_PROFILES}/${target.userId}`);
+    const { reportRevision } = detail.body as { reportRevision: number };
+    await panelCall(
+      h,
+      moderator.token,
+      'POST',
+      `${RIDER_PROFILES}/${target.userId}/dismiss-reports`,
+      {
+        reason: 'Нарушений нет',
+        reportRevision,
+      },
+    );
+    await collections(h).users.updateOne({ _id: b.userId }, { $set: { deletedAt: h.clock.now() } });
+    await notificationsIntake(h).drain();
+    expect(await resolvedOf(a.userId)).toEqual([
+      ['rides', 'Жалоба рассмотрена', DISMISSED, null, null],
+    ]);
+    expect(await resolvedOf(b.userId)).toEqual([]);
+    expect(await notificationsOf(h, target.userId)).toEqual([]);
+  });
+
+  it('дубль автора в payload — одно уведомление; битый payload — skipped', async () => {
+    const eventId = await appendEvent(h, RESOLVED, {
+      targetUserId: target.userId,
+      resolution: 'dismissed',
+      reporterUserIds: [a.userId, a.userId],
+    });
+    await runIntake(h, RESOLVED, eventId);
+    expect(await resolvedOf(a.userId)).toHaveLength(1);
+    const bad = await appendEvent(h, RESOLVED, {
+      targetUserId: target.userId,
+      resolution: 'hidden',
+      reporterUserIds: [a.userId],
+    });
+    expect(await runIntake(h, RESOLVED, bad)).toBe('skipped');
   });
 });
 

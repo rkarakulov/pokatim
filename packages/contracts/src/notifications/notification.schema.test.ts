@@ -98,6 +98,7 @@ describe('справочники уведомлений (только в кон�
       'social_ride_ask',
       'ride_photo_reset',
       'race_cancelled',
+      'profile_report_resolved',
     ]);
     expect(PUSH_PLATFORMS).toEqual(['ios', 'android']);
   });

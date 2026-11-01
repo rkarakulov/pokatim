@@ -54,7 +54,9 @@ import {
 } from '../tickets';
 import {
   PROFILE_FIELD_RESET,
+  PROFILE_REPORTS_RESOLVED,
   ProfileFieldReset,
+  ProfileReportsResolved,
   RIDER_NAMES,
   type RiderNameDirectory,
 } from '../profile';
@@ -164,6 +166,8 @@ export class NotificationIntake {
         return this.eventReminder(payload, now);
       case PROFILE_FIELD_RESET:
         return this.profileFieldReset(payload);
+      case PROFILE_REPORTS_RESOLVED:
+        return this.profileReportsResolved(payload);
       case ACHIEVEMENTS_GRANT_NOTICED:
         return this.achievementGranted(payload, now);
       case SOCIAL_REACTION_CREATED:
@@ -651,6 +655,26 @@ export class NotificationIntake {
         // ревизия сбросов профиля (ревью pass 2): позже записанный сброс заменяет прежний независимо от `resetAt`
         collapse: { key: `profile:${userId}:${field}`, seq },
         recipients: [userId],
+      },
+    ];
+  }
+
+  /**
+   * Решение по жалобам на профиль (profile-moderation-d11, D11-2) — авторам жалоб, закрытых действием. Порта нет:
+   * авторы — из payload (живость проверяет запись). Без цели: у `profile` нет порта публичности, а после сброса имени
+   * профиль скрыт — переход вёл бы на «Не найдено» (как у скрытого райда). Без схлопывания: каждое решение закрывает
+   * свои жалобы (новая жалоба — после решения, S2).
+   */
+  private profileReportsResolved(payload: unknown): NoticeDraft[] | IntakeSkip {
+    const event = ProfileReportsResolved.safeParse(payload);
+    if (!event.success) return 'invalid_payload';
+    const { targetUserId, resolution, reporterUserIds } = event.data;
+    return [
+      {
+        text: { kind: 'profile_report_resolved', resolution },
+        target: null,
+        // сам райдер профиля жалобу на себя подать не может (S1) — страховка от смешения с его T3
+        recipients: [...new Set(reporterUserIds)].filter((userId) => userId !== targetUserId),
       },
     ];
   }

@@ -2,13 +2,23 @@ import { z } from 'zod';
 
 import { ActionReason } from '../admin/members.schema.ts';
 import { RIDER_GENDERS } from '../results/results.schema.ts';
+import { ProfileReportReason } from './profile-report.schema.ts';
 import { VerifiedBirthYear } from './verified-profile.schema.ts';
 
 /**
  * `POST /v1/admin/profiles/:userId/name-reset` (`profiles.moderate`, profile-02): сброс публичного имени райдера
- * модератором. Причина — в журнал действий; само имя туда не пишется (ПДн).
+ * модератором. Причина — код справочника причин жалоб на профиль (profile-moderation-d11): код — в журнал
+ * (`details.resetReason`), текст `comment` — только у `other` (обязателен), у прочих — `INVALID` (панель — единственный
+ * клиент, строгий контракт). Само имя в журнал не пишется (ПДн).
  */
-export const ResetRiderNameRequest = z.strictObject({ reason: ActionReason });
+export const ResetRiderNameRequest = z
+  .strictObject({ reason: ProfileReportReason, comment: ActionReason.optional() })
+  .superRefine((body, ctx) => {
+    if (body.reason === 'other' && body.comment === undefined)
+      ctx.addIssue({ code: 'custom', message: 'REQUIRED', path: ['comment'] });
+    if (body.reason !== 'other' && body.comment !== undefined)
+      ctx.addIssue({ code: 'custom', message: 'INVALID', path: ['comment'] });
+  });
 export type ResetRiderNameRequest = z.infer<typeof ResetRiderNameRequest>;
 
 /** `reset: false` — имени уже не было (идемпотентный успех, записи журнала нет; D2). */

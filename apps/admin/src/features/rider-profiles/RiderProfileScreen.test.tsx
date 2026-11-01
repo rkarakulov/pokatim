@@ -56,9 +56,14 @@ const detail = (
 
 const open = () => renderApp(`/rider-profiles/${ID}`);
 const dialog = () => screen.getByRole('dialog');
+/** Действие с причиной-текстом; у сброса (`ResetReasonDialog`) — «Другое» и текст. */
 const confirmWith = async (button: string, reason: string) => {
   fireEvent.click(await screen.findByRole('button', { name: button }));
-  fireEvent.change(within(dialog()).getByLabelText(/Причина/), { target: { value: reason } });
+  const other = within(dialog()).queryByRole('radio', { name: 'Другое' });
+  if (other) fireEvent.click(other);
+  fireEvent.change(within(dialog()).getByLabelText(/Причина \(обязательно\)/), {
+    target: { value: reason },
+  });
   fireEvent.click(within(dialog()).getByRole('button', { name: button }));
 };
 
@@ -124,26 +129,60 @@ describe('карточка профиля райдера (profile-moderation, AC
     ['Сбросить клуб', 'resetRiderClub'],
     ['Сбросить имя', 'resetRiderName'],
   ] as const)(
-    '«%s» — ReasonDialog с предупреждением D11; запрос с причиной, карточка перечитана',
+    '«%s» — причина из справочника жалоб (D11-1): без текста и предупреждения; запрос с кодом, карточка перечитана',
     async (button, method) => {
       mocked[method].mockResolvedValue({ reset: true });
       await open();
       fireEvent.click(await screen.findByRole('button', { name: button }));
-      expect(within(dialog()).getByText(WARNING)).toBeTruthy();
       const confirm = within(dialog()).getByRole('button', { name: button });
-      fireEvent.change(within(dialog()).getByLabelText(/Причина/), { target: { value: 'ab' } });
       expect(confirm.hasAttribute('disabled')).toBe(true);
-      fireEvent.change(within(dialog()).getByLabelText(/Причина/), {
-        target: { value: 'Реклама в профиле' },
-      });
+      for (const label of [
+        'Неприемлемое фото',
+        'Неприемлемый клуб',
+        'Неприемлемое имя',
+        'Выдаёт себя за другого',
+        'Спам или реклама',
+        'Другое',
+      ]) {
+        expect(within(dialog()).getByRole('radio', { name: label })).toBeTruthy();
+      }
+      fireEvent.click(within(dialog()).getByRole('radio', { name: 'Спам или реклама' }));
+      expect(within(dialog()).queryByText(WARNING)).toBeNull();
+      expect(within(dialog()).queryByLabelText(/Причина \(обязательно\)/)).toBeNull();
+      expect(confirm.hasAttribute('disabled')).toBe(false);
       fireEvent.click(confirm);
-      await waitFor(() =>
-        expect(mocked[method]).toHaveBeenCalledWith(ID, { reason: 'Реклама в профиле' }),
-      );
+      await waitFor(() => expect(mocked[method]).toHaveBeenCalledWith(ID, { reason: 'spam' }));
       await waitFor(() => expect(mocked.getRiderProfile).toHaveBeenCalledTimes(2));
       expect(screen.queryByRole('dialog')).toBeNull();
     },
   );
+
+  it('«Другое» — предупреждение D11 и обязательный текст 3+ символа; запрос с кодом и текстом', async () => {
+    mocked.resetRiderClub.mockResolvedValue({ reset: true });
+    await open();
+    fireEvent.click(await screen.findByRole('button', { name: 'Сбросить клуб' }));
+    const confirm = within(dialog()).getByRole('button', { name: 'Сбросить клуб' });
+    fireEvent.click(within(dialog()).getByRole('radio', { name: 'Другое' }));
+    expect(within(dialog()).getByText(WARNING)).toBeTruthy();
+    expect(confirm.hasAttribute('disabled')).toBe(true);
+    const field = within(dialog()).getByLabelText(/Причина \(обязательно\)/);
+    fireEvent.change(field, { target: { value: 'ab' } });
+    expect(confirm.hasAttribute('disabled')).toBe(true);
+    fireEvent.change(field, { target: { value: '  Реклама в профиле ' } });
+    expect(confirm.hasAttribute('disabled')).toBe(false);
+    // смена на код — текст и предупреждение уходят, в запрос не попадают
+    fireEvent.click(within(dialog()).getByRole('radio', { name: 'Неприемлемый клуб' }));
+    expect(within(dialog()).queryByText(WARNING)).toBeNull();
+    fireEvent.click(within(dialog()).getByRole('radio', { name: 'Другое' }));
+    fireEvent.click(confirm);
+    await waitFor(() =>
+      expect(mocked.resetRiderClub).toHaveBeenCalledWith(ID, {
+        reason: 'other',
+        comment: 'Реклама в профиле',
+      }),
+    );
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
 
   it('«Отклонить жалобы» — с reportRevision карточки и предупреждением', async () => {
     mocked.dismissRiderProfileReports.mockResolvedValue({ dismissed: true });

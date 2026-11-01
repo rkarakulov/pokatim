@@ -263,21 +263,35 @@ describe('PUBLIC_NAME_CONSENT_VERSION (profile-02)', () => {
   });
 });
 
-describe('ResetRiderNameRequest / RiderNameResetResult (profile-02)', () => {
-  it('причина обрезается; ответ — флаг reset', () => {
-    expect(ResetRiderNameRequest.parse({ reason: '  Оскорбительное имя ' })).toEqual({
-      reason: 'Оскорбительное имя',
-    });
+describe('ResetRiderNameRequest / RiderNameResetResult (profile-02, profile-moderation-d11)', () => {
+  it('причина — код справочника жалоб без текста; ответ — флаг reset', () => {
+    expect(ResetRiderNameRequest.parse({ reason: 'name' })).toEqual({ reason: 'name' });
     expect(RiderNameResetResult.parse({ reset: false })).toEqual({ reset: false });
     expect(RiderNameResetResult.safeParse({}).success).toBe(false);
   });
 
-  it('без причины — REQUIRED, короткая — TOO_SHORT, лишний ключ — ошибка', () => {
+  it('«Другое» — с обязательным текстом (обрезается)', () => {
+    expect(ResetRiderNameRequest.parse({ reason: 'other', comment: '  Оскорбительное ' })).toEqual({
+      reason: 'other',
+      comment: 'Оскорбительное',
+    });
+    const missing = ResetRiderNameRequest.safeParse({ reason: 'other' });
+    expect(codesOf(missing)).toEqual(['REQUIRED']);
+    expect(missing.error?.issues[0]?.path).toEqual(['comment']);
+    expect(codesOf(ResetRiderNameRequest.safeParse({ reason: 'other', comment: 'ab' }))).toEqual([
+      'TOO_SHORT',
+    ]);
+  });
+
+  it('текст у не-«Другое» — INVALID; без причины, свободный текст в reason, лишний ключ — ошибка', () => {
+    const extra = ResetRiderNameRequest.safeParse({ reason: 'name', comment: 'Мат в имени' });
+    expect(codesOf(extra)).toEqual(['INVALID']);
+    expect(extra.error?.issues[0]?.path).toEqual(['comment']);
     expect(codesOf(ResetRiderNameRequest.safeParse({}))).toEqual(['REQUIRED']);
-    expect(codesOf(ResetRiderNameRequest.safeParse({ reason: 'ab' }))).toEqual(['TOO_SHORT']);
-    expect(
-      ResetRiderNameRequest.safeParse({ reason: 'Оскорбительное', publicName: null }).success,
-    ).toBe(false);
+    expect(ResetRiderNameRequest.safeParse({ reason: 'Оскорбительное имя' }).success).toBe(false);
+    expect(ResetRiderNameRequest.safeParse({ reason: 'name', publicName: null }).success).toBe(
+      false,
+    );
   });
 });
 

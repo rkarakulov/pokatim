@@ -184,6 +184,44 @@ describe('«Журнал действий» (AC12)', () => {
     expect(screen.getByRole('cell', { name: 'Снят запрет загрузки фото' })).toBeTruthy();
   });
 
+  it('profile-moderation-d11: сброс — причина по коду справочника жалоб; текст «Другое» — в колонке «Причина»', async () => {
+    mocked.listAudit.mockResolvedValue({
+      items: [
+        {
+          ...signedIn,
+          id: '01890a5d-ac96-774b-bcce-b302099a8068',
+          action: 'profile.club_reset',
+          reason: null,
+          subject: null,
+          details: { reportCount: 2, resetReason: 'club' },
+        },
+        {
+          ...signedIn,
+          id: '01890a5d-ac96-774b-bcce-b302099a8069',
+          action: 'profile.avatar_reset',
+          reason: 'Чужое фото',
+          subject: null,
+          details: {
+            reportCount: 0,
+            resetReason: 'other',
+            avatarBlockedUntil: '2026-11-29T11:05:00.000Z',
+          },
+        },
+      ],
+      nextCursor: null,
+    });
+    await renderApp('/audit');
+    expect(
+      await screen.findByText('Сброшен клуб участника: причина — Неприемлемый клуб · Жалоб: 2'),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        'Сброшено фото участника: причина — Другое · Жалоб: 0 · запрет загрузки фото до 29 ноября 2026, 14:05',
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText('Чужое фото')).toBeTruthy();
+  });
+
   it('achievements-panel: ручные решения — код и уровень, вид и короткий id объекта; объект — участник', async () => {
     const rider = { kind: 'rider' as const, id: MARIA, label: 'Участник ·8a8058' };
     mocked.listAudit.mockResolvedValue({

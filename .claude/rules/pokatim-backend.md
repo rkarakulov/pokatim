@@ -195,7 +195,10 @@ paths:
   Follow-up (profile-moderation-followups): очередь `?reason=` (одна причина), строка — `openReasons`; сброс с
   `{ reset: true }` пишет в той же транзакции после журнала outbox `profile.field-reset` (`profile.events.ts`, строгая
   схема `ProfileFieldReset`: `userId`, `field`, `resetAt`, `seq`, `avatarBlockedUntil` — только если запрет включил этот
-  сброс; без причины и значения). Запрет загрузки фото — `PROFILE_POLICY.avatarBan` (3 сброса за 180 дн. → 30 дн.,
+  сброс; без причины и значения). profile-moderation-d11: журнал сброса — `details.resetReason` (код), `reason` —
+  текст «Другое» или `null`; закрыта хотя бы одна жалоба (сброс или «Отклонить жалобы») — outbox
+  `profile.reports-resolved` (`ProfileReportsResolved`: `targetUserId`, `resolution`, `reporterUserIds` — авторы
+  открытых жалоб, прочитанные в транзакции до `closeOpen`; без причины и id жалоб). Запрет загрузки фото — `PROFILE_POLICY.avatarBan` (3 сброса за 180 дн. → 30 дн.,
   `[ASSUMPTION]`), `ProfileAvatarService.admit` — `409 PROFILE_INVALID_STATE { reason: 'avatar_blocked', until }`;
   `POST admin/rider-profiles/:userId/avatar-unblock` — журнал `profile.avatar_unblocked`, нет запрета —
   `{ unblocked: false }` без журнала и события. `ProfileView.avatarUploadBlockedUntil` — `profileViewOf(doc, now)` во
@@ -771,10 +774,11 @@ RC-A1, ADR-0019).
   коды) и дают порт чтения через `index.ts`: `ResultsNotices`, `DisputeNotices`, `RideNotices`, `RouteNotices`,
   `TicketNotices`; плюс `RaceRegistry`,
   `IdentityAccounts.liveUserIds/emailsOf`. Чужих коллекций `notifications` не читает; источники о нём не знают.
-  `profile` — источник без порта: `PROFILE_FIELD_RESET` и схема `ProfileFieldReset` из `profile/index.ts`, payload
-  самодостаточен, живость получателя — `liveUserIds`; Nest-импорт `ProfileCoreModule` — в `NotificationsModule` и
+  `profile` — источник без порта: `PROFILE_FIELD_RESET` / `ProfileFieldReset` и `PROFILE_REPORTS_RESOLVED` /
+  `ProfileReportsResolved` (profile-moderation-d11: `profile_report_resolved` авторам, группа «Райды», без цели и
+  схлопывания, получатели без дублей и без самого райдера) из `profile/index.ts`, payload самодостаточен, живость получателя — `liveUserIds`; Nest-импорт `ProfileCoreModule` — в `NotificationsModule` и
   `NotificationsWorkerModule` (не в `NotificationsCoreModule`) ради порта `RIDER_NAMES` для имён «Своих» (social-p1); схлопывание `profile:<uid>:<field>` по `seq`, событие без `seq` — `invalid_payload`.
-- Маршруты объявляет подписчик: `notificationsOutboxRoutes` (21 тип → `notifications-intake`; `rides.photo-reset` (ride-photo-followups);
+- Маршруты объявляет подписчик: `notificationsOutboxRoutes` (22 типа → `notifications-intake`; `profile.reports-resolved` (profile-moderation-d11); `rides.photo-reset` (ride-photo-followups);
   `races.race-cancelled` (`{ raceId, reason }`, транзакция `RacesService.cancel` после журнала) — `RaceRegistry.get`
   (`cancelled`, иначе `state`) + `ResultsNotices.protocolAudience`, без письма; social-p7 — четыре
   `social.*`, черновики — `socialNoticeDraft`, `drafts(type, payload, now, eventId)`: процессор передаёт id события;

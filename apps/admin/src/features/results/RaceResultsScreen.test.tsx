@@ -727,7 +727,7 @@ describe('«Результаты» гонки — имя участника (pro
     expect(screen.queryByRole('button', { name: 'Сбросить имя' })).toBeNull();
   });
 
-  it('модератор: «Сбросить имя» → ReasonDialog с предупреждением → запрос → строка «Участник» (AC7)', async () => {
+  it('модератор: «Сбросить имя» → причина из справочника, «Другое» — с предупреждением и текстом → запрос → строка «Участник» (AC7, D11-1)', async () => {
     mocked.me.mockResolvedValue(ME.moderator);
     mocked.getRaceStandings
       .mockResolvedValueOnce({
@@ -751,13 +751,18 @@ describe('«Результаты» гонки — имя участника (pro
     const standings = await screen.findByRole('region', { name: 'Участники' });
     fireEvent.click(await within(standings).findByRole('button', { name: 'Сбросить имя' }));
     const dialog = await screen.findByRole('dialog');
-    expect(within(dialog).getByText(/Не повторяйте имя в причине/)).toBeTruthy();
     // сброс закрывает все открытые жалобы на профиль (§3 п. 5, findings MEDIUM-1) — модератор их здесь не видит
     expect(within(dialog).getByText(/Открытые жалобы на профиль участника закроются/)).toBeTruthy();
+    expect(within(dialog).queryByText(/Не повторяйте имя/)).toBeNull();
+    fireEvent.click(within(dialog).getByRole('radio', { name: 'Другое' }));
+    expect(within(dialog).getByText(/Не повторяйте имя/)).toBeTruthy();
     fireEvent.change(reasonField(), { target: { value: 'Оскорбительное имя' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Сбросить имя' }));
     await waitFor(() =>
-      expect(mocked.resetRiderName).toHaveBeenCalledWith(USER_A, { reason: 'Оскорбительное имя' }),
+      expect(mocked.resetRiderName).toHaveBeenCalledWith(USER_A, {
+        reason: 'other',
+        comment: 'Оскорбительное имя',
+      }),
     );
     expect(await within(standings).findByText('Участник ·9a0a01')).toBeTruthy();
     expect(within(standings).queryByRole('button', { name: 'Сбросить имя' })).toBeNull();

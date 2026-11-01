@@ -98,9 +98,11 @@ paths:
   частичный индекс `profiles_report_queue_idx` `{ lastReportAt: -1, _id: -1 }` по `openReportCount: { $gt: 0 }`: запрос
   обязан содержать условие и `hint`. **Порядок записи — профиль первым:** жалоба (`recordReport`: `$inc
   openReportCount, reportRevision`, `$max lastReportAt`, фильтр публичности и «не свой», `updatedAt` не трогается) →
-  вставка жалобы; сбросы фото/клуба/имени — условная запись профиля (`openReportCount: 0`) → побочное → `closeOpen` →
-  журнал; «Отклонить» — `clearReports` по `reportRevision` и `openReportCount > 0` (без `updatedAt`) → `closeOpen` →
-  журнал. Параллельные транзакции конфликтуют по документу профиля — `openReportCount` = числу открытых жалоб.
+  вставка жалобы; сбросы фото/клуба/имени — условная запись профиля (`openReportCount: 0`) → побочное →
+  `openReporters` → `closeOpen` → outbox `profile.reports-resolved` (если закрыта хоть одна) → журнал; «Отклонить» —
+  `clearReports` по `reportRevision` и `openReportCount > 0` (без `updatedAt`) → `openReporters` → `closeOpen` → outbox →
+  журнал (profile-moderation-d11). Инвариант: авторы события = авторы жалоб, закрытых этим действием (чтение после
+  записи профиля в той же транзакции — новая жалоба конфликтует). Параллельные транзакции конфликтуют по документу профиля — `openReportCount` = числу открытых жалоб.
 - `profiles.{openReasons, avatarResetsAt, avatarBlockedUntil, resetSeq}` (profile-moderation-followups) — тоже
   необязательные (`?? []` / `?? null` / `?? 0`). `openReasons` — причины открытых жалоб: `$addToSet` в `recordReport`,
   `[]` — в каждой операции, обнуляющей `openReportCount` (сбросы, `clearReports` закрывают все открытые); порядок не

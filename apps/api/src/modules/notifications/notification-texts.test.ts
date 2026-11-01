@@ -224,6 +224,23 @@ describe('renderPushSummary: сводка тихих часов с формам�
   });
 });
 
+describe('решение по жалобе на профиль (profile-moderation-d11): без имени профиля и деталей сброса', () => {
+  it('меры приняты / нарушений не нашли', () => {
+    expect(renderNotification({ kind: 'profile_report_resolved', resolution: 'actioned' })).toEqual(
+      {
+        title: 'Жалоба рассмотрена',
+        body: 'Модератор рассмотрел вашу жалобу на профиль райдера и принял меры. Спасибо.',
+      },
+    );
+    expect(
+      renderNotification({ kind: 'profile_report_resolved', resolution: 'dismissed' }),
+    ).toEqual({
+      title: 'Жалоба рассмотрена',
+      body: 'Модератор рассмотрел вашу жалобу на профиль райдера и нарушений не нашёл. Спасибо.',
+    });
+  });
+});
+
 describe('сброс поля профиля модератором (profile-moderation-followups): без причины модератора (N12)', () => {
   it('имя, клуб, фото без запрета', () => {
     expect(renderNotification({ kind: 'profile_name_reset' })).toEqual({

@@ -135,7 +135,10 @@ paths:
   текста `profile.show.label` + `profile.show.hint` (i18n). Сменили формулировку — **подняли версию** (дата), иначе
   журнал согласий ссылается на чужой текст. Версию в событие пишет сервер. Шит согласия приложения (name-consent-prompt) показывает те же ключи —
   одна версия на оба места. `riderLine` запрещает и заглушку «Райдер», «Райдер #N», «Райдер №N» (N8). Сброс имени —
-  `src/profile/profile-admin.schema.ts` (`ResetRiderNameRequest` с `ActionReason`, `RiderNameResetResult`).
+  `src/profile/profile-admin.schema.ts` (`ResetRiderNameRequest`, `RiderNameResetResult`). Тело всех сбросов профиля
+  (имя, фото, клуб; profile-moderation-d11) — `{ reason: ProfileReportReason, comment?: ActionReason }`: `comment`
+  обязателен у `other` (`REQUIRED`), у прочих — `INVALID` (строгий контракт панели). «Снять запрет» и «Отклонить
+  жалобы» — свободная `reason: ActionReason`. Журнал — `AuditEntry.details.resetReason` (код).
 - Треки и устройства (ADR-0011): `src/tracks/track-upload.schema.ts`, `src/devices/device.schema.ts` — статусы,
   причины, источники, провайдеры, проблемы подключения в ответах — `tolerantEnum`; путь `:provider` и запросы —
   строгие; формат `stream` — только сервер. Ответы без идентификаторов агрегатора, ключей хранилища, координат и

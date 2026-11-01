@@ -148,7 +148,7 @@ describe('GET /v1/riders/:publicId (AC5)', () => {
       token,
       'POST',
       `/v1/admin/profiles/${userIdOf(session)}/name-reset`,
-      { reason: 'Оскорбительное имя' },
+      { reason: 'name' },
     );
     expect(reset.status).toBe(200);
     expect(await status()).toBe(404);

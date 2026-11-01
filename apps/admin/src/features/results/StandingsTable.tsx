@@ -8,8 +8,10 @@ import { api } from '../../api';
 import { formatElapsed } from '../../format';
 import { useCan } from '../../session/can';
 import { Banner, Button, ChipGroup, DataTable, EmptyState, StatusTag, ToggleChip } from '../../ui';
+import { ResetReasonDialog } from '../rider-profiles/ResetReasonDialog';
 import { FlagList } from './FlagList';
 import type { OpenResultsDialog } from './results-actions';
+import { resultsErrorText } from './results-errors';
 import { placeLabel, RESULT_TONE, riderLabel } from './results-format';
 import { standingsQuery } from './results-query';
 import { type DemographicsTarget, VerifiedDemographicsDialog } from './VerifiedDemographicsDialog';
@@ -128,6 +130,8 @@ export function StandingsTable({
   const [group, setGroup] = useState<GroupFilter>(ALL_GROUPS);
   const [attention, setAttention] = useState(false);
   const [demographics, setDemographics] = useState<DemographicsTarget | null>(null);
+  // «Сбросить имя» — причина из справочника жалоб на профиль (profile-moderation-d11), не `ReasonDialog`
+  const [resetUserId, setResetUserId] = useState<string | null>(null);
   const filter = {
     ...(group === ALL_GROUPS ? {} : { group }),
     ...(attention ? { attention: 'true' as const } : {}),
@@ -210,19 +214,7 @@ export function StandingsTable({
             const dq = canDisqualify ? disqualifyAction(row) : null;
             const reset =
               canModerate && row.riderName !== null ? (
-                <Button
-                  size="sm"
-                  variant="danger"
-                  onClick={() =>
-                    open({
-                      title: t('admin.results.dialog.resetName'),
-                      consequences: t('admin.results.dialog.resetNameConsequences'),
-                      confirmLabel: t('admin.results.action.resetName'),
-                      destructive: true,
-                      run: (reason) => run(() => api.resetRiderName(row.userId, { reason })),
-                    })
-                  }
-                >
+                <Button size="sm" variant="danger" onClick={() => setResetUserId(row.userId)}>
                   {t('admin.results.action.resetName')}
                 </Button>
               ) : null;
@@ -329,6 +321,17 @@ export function StandingsTable({
         </section>
       ) : null}
       <VerifiedDemographicsDialog target={demographics} onClose={() => setDemographics(null)} />
+      <ResetReasonDialog
+        open={resetUserId !== null}
+        title={t('admin.results.dialog.resetName')}
+        consequences={t('admin.results.dialog.resetNameConsequences')}
+        confirmLabel={t('admin.results.action.resetName')}
+        errorText={resultsErrorText}
+        onConfirm={(body) =>
+          resetUserId ? run(() => api.resetRiderName(resetUserId, body)) : Promise.resolve()
+        }
+        onClose={() => setResetUserId(null)}
+      />
     </>
   );
 }

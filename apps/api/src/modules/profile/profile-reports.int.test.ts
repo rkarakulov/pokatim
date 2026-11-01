@@ -16,6 +16,8 @@ import {
 } from '../../../test/profiles';
 import { staff } from '../../../test/races';
 import { rider, type Rider } from '../../../test/rides';
+import { eventsOfType } from '../../../test/notifications';
+import { PROFILE_REPORTS_RESOLVED, type ProfileReportsResolved } from './profile.events';
 import { PROFILE_POLICY } from './profile.policy';
 import { ProfileRepository } from './profile.repository';
 
@@ -178,7 +180,7 @@ describe('openReasons профиля (profile-moderation-followups, RC-F1)', () 
 
     const moderator = await staff(h, 'moderator@example.by', 'moderator');
     await profileModerationCall(h, moderator.token, 'POST', `/${target.userId}/club-reset`, {
-      reason: 'Мат в клубе',
+      reason: 'club',
     });
     expect((await profileOf(target.userId))?.openReasons).toEqual([]);
 
@@ -278,10 +280,21 @@ describe('гонка «жалоба ↔ сброс» (запись профил�
       await Promise.all([
         ...reporters.map((reporter) => reportRider(h, reporter.token, who.publicId)),
         profileModerationCall(h, moderator.token, 'POST', `/${who.userId}/club-reset`, {
-          reason: 'Мат в клубе',
+          reason: 'club',
         }),
       ]);
       expect((await profileOf(who.userId))?.openReportCount ?? 0).toBe(await openCount(who.userId));
+      // авторы события = авторы жалоб, закрытых сбросом (profile-moderation-d11)
+      const closed = await profileReportsDb(h)
+        .find({ targetUserId: who.userId, resolution: 'actioned' })
+        .toArray();
+      const event = (await eventsOfType(h, PROFILE_REPORTS_RESOLVED)).find(
+        (item) => (item.payload as ProfileReportsResolved).targetUserId === who.userId,
+      );
+      const authors = closed.map((report) => report.reporterUserId).sort();
+      expect(
+        event ? [...(event.payload as ProfileReportsResolved).reporterUserIds].sort() : [],
+      ).toEqual(authors);
     }
   });
 });

@@ -113,7 +113,7 @@ paths:
   скрывают права `results.manage` / `results.revise`; места, статусы и ревизии — только с сервера.
   Подпись участника — `riderLabel(entryId, riderName)`: «Анна К. ·id» при имени (сервер отдаёт его только с
   согласием), иначе «Участник ·id» (profile-02). «Сбросить имя» в «Участниках» — только с `profiles.moderate` и при
-  имени, `ReasonDialog` с предупреждением не писать имя в причину.
+  имени, `ResetReasonDialog` (`features/rider-profiles`, profile-moderation-d11) — как в карточке профиля.
   Группы и флаги (race-results-07): вкладки групп — `ChipGroup` по `groups` ответа («Все группы» — без `group`; вкладки
   держатся из последнего ответа при загрузке и ошибке), «Только «Требует внимания»» — `ToggleChip` (`attention=true`);
   фильтры — на сервере, в ключе запроса. Колонки группы, уровня и флагов (`FlagList`: подпись кода и метрика
@@ -165,15 +165,17 @@ paths:
   `<img src={api.riderAvatarUrl(id)}>` (тот же origin, `img-src 'self'` — сторож `csp.test.ts`) в квадрате
   `.avatar-preview` (`--panel-avatar-preview`, `panel-tokens.ts`), без фото — пустой квадрат той же раскладки.
   «Сбросить фото / клуб / имя» — `disabled` + `DisabledReason`, когда сбрасывать нечего (по карточке); «Отклонить
-  жалобы» — при `openReportCount > 0`, шлёт `reportRevision`. Все четыре — `ReasonDialog` с предупреждением «Не
-  повторяйте имя или клуб в причине» (`extraFields`); 409 `CONFLICT` — `ConflictBanner` «Пришли новые жалобы,
+  жалобы» — при `openReportCount > 0`, шлёт `reportRevision`. Сбросы — `ResetReasonDialog` (profile-moderation-d11):
+  причина — `RadioGroup` по `PROFILE_REPORT_REASONS` (подписи `domain.profileReportReason.*`), у «Другое» —
+  предупреждение «Не повторяйте имя или клуб в причине» и обязательный текст, тело `{ reason, comment? }`. «Отклонить
+  жалобы» и «Снять запрет» — `ReasonDialog` с тем же предупреждением (`extraFields`); 409 `CONFLICT` — `ConflictBanner` «Пришли новые жалобы,
   обновите карточку», снимается после успешного перечитывания; 404 на действие — перечитывание карточки; после
   действия — инвалидация `['admin','rider-profiles']` и журнала. Ошибка перечитывания при показанной карточке: 404 —
   «Профиль не найден» без действий, 403 — «Нет доступа», прочее — баннер «Не удалось обновить данные» с повтором.
   Запрет загрузки фото (followups): `ReadonlyField` «Сбросов фото за 180 дней» всегда, подсказка «Загрузка фото
   запрещена до <дата, время>» (`formatDateTimeLong`, Минск) — только при запрете; «Снять запрет» — в шапке только при
   запрете, `ReasonDialog` не деструктивный, `{ unblocked: false }` — перечитывание. Журнал — сброс, включивший запрет,
-  показывает его срок (`details.avatarBlockedUntil`).
+  показывает его срок (`details.avatarBlockedUntil`), сброс — «причина — <подпись>» по `details.resetReason`.
   Блок «Достижения» (achievements-panel) — `RiderAchievementsSection` под жалобами, только при
   `useCan('achievements.manage')` (без права — ни блока, ни запроса; 403 запроса — блок скрыт): свой запрос
   `riderAchievementsQuery` (`['admin','rider-achievements',userId]`), `DataTable` (достижение и уровень, объект — нет

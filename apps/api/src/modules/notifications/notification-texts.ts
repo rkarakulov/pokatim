@@ -50,6 +50,8 @@ export type NoticeText =
   | { kind: 'event_reminder'; event: string; startsAt: Date; place: string | null; text: string }
   | { kind: 'profile_name_reset' | 'profile_club_reset' }
   | { kind: 'profile_avatar_reset'; blockedUntil: Date | null }
+  /** решение по жалобе на профиль (profile-moderation-d11) — автору жалобы; без имени профиля и деталей сброса */
+  | { kind: 'profile_report_resolved'; resolution: 'actioned' | 'dismissed' }
   /** фото своего райда удалено модератором; `canReplace` — райд при приёме опубликован и ещё не начался */
   | { kind: 'ride_photo_reset'; ride: string; canReplace: boolean }
   /** новое достижение, уровень (ранг 2–3 — «Новый уровень») или сезонное; объект — свой (гонка, маршрут, райд, сезон) */
@@ -149,6 +151,7 @@ const TITLES: Record<
   profile_club_reset: 'Клуб в профиле сброшен',
   ride_photo_reset: 'Фото райда удалено',
   race_cancelled: 'Гонка отменена',
+  profile_report_resolved: 'Жалоба рассмотрена',
 };
 
 function bodyOf(input: Exclude<NoticeText, SocialNoticeText>): string {
@@ -199,6 +202,10 @@ function bodyOf(input: Exclude<NoticeText, SocialNoticeText>): string {
         : 'Модератор удалил фото после жалоб. Загрузите другое фото.';
     case 'profile_club_reset':
       return 'Модератор сбросил клуб после жалоб. Укажите другой клуб в профиле.';
+    case 'profile_report_resolved':
+      return input.resolution === 'actioned'
+        ? 'Модератор рассмотрел вашу жалобу на профиль райдера и принял меры. Спасибо.'
+        : 'Модератор рассмотрел вашу жалобу на профиль райдера и нарушений не нашёл. Спасибо.';
     case 'ride_photo_reset':
       return input.canReplace
         ? `Модератор удалил фото райда ${quoted(input.ride)}. Можно загрузить другое, пока райд не начался.`

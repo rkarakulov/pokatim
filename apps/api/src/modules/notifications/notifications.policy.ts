@@ -79,6 +79,8 @@ const KIND_GROUPS: Record<NotificationKind, NotificationGroup> = {
   // ride-photo-followups: фото своего райда удалено модератором — организатору
   ride_photo_reset: RIDES,
   race_cancelled: RACES,
+  // profile-moderation-d11: решение по жалобе на профиль — автору (как «Жалоба рассмотрена» у райдов)
+  profile_report_resolved: RIDES,
 };
 
 /** Группа настроек события (N4). */
