@@ -2,10 +2,12 @@ import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 
 import { QUEUE } from '../../queues';
+import { ProductEventsCoreModule } from '../product-events';
 import { AccessTokenVerifier } from './access-token';
 import { AccountClosure } from './account-closure';
 import { AccountConfirmation } from './account-confirmation';
 import { AccountErasure } from './account-erasure';
+import { ActiveDay } from './active-day';
 import { AuthController } from './auth.controller';
 import { AuthGuard } from './auth.guard';
 import { CredentialsCheck } from './credentials-check';
@@ -41,10 +43,11 @@ export class IdentityAccountsModule {}
 
 /**
  * HTTP-часть identity: регистрация, ссылки подтверждения, обмен токена регистрации на сессию, вход, ротация, выход,
- * сброс пароля. `AuthGuard` — авторизация запросов других модулей (импорт `IdentityModule`, ADR-0008).
+ * сброс пароля. `AuthGuard` — авторизация запросов других модулей (импорт `IdentityModule`, ADR-0008) и активный день
+ * (`ActiveDay`, журнал метрик `PRODUCT_EVENTS` — единственное ребро identity к другому модулю, лист `product-events`, P7).
  */
 @Module({
-  imports: [IdentityAccountsModule],
+  imports: [IdentityAccountsModule, ProductEventsCoreModule],
   controllers: [AuthController, SessionController],
   providers: [
     AccessTokenVerifier,
@@ -60,6 +63,7 @@ export class IdentityAccountsModule {}
     PasswordResetService,
     PanelCredentials,
     AccountClosure,
+    ActiveDay,
   ],
   // гард создаётся в модуле-потребителе (`@UseGuards`) — ему нужны и зависимости гарда; сам класс репозитория
   // наружу не экспортируется из `index.ts`: другие модули identity-коллекции не читают
@@ -72,6 +76,8 @@ export class IdentityAccountsModule {}
     IdentityAccountsModule,
     AccountClosure,
     SessionCookie,
+    // зависимость `AuthGuard` (активный день, P7)
+    ActiveDay,
   ],
 })
 export class IdentityModule {}

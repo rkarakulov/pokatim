@@ -25,13 +25,13 @@ import { ROUTE_POLICY, routeExportFormats } from './routes.policy';
 import { type RouteDerivedState, RoutesRepository } from './routes.repository';
 
 /** Маршрут каталога: готовый (длина и петля есть) и опубликованный. */
-type CatalogRoute = RouteDoc & { distanceM: number; catalog: RouteCatalogDoc };
+export type CatalogRoute = RouteDoc & { distanceM: number; catalog: RouteCatalogDoc };
 
 const notFound = () => domainError('NOT_FOUND', 404);
 
 const gunzipAsync = promisify(gunzip);
 
-const inCatalog = (route: RouteDoc): route is CatalogRoute =>
+export const inCatalog = (route: RouteDoc): route is CatalogRoute =>
   route.distanceM !== null && (route.catalog ?? null) !== null;
 
 /**
@@ -50,8 +50,14 @@ const signedAuthors = (routes: readonly RouteDoc[]) =>
     .filter((route) => route.origin === 'rider' && route.publication?.showAuthorName === true)
     .map((route) => route.ownerUserId);
 
-/** Ответ приложения — явный список полей: без владельца, sha256, статуса, отказа, попыток и линии сверки. */
-function toCatalogCard(route: CatalogRoute, names: ReadonlyMap<string, string>): CatalogRouteCard {
+/**
+ * Ответ приложения — явный список полей: без владельца, sha256, статуса, отказа, попыток и линии сверки. Экспорт —
+ * только внутри модуля (`RoutesForSocialService`, social-p7).
+ */
+export function toCatalogCard(
+  route: CatalogRoute,
+  names: ReadonlyMap<string, string>,
+): CatalogRouteCard {
   return {
     id: route._id,
     title: route.title,

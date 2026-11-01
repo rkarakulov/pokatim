@@ -15,6 +15,7 @@ import {
 } from '../results';
 import {
   RIDES_PARTICIPANT_JOINED,
+  RIDES_PHOTO_RESET,
   RIDES_REPORTS_RESOLVED,
   RIDES_RIDE_CANCELLED,
   RIDES_RIDE_RESCHEDULED,
@@ -23,6 +24,12 @@ import { ROUTE_PUBLICATION_DECIDED } from '../routes';
 import { TICKETS_REMINDER_DUE } from '../tickets';
 import { PROFILE_FIELD_RESET } from '../profile';
 import { ACHIEVEMENTS_GRANT_NOTICED } from '../achievements';
+import {
+  SOCIAL_CONNECTION_ADDED,
+  SOCIAL_INVITE_REGISTERED,
+  SOCIAL_REACTION_CREATED,
+  SOCIAL_RIDE_ASK_DUE,
+} from '../social';
 import { SocialNoticeParams } from './social-notices';
 
 /**
@@ -48,6 +55,13 @@ export const notificationsOutboxRoutes = {
   [PROFILE_FIELD_RESET]: QUEUE.notificationsIntake,
   // achievements-push: новое достижение или уровень (порт `ACHIEVEMENT_NOTICES`)
   [ACHIEVEMENTS_GRANT_NOTICED]: QUEUE.notificationsIntake,
+  // ride-photo-followups: модератор удалил фото райда (организатору)
+  [RIDES_PHOTO_RESET]: QUEUE.notificationsIntake,
+  // social-p7: уведомления «Свои» K10 (порт `SOCIAL_NOTICES`); «Свои идут» — из `rides.participant-joined`
+  [SOCIAL_REACTION_CREATED]: QUEUE.notificationsIntake,
+  [SOCIAL_CONNECTION_ADDED]: QUEUE.notificationsIntake,
+  [SOCIAL_INVITE_REGISTERED]: QUEUE.notificationsIntake,
+  [SOCIAL_RIDE_ASK_DUE]: QUEUE.notificationsIntake,
 } as const;
 
 export type NotificationSourceEvent = keyof typeof notificationsOutboxRoutes;

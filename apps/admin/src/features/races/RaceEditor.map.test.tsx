@@ -131,6 +131,7 @@ describe('карта гонки с коридором (panel-race-map, AC1–AC4
     ).toBeTruthy();
     // подзаголовки блока — уровнем ниже заголовка секции
     expect(within(section).getByRole('heading', { name: 'Профиль высоты', level: 3 })).toBeTruthy();
+    expect(within(section).getByRole('heading', { name: 'Цифры', level: 3 })).toBeTruthy();
     const tile = within(section).getByRole('group', { name: 'В пути' });
     expect(text(tile.textContent)).toContain('при 20 км/ч');
     expect(text(within(section).getByText(/^Коридор: ±50 м от маршрута/).textContent)).toBe(

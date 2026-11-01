@@ -286,6 +286,12 @@ paths:
   `thanked`), `RideAttendedGroup` («Ехали N»), `RideAttendance.allThanked` (`.default(false)`). api-client —
   `thankRideRiders(token, id, publicId?)` (без `publicId` — тело `{}`), `getRaceEntryRespect`, `setRaceEntryRespect`,
   `getRouteRespect`, `setRouteRespect` (`PUT`).
+  Главная (P7, K7) — `src/social/home.schema.ts` (экспорт из корня в конец): `SOCIAL_HOME_ROWS_MAX` и
+  `SOCIAL_HOME_RIDERS_MAX` (3), `SocialHomeRider` (`RideRiderRow` с обязательным `publicId`), строки
+  `SocialHomeRideRow` (`RideCard`, `riders` 1–3, `othersCount`), `SocialHomeResultRow` (`deltaSec`
+  `.nullable().default(null)`: своё − зрителя), `SocialHomeRouteRow` (`CatalogRouteCard`), `SocialHomeRow`
+  (`discriminatedUnion('kind')`), `SocialHome` — `items` разбираются по одной строке, незнакомый вид и битая строка
+  отбрасываются (`transform`). Без `hasMore`. api-client — `getSocialHome(token)`.
 - Фото организатора райда (ride-photo, ADR-0028): `src/rides/ride.schema.ts` — `RIDE_PHOTO_MAX_BYTES` (10 МиБ),
   `RIDE_PHOTO_MAX_EDGE_PX` (1600), `RIDE_PHOTO_MIN_SHORT_PX` (400), `RidePhotoId` (= `OpaqueToken` из
   `auth/verification.schema.ts`), `RidePhotoRef` (`{ id }`), `RideSummary.photo` (`.nullable().default(null)` — старый
@@ -294,4 +300,7 @@ paths:
   reason: ActionReason }`). Коды `IMAGE_FORMAT_UNSUPPORTED` (415), `IMAGE_TOO_LARGE` (413), `IMAGE_INVALID` (422) — в
   конце `ErrorCode`, для всех новых видов фото (аватар — `AVATAR_*`); действие журнала `ride.photo_reset` — в конце
   `AUDIT_ACTIONS`. api-client — `uploadRidePhoto(token, id, body)`, `ridePhotoUploadRequest`, `deleteRidePhoto`,
-  `ridePhotoUrl`; admin — `resetRidePhoto(id, body)`, `ridePhotoUrl`.
+  `ridePhotoUrl`; admin — `resetRidePhoto(id, body)`. ride-photo-followups: `ModerationRidePhotoQuery`
+  (`strictObject { photoId: RidePhotoId }`, `GET /v1/admin/rides/:id/photo`), admin — `moderationRidePhotoUrl(rideId,
+  photoId)` (без запроса); вид уведомления `ride_photo_reset` — в конце `NOTIFICATION_KINDS` (старые сборки —
+  `unknown`, текст с сервера).

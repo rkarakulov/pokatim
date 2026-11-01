@@ -403,7 +403,12 @@ describe('«Свои» на чужом профиле (P3, K6)', () => {
     signIn();
     setConnection.mockResolvedValueOnce({ ...noSocial, connected: true });
     await openSocial();
-    await fireEvent.press(await screen.findByRole('button', { name: 'В свои: Анна К.' }));
+    const connect = await screen.findByRole('button', { name: 'В свои: Анна К.' });
+    // ширина кнопки — по длинной подписи: вторая подпись скрыто держит место, строка не прыгает
+    expect(
+      within(connect).getByText('Убрать из своих', { includeHiddenElements: true }),
+    ).not.toBeVisible();
+    await fireEvent.press(connect);
     expect(setConnection).toHaveBeenCalledWith(liveSession.accessToken, PUBLIC_ID, {
       connected: true,
     });

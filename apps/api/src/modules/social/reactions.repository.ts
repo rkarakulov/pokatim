@@ -31,6 +31,11 @@ export class ReactionsRepository {
     await this.reactions.insertOne(doc, { session: tx });
   }
 
+  /** Реакция по id (P7, `SOCIAL_NOTICES`): снята или стёрта — `null`. */
+  findById(id: string): Promise<ReactionDoc | null> {
+    return this.reactions.findOne({ _id: id });
+  }
+
   async exists(key: ReactionKey): Promise<boolean> {
     return (await this.reactions.countDocuments(key, { limit: 1 })) > 0;
   }

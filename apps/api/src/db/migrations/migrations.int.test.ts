@@ -65,6 +65,7 @@ import {
   ROUTE_RIDES_LEADERBOARD_INDEX,
   routeRidesLeaderboardIdx,
 } from './0049_route_rides_leaderboard_idx';
+import { RACES_PROTOCOL_PUBLISHED_INDEX, socialHome } from './0050_social_home';
 import { SOCIAL_COLLECTIONS } from '../../modules/social/social.collection';
 import { PRODUCT_EVENTS_COLLECTIONS } from '../../modules/product-events/product-events.collection';
 import { TICKETS_COLLECTIONS } from '../../modules/tickets/tickets.collection';
@@ -188,6 +189,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0047_ride_photos',
       '0048_race_entry_numbers',
       '0049_route_rides_leaderboard_idx',
+      '0050_social_home',
     ]);
   });
 
@@ -254,6 +256,11 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       },
       // 0037_og_sync_indexes (og-images): пререндер OG-картинок
       races_og_sync_idx: plain({ status: 1, updatedAt: 1, _id: 1 }),
+      // 0050_social_home (social-p7, RC-P7-16): протоколы за окно для Главной «Свои»
+      races_protocol_published_idx: {
+        ...plain({ protocolPublishedAt: -1, _id: -1 }),
+        partialFilterExpression: { protocolPublishedAt: { $type: 'date' } },
+      },
     });
     const meta = h.db.collection<{ _id: string; version: number }>(RACES_COLLECTIONS.meta);
     await meta.deleteMany({});
@@ -2102,7 +2109,6 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
 
   it('0049_route_rides_leaderboard_idx: частичный (routeId, время, дата, _id) по passed; последняя; повторный up — без изменений', async () => {
     const ids = migrations.map((migration) => migration.id);
-    expect(ids.at(-1)).toBe('0049_route_rides_leaderboard_idx');
     expect(ids.indexOf('0049_route_rides_leaderboard_idx')).toBe(
       ids.indexOf('0048_race_entry_numbers') + 1,
     );
@@ -2128,5 +2134,24 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     await routeRidesLeaderboardIdx.up(h.db);
     await routeRidesLeaderboardIdx.up(h.db);
     expect(await indexesOf(ROUTE_RIDES_COLLECTIONS.rides)).toEqual(before);
+  });
+
+  it('0050_social_home: частичный (protocolPublishedAt ↓, _id ↓) по дате протокола; последняя; повторный up — без изменений', async () => {
+    const ids = migrations.map((migration) => migration.id);
+    expect(ids.at(-1)).toBe('0050_social_home');
+    expect(ids.indexOf('0050_social_home')).toBe(
+      ids.indexOf('0049_route_rides_leaderboard_idx') + 1,
+    );
+    expect(RACES_PROTOCOL_PUBLISHED_INDEX.options.name).toBe('races_protocol_published_idx');
+    const before = await indexesOf(RACES_COLLECTIONS.races);
+    expect(before.races_protocol_published_idx).toEqual({
+      key: { protocolPublishedAt: -1, _id: -1 },
+      unique: false,
+      partialFilterExpression: { protocolPublishedAt: { $type: 'date' } },
+      expireAfterSeconds: undefined,
+    });
+    await socialHome.up(h.db);
+    await socialHome.up(h.db);
+    expect(await indexesOf(RACES_COLLECTIONS.races)).toEqual(before);
   });
 });

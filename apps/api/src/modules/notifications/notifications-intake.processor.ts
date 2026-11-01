@@ -92,7 +92,12 @@ export class NotificationsIntakeProcessor extends WorkerHost {
       return 'stale';
     }
     if (data.fanout) return this.enqueueFanout(type, eventId, data.fanout, true);
-    const drafts = await this.intake.drafts(type, await this.outbox.payloadOf(eventId), now);
+    const drafts = await this.intake.drafts(
+      type,
+      await this.outbox.payloadOf(eventId),
+      now,
+      eventId,
+    );
     if (typeof drafts === 'string') {
       this.logger.log(`notifications.event_skipped type=${type} event=${eventId} reason=${drafts}`);
       return 'skipped';

@@ -375,8 +375,12 @@ export function createAdminApiClient({ baseUrl, fetchImpl }: AdminApiClientOptio
     /** Удалить фото организатора (ride-photo): `photoId` из карточки, фото уже другое — 409 `CONFLICT`. */
     resetRidePhoto: (id: string, body: ResetRidePhotoRequest) =>
       post(`${moderationRide(id)}/photo-reset`, ModerationRideDetail, body),
-    /** Адрес фото райда для карточки (тот же origin, без запроса); у скрытого райда — 404. */
-    ridePhotoUrl: (id: string) => `${baseUrl}/v1/ride-photos/${encodeURIComponent(id)}`,
+    /**
+     * Адрес фото райда для карточки модерации (ride-photo-followups, без запроса): у любого статуса, сессия — cookie
+     * панели; `photoId` не текущий — 404.
+     */
+    moderationRidePhotoUrl: (rideId: string, photoId: string) =>
+      `${baseUrl}${moderationRide(rideId)}/photo?photoId=${encodeURIComponent(photoId)}`,
 
     // --- модерация маршрутов райдеров (routes.moderate, routes-06): конфликт версии — 409 CONFLICT ---
     listRiderRoutes: (params: RiderRouteListParams = {}) =>

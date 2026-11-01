@@ -629,6 +629,9 @@ paths:
   `manualAt`); `rides: {rideId, at}[]`, `rideCount` = `$size`, `lastRideAt` = `$max` — пишет только пересчёт явки
   (pipeline с `$literal`). `removedAt` — надгробие (RC-6): пересчёт его не сбрасывает и документ не удаляет; ручное
   добавление сбрасывает. Документ без источников с `removedAt: null` удаляется.
+  `manualNoticeAt?: Date | null` (P7, K11) — последнее уведомление «Вас добавили» по паре: условный `$set` в транзакции
+  `addManual` (`claimManualNotice`: `null`/нет поля или старше `manualRenotifyMs`); без миграции и бэкфилла, нет поля —
+  `null`; `remove`, пересчёт явки и `EMPTY` его не трогают.
 - `ride_attendance` — **документ на райд** (`_id` = rideId, `entries: {userId, via, at, declinedAt}[]`, RC-2a):
   каждое изменение явки — в транзакции первой операцией (сериализует пересчёт связей райда; документ на райдера дал
   бы write skew). Стирание — `$pull` без пересчёта связей других (RC-7).
@@ -636,6 +639,10 @@ paths:
   в транзакции (`claimAsk`, после `ensure`), один раз на райд; без миграции и бэкфилла, нет поля — `null`; `updatedAt`
   не трогает (это время изменения явки; документ, созданный захватом через `ensure`, получает его при создании); `entriesOf`/`attendees`/`pullUser` поле не читают.
 - `social_reactions` — счётчики только `countDocuments` на чтении (без денормализации).
+- Миграция `0050_social_home` (P7, expand-only, номер — по факту слияния): `races_protocol_published_idx
+  { protocolPublishedAt: -1, _id: -1 }`, частичный `{ protocolPublishedAt: { $type: 'date' } }` — протоколы за окно для
+  Главной «Свои» (`RacesRepository.protocolsPublishedSince`, `hint`). Redis: `active-day:<userId>:<YYYY-MM-DD>` (TTL — до
+  начала следующих суток по Минску + 1 ч), без ПДн, кроме uuid.
 - Уведомления группы «Свои» (P1, ADR-0027 п. 6) — исключение из «текст — снимок»: документ хранит `actors?: userId[]`
   (порядок записи, ≤ `SOCIAL_ACTORS_MAX` = 100) и `params?` (`{ object? }` ≤ 200 — название объекта, без имён), `title`/
   `body` — запасной текст с «Райдер»; имена собираются при чтении. Схлопывание копит `actors` условным upsert по окну

@@ -1,9 +1,9 @@
 import { size, space, stroke } from '@pokatim/design-tokens';
 import { textStyle, useTheme } from '@rkarakulov/ui';
-import { Image } from 'expo-image';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { HeroPhoto } from './hero-photo';
 import { PhotoScrim } from './photo-scrim';
 
 export interface SectionHeroProps {
@@ -24,7 +24,8 @@ export interface SectionHeroProps {
  * Герой раздела Главной (`.hero.fb-type` прототипа): кикер → дата → название → линия 1 px, под ним — мета. Без фото —
  * типографский; с `photo` (фото организатора райда) — фото `cover` по центру под затемнением `PhotoScrim`, текст и
  * линия — роль `text.onPhoto`; фото не загрузилось — типографский (вариант с фото — кандидат `HeroCard` в
- * `@rkarakulov/ui`, R8 блока 02). Ставится в колонку с полями `gutter`: блок героя выходит во всю ширину экрана.
+ * `@rkarakulov/ui`, R8 блока 02). Картинка — `HeroPhoto` (native — `expo-image`, web — `<img>`, есть уже в SSR).
+ * Ставится в колонку с полями `gutter`: блок героя выходит во всю ширину экрана.
  * Для скринридера — один элемент «кикер. название. даты» (фото декоративное); с `onPress` — ссылка (роль `link`).
  */
 export function SectionHero({ kicker, date, title, meta = [], onPress, photo }: SectionHeroProps) {
@@ -45,18 +46,7 @@ export function SectionHero({ kicker, date, title, meta = [], onPress, photo }: 
       >
         {shownPhoto ? (
           <>
-            <Image
-              testID="section-hero-photo"
-              source={{ uri: shownPhoto }}
-              style={StyleSheet.absoluteFill}
-              contentFit="cover"
-              contentPosition="center"
-              cachePolicy="memory-disk"
-              accessible={false}
-              accessibilityLabel=""
-              accessibilityIgnoresInvertColors
-              onError={() => setFailedPhoto(shownPhoto)}
-            />
+            <HeroPhoto uri={shownPhoto} onError={() => setFailedPhoto(shownPhoto)} />
             <PhotoScrim />
           </>
         ) : null}

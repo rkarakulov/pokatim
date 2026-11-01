@@ -17,7 +17,7 @@ export interface RideInviteFacts {
   paceMaxKmh: number;
   /** маршрут, который **сейчас в каталоге** (`public`); свой маршрут организатора (`private`) и висячий — `null` */
   routeId: string | null;
-  /** фото организатора (ride-photo, ADR-0028): id текущего фото или `null`; рисует только `night` (4a), OG — нет */
+  /** фото организатора (ride-photo, ADR-0028): id текущего фото или `null`; рисуют `night` (4a) и OG райда */
   photoId: string | null;
 }
 
@@ -28,10 +28,15 @@ export interface RidesForSharing {
    */
   inviteFacts(userId: string, rideId: string): Promise<RideInviteFacts | null>;
   /**
-   * Байты фото для рендера 4a (только worker): только пока райд не скрыт и `photoId` — его текущее фото; иначе `null`
-   * (вход устарел — картинка не нужна, ретраить нечего).
+   * Байты фото для рендера 4a и OG-картинки райда (только worker): только пока райд не скрыт и `photoId` — его текущее
+   * фото; иначе `null` (вход устарел — картинка не нужна, ретраить нечего).
    */
   invitePhoto(rideId: string, photoId: string): Promise<Uint8Array | null>;
+  /**
+   * Выданная картинка приглашения ещё актуальна (ride-photo-followups, отдача `story-cards/:file`): райд не скрыт и
+   * нарисованное фото (`photoId`, у картинки без фото — `null`) всё ещё его текущее. Отменённый и прошедший — `true`.
+   */
+  inviteCardLive(rideId: string, photoId: string | null): Promise<boolean>;
   /** Линия показа маршрута, пока он в каталоге (только worker); иначе `null`. */
   inviteLine(routeId: string): Promise<LonLat[] | null>;
   /**

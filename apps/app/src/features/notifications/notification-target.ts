@@ -18,7 +18,8 @@ export function notificationTargetPath(target: unknown): Href | null {
     case 'race':
       return `/races/${value.raceId}`;
     case 'ride':
-      return `/rides/${value.rideId}`;
+      // источник «Я иду» K12 — «из уведомления» (social-p7): карточка райда читает `from`
+      return `/rides/${value.rideId}?from=notification`;
     case 'dispute-response':
       return `/races/dispute-response/${value.raceId}/${value.disputeId}`;
     case 'my-route':

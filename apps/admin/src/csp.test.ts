@@ -46,7 +46,7 @@ describe('CSP панели и стиль карты (routes-05, RC-4)', () => {
     expect(block).toContain('add_header X-Content-Type-Options "nosniff" always;');
   });
 
-  it("фото райдера в карточке модерации (/v1/avatars/:id, тот же origin) — img-src 'self' (profile-moderation)", () => {
+  it("фото райдера (/v1/avatars/:id) и фото райда модерации (/v1/admin/rides/:id/photo) — тот же origin, img-src 'self'", () => {
     expect(directive(csp, 'img-src')).toContain("'self'");
   });
 });

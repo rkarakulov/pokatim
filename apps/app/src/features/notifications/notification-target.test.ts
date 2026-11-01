@@ -14,7 +14,7 @@ const RIDER = 'Ab_-'.repeat(10) + 'xyz';
 describe('notificationTargetPath — белый список целей (N10)', () => {
   it.each([
     [{ type: 'race', raceId: RACE }, `/races/${RACE}`],
-    [{ type: 'ride', rideId: RIDE }, `/rides/${RIDE}`],
+    [{ type: 'ride', rideId: RIDE }, `/rides/${RIDE}?from=notification`],
     [
       { type: 'dispute-response', raceId: RACE, disputeId: DISPUTE },
       `/races/dispute-response/${RACE}/${DISPUTE}`,
@@ -56,7 +56,7 @@ describe('notificationTargetPath — белый список целей (N10)', 
 
 describe('pushTargetPath — нажатие на push', () => {
   it('цель из белого списка — экран объекта', () => {
-    expect(pushTargetPath({ type: 'ride', rideId: RIDE })).toBe(`/rides/${RIDE}`);
+    expect(pushTargetPath({ type: 'ride', rideId: RIDE })).toBe(`/rides/${RIDE}?from=notification`);
   });
 
   it.each([null, undefined, { type: 'unknown' }, 'pokatim://settings/account/delete'])(
