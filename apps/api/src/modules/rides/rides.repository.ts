@@ -841,7 +841,10 @@ export class RidesRepository {
     );
   }
 
-  /** Сброс фото модератором по `photoId` карточки (любой статус): после записи; `null` — фото уже другое или нет. */
+  /**
+   * Сброс фото модератором по `photoId` карточки (любой статус): после записи; `null` — фото уже другое или нет.
+   * `noticeSeq` +1 — номер события `rides.photo-reset` (ride-photo-followups R7).
+   */
   resetPhoto(
     tx: DbSession,
     id: string,
@@ -850,7 +853,7 @@ export class RidesRepository {
   ): Promise<RideModerationDoc | null> {
     return this.rides.findOneAndUpdate(
       { _id: id, photoId },
-      { $set: { photoId: null, updatedAt: now } },
+      { $set: { photoId: null, updatedAt: now }, $inc: { noticeSeq: 1 } },
       { session: tx, returnDocument: 'after', projection: { participants: 0 } },
     );
   }

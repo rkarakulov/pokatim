@@ -4,10 +4,12 @@ export { RideErasure, type RideErasureResult } from './ride-erasure';
 export { RIDE_NOTICES, type RideNotice, type RideNotices } from './ride-notices.port';
 export {
   RIDES_PARTICIPANT_JOINED,
+  RIDES_PHOTO_RESET,
   RIDES_REPORTS_RESOLVED,
   RIDES_RIDE_CANCELLED,
   RIDES_RIDE_RESCHEDULED,
   RideEventPayload,
+  RidesPhotoReset,
   RidesReportsResolved,
 } from './rides.events';
 /** Порт карточки-приглашения для `sharing` (ADR-0018): публичные факты будущего райда и линия маршрута каталога. */

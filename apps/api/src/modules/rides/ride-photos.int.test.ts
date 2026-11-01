@@ -5,6 +5,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { brokenJpeg, GIF_BYTES, hasGpsIfd, hugePng, twoToneImage } from '../../../test/avatars';
 import { createHarness, DAY, type Harness } from '../../../test/harness';
 import { bearer, call, gate, retried, untilBlocked } from '../../../test/identity';
+import { eventsOfType } from '../../../test/notifications';
 import { panel, panelCall, panelCookie } from '../../../test/panel';
 import { staff } from '../../../test/races';
 import {
@@ -23,6 +24,7 @@ import { heldUpload } from '../../../test/uploads';
 import { ImageProcessing, MEDIA_POLICY } from '../media';
 import { RideErasure } from './ride-erasure';
 import { ridePhotosCollections } from './ride-photos.collection';
+import { RideReportsRepository } from './ride-reports.repository';
 import { RidesRepository } from './rides.repository';
 
 /**
@@ -429,6 +431,67 @@ describe('сброс модератором (AC3, R10)', () => {
     expect(
       (await panelCall(h, undefined, 'POST', `${MODERATION}/${ride.id}/photo-reset`, {})).status,
     ).toBe(401);
+    expect((await fetchPhoto(id)).status).toBe(200);
+  });
+});
+
+describe('сброс модератором → событие rides.photo-reset (ride-photo-followups AC4, источник)', () => {
+  let moderator: { userId: string; token: string };
+  beforeEach(async () => {
+    moderator = await staff(h, 'moderator@example.by', 'moderator');
+  });
+  const reset = (id: string, photoId: string) =>
+    panelCall(h, moderator.token, 'POST', `${MODERATION}/${id}/photo-reset`, {
+      photoId,
+      reason: 'Чужое фото',
+    });
+  const resetEvents = () => eventsOfType(h, 'rides.photo-reset');
+
+  it('сброс — одно событие { rideId, seq }, seq = noticeSeq райда после записи; второй сброс — seq больше', async () => {
+    const ride = await createRide(h, organizer);
+    const first = photoIdOf(await upload(organizer, ride.id, await photo()));
+    expect((await reset(ride.id, first)).status).toBe(200);
+    const seqAfterFirst = (await ridesDb(h).findOne({ _id: ride.id }))?.noticeSeq;
+    expect(seqAfterFirst).toBeGreaterThan(0);
+    const second = photoIdOf(await upload(organizer, ride.id, await photo()));
+    expect((await reset(ride.id, second)).status).toBe(200);
+    const seqAfterSecond = (await ridesDb(h).findOne({ _id: ride.id }))?.noticeSeq;
+    const events = await resetEvents();
+    expect(events.map((event) => event.payload)).toEqual([
+      { rideId: ride.id, seq: seqAfterFirst },
+      { rideId: ride.id, seq: seqAfterSecond },
+    ]);
+    expect(seqAfterSecond).toBe(seqAfterFirst! + 1);
+    const json = JSON.stringify(events);
+    expect(json).not.toContain(first);
+    expect(json).not.toContain('Чужое фото');
+  });
+
+  it('фото нет — 200 без события и журнала; фото уже другое (409) — без события', async () => {
+    const ride = await createRide(h, organizer);
+    const first = photoIdOf(await upload(organizer, ride.id, await photo()));
+    const second = photoIdOf(await upload(organizer, ride.id, await photo()));
+    expect((await reset(ride.id, first)).status).toBe(409);
+    await removePhoto(organizer, ride.id);
+    expect((await reset(ride.id, second)).status).toBe(200);
+    expect(await resetEvents()).toEqual([]);
+    expect(await panel(h).audit.countDocuments({ action: 'ride.photo_reset' })).toBe(0);
+  });
+
+  it('откат транзакции (сбой после записи события) — ни события, ни журнала, фото на месте', async () => {
+    const ride = await createRide(h, organizer);
+    const id = photoIdOf(await upload(organizer, ride.id, await photo()));
+    const reports = h.app.get(RideReportsRepository, { strict: false });
+    // `latest` — последний шаг транзакции сброса, после журнала и события
+    const spy = vi.spyOn(reports, 'latest').mockRejectedValue(new Error('чтение жалоб недоступно'));
+    try {
+      expect((await reset(ride.id, id)).status).toBe(500);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(await resetEvents()).toEqual([]);
+    expect(await panel(h).audit.countDocuments({ action: 'ride.photo_reset' })).toBe(0);
+    expect((await ridesDb(h).findOne({ _id: ride.id }))?.photoId).toBe(id);
     expect((await fetchPhoto(id)).status).toBe(200);
   });
 });
