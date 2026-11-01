@@ -103,16 +103,18 @@ describe('страница маршрута панели (routes-05, AC1–AC3)'
     expect(screen.getByText(/Минск · гравий/)).toBeTruthy();
   });
 
-  it('карта и профиль — один блок (на весь экран разворачивается вместе), «Цифры» — после профиля', async () => {
+  it('блок «карта · цифры · профиль»: цифры строкой между картой и профилем, без плиток; весь блок — на весь экран', async () => {
     vi.stubEnv('VITE_MAP_STYLE_LIGHT', 'https://tiles.example/styles/positron');
     await renderApp(`/routes/${ROUTE_ID}`);
     const map = await screen.findByTestId('route-map');
     const view = screen.getByTestId('route-view');
-    expect(view.contains(map)).toBe(true);
-    expect(view.contains(screen.getByRole('slider', { name: /^Профиль высоты/ }))).toBe(true);
     const stats = screen.getByRole('group', { name: 'Длина' });
-    expect(view.contains(stats)).toBe(false);
-    expect(view.compareDocumentPosition(stats) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const slider = screen.getByRole('slider', { name: /^Профиль высоты/ });
+    for (const node of [map, stats, slider]) expect(view.contains(node)).toBe(true);
+    expect(map.compareDocumentPosition(stats) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(stats.compareDocumentPosition(slider) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(view.querySelector('.stat-tile')).toBeNull();
+    expect(stats.closest('.route-stats')).not.toBeNull();
   });
 
   it('без профиля высоты — «Нет данных о высоте», слайдера нет; цифры высот — «—»', async () => {

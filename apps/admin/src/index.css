@@ -1216,16 +1216,40 @@ select.field__control option:disabled {
   border: var(--stroke-hairline) solid var(--color-border-subtle);
 }
 
-/* блок «карта + профиль» (admin-maps-desktop): на широком экране карта не выше доли окна, профиль низкий — оба в
-   одном экране, скраббинг по профилю виден на карте; узкое окно — прежние пропорции (карта 2:1, профиль 4:1) */
+/* цифры маршрута строкой (admin-route-stats-compact, как у komoot/Strava): подпись мелко, значение средним
+   кеглем, без плиток; между картой и профилем, узкое окно — перенос */
+.route-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-s2) var(--space-s5);
+  margin-top: var(--space-s3);
+}
+
+.route-stats__item {
+  display: flex;
+  flex-direction: column;
+}
+
+.route-stats__label,
+.route-stats__hint {
+  color: var(--color-text-secondary);
+}
+
+/* блок «карта · цифры · профиль» (admin-maps-desktop): на широком экране карта не выше доли окна, профиль низкий
+   (2–3 высоты касания, ~90–130 px) — всё в одном экране, скраббинг по профилю виден на карте; узкое окно — прежние
+   пропорции (карта 2:1, профиль 4:1) */
 @media (min-width: 900px) {
   .route-view .route-map--page {
     max-height: 55vh;
   }
 
   .route-view .elevation-profile__plot {
-    aspect-ratio: 10 / 1;
-    max-height: 18vh;
+    height: clamp(calc(var(--size-touch-min) * 2), 13vh, calc(var(--size-touch-min) * 3));
+    aspect-ratio: auto;
+  }
+
+  .route-view__profile.section {
+    margin-top: var(--space-s4);
   }
 }
 

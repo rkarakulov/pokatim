@@ -4,11 +4,11 @@ import { routeDurationMin, routePaceKmh, type ScrubStore } from '@pokatim/route-
 import { useRef } from 'react';
 
 import { formatKmFromMeters } from '../../format';
-import { StatTile } from '../../ui';
 import { useFullscreen } from '../maps/use-fullscreen';
 import { ElevationProfile } from './ElevationProfile';
 import { durationText, metersText, profileSummary } from './route-detail-format';
 import { RouteLine } from './RoutePreview';
+import { RouteStats } from './RouteStats';
 
 /** Что нужно блоку от маршрута: маршрут команды (`PanelRoute`) и заявка райдера (routes-06) дают одно и то же. */
 export type ReadyRouteData = Pick<
@@ -22,9 +22,10 @@ export type ReadyRouteData = Pick<
  * пустой список (как асфальт, RC-11). Карта гонки (panel-race-map) — тот же блок с коридором `corridorWidthM` и
  * подзаголовками `h3` внутри секции «Карта гонки».
  *
- * Раскладка (admin-maps-desktop): карта и профиль — соседи в блоке `.route-view`, «Цифры» — после него. На широком
- * экране карта ограничена по высоте, профиль низкий — оба в одном экране, скраббинг по профилю виден на карте
- * (`index.css`). «На весь экран» разворачивает этот блок целиком: карта занимает остаток, профиль — снизу.
+ * Раскладка (admin-maps-desktop, admin-route-stats-compact): блок `.route-view` — карта, цифры строкой (`RouteStats`,
+ * заголовок «Цифры» только для скринридера), профиль. На широком экране карта ограничена по высоте, профиль низкий —
+ * всё в одном экране, скраббинг по профилю виден на карте (`index.css`). «На весь экран» разворачивает блок целиком:
+ * карта занимает остаток, цифры и профиль — снизу.
  */
 export function RouteReadyView({
   route,
@@ -66,6 +67,40 @@ export function RouteReadyView({
               : {})}
           />
         </section>
+        <section className="route-view__stats" aria-labelledby="route-stats-title">
+          <Heading id="route-stats-title" className="visually-hidden">
+            {t('admin.routes.detail.stats')}
+          </Heading>
+          <RouteStats
+            items={[
+              {
+                label: t('admin.routes.detail.stats.distance'),
+                value: formatKmFromMeters(distanceM),
+              },
+              {
+                label: t('admin.routes.detail.stats.gain'),
+                value: route.elevationGainM === null ? '—' : metersText(route.elevationGainM),
+              },
+              {
+                label: t('admin.routes.detail.stats.max'),
+                value: elevation ? metersText(elevation.maxM) : '—',
+              },
+              {
+                label: t('admin.routes.detail.stats.min'),
+                value: elevation ? metersText(elevation.minM) : '—',
+              },
+              {
+                label: t('admin.routes.detail.stats.shape'),
+                value: t(route.isLoop ? 'routes.detail.chip.loop' : 'routes.detail.chip.oneWay'),
+              },
+              {
+                label: t('admin.routes.detail.stats.time'),
+                value: durationText(routeDurationMin(distanceM, pace)),
+                hint: t('routes.detail.stats.pace', { pace }),
+              },
+            ]}
+          />
+        </section>
         <section className="section route-view__profile" aria-labelledby="route-profile-title">
           <Heading id="route-profile-title" className="section__title t-label">
             {t('admin.routes.detail.profile')}
@@ -83,38 +118,6 @@ export function RouteReadyView({
           )}
         </section>
       </div>
-      <section className="section" aria-labelledby="route-stats-title">
-        <Heading id="route-stats-title" className="section__title t-label">
-          {t('admin.routes.detail.stats')}
-        </Heading>
-        <div className="stat-tiles">
-          <StatTile
-            label={t('admin.routes.detail.stats.distance')}
-            value={formatKmFromMeters(distanceM)}
-          />
-          <StatTile
-            label={t('admin.routes.detail.stats.gain')}
-            value={route.elevationGainM === null ? '—' : metersText(route.elevationGainM)}
-          />
-          <StatTile
-            label={t('admin.routes.detail.stats.max')}
-            value={elevation ? metersText(elevation.maxM) : '—'}
-          />
-          <StatTile
-            label={t('admin.routes.detail.stats.min')}
-            value={elevation ? metersText(elevation.minM) : '—'}
-          />
-          <StatTile
-            label={t('admin.routes.detail.stats.shape')}
-            value={t(route.isLoop ? 'routes.detail.chip.loop' : 'routes.detail.chip.oneWay')}
-          />
-          <StatTile
-            label={t('admin.routes.detail.stats.time')}
-            value={durationText(routeDurationMin(distanceM, pace))}
-            hint={t('routes.detail.stats.pace', { pace })}
-          />
-        </div>
-      </section>
     </>
   );
 }
