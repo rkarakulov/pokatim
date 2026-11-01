@@ -34,10 +34,11 @@ const TIME_LIMIT_MS = 3000 * CI_BUDGET_FACTOR;
 const ADVERSARIAL_TIME_LIMIT_MS = 8000 * CI_BUDGET_FACTOR;
 /**
  * Участки маршрута (route-rides-05): 30 прогонов движка (предел участков) по всему треку 50 000 точек на маршруте
- * 300 км. Замер локально ≈ 530–550 мс в простое, до 4,5 с под параллельным `pnpm check`; бюджет — 5 с (на CI × 3 =
- * 15 с — граница спеки, до таймаута потока 30 с): 2 × замера в простое флакал под нагрузкой.
+ * 300 км. Замер локально ≈ 550–600 мс (и в полном наборе пакета под load ≈ 13), но под параллельным `pnpm check`
+ * (turbo: jest/vitest других пакетов) — до 5,5 с; бюджет — как у худшего случая (`ADVERSARIAL_TIME_LIMIT_MS`): запас до
+ * таймаута потока 30 с, исход которого изолирован (`sections.failure: 'timeout'`, вердикт маршрута не меняется).
  */
-const SECTIONS_TIME_LIMIT_MS = 5000 * CI_BUDGET_FACTOR;
+const SECTIONS_TIME_LIMIT_MS = ADVERSARIAL_TIME_LIMIT_MS;
 const MEMORY_LIMIT_BYTES = 64 * 1024 * 1024 * CI_BUDGET_FACTOR;
 
 /** Маршрут `legs × 10` км «змейкой»: legs × (9,5 км на восток/запад + 0,5 км на север); вершины — раз в 100 м. */
