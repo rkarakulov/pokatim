@@ -147,12 +147,15 @@ paths:
   нет `WEB_ORIGIN` — ни запросов, ни картинки. Сезон и профиль райдера — своя картинка через `ownOgImage` (схема id
   по виду — `OG_CARD_ID`); мета райдера — без ПДн, `publicId` только в URL `og:image`. Свой fetch и расчёт версии в приложении — запрещены.
 - `robots.txt` и `sitemap.xml` (landing-seo) — API-маршруты `src/app/{robots.txt,sitemap.xml}+api.ts`, правила —
-  `src/lib/seo.ts`. **Новый экран в `src/app`** — классифицируй: только вошедшим, онбординг, токен в URL — префикс в
+  `src/lib/seo.ts`. `sitemap.xml` — sitemap index (sitemap-index); дочерние карты — **в корне**, тот же маршрут с
+  query (`?kind=static`, `?kind=<вид>&page=<n>`, разбор — `parseSitemapQuery`): карта по протоколу перечисляет только URL
+  ниже своего каталога, подкаталог `/sitemap/…` для `/races/…` недействителен. Ответы — `src/lib/sitemap-route.ts`.
+  **Новый экран в `src/app`** — классифицируй: только вошедшим, онбординг, токен в URL — префикс в
   `SEO_DISALLOW`; публичный — в `PUBLIC` сторожа `__tests__/seo-routes.test.ts`. Публичную страницу с `noindex` в мета
   не закрывай (краулер не увидит `noindex`); исключения — ссылки с токеном и экраны только для вошедших (карточки для
   сторис, приглашение райда: `Disallow` + `noindexPageMetadata` как защита в глубину). `/v1/` не закрывай: Googlebot при рендере
   соблюдает robots и для fetch — публичный экран потеряет данные из API. Новый индексируемый вид объекта — `SITEMAP_KINDS` в contracts и
-  `GET /v1/sitemap` (`sharing`, порты владельцев).
+  источник `SitemapService` (`sharing`, `sitemapRange` порта владельца по `_id` ↑ + индекс `(status, _id, updatedAt)`).
 - Гостевой лендинг `/welcome` (guest-landing, `docs/product/landing.md`) — корневой `src/app/welcome.tsx` в том же
   `Stack.Protected guard={!signedIn}`, что `(onboarding)` (не в группе: `initialRouteName` группы не трогаем); экран —
   `features/landing/`. `loader` — четыре публичных списка (`loadLandingSeed`, части `null`, не бросает; маршруты —

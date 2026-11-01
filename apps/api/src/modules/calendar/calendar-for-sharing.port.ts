@@ -23,4 +23,12 @@ export interface CalendarForSharing {
     after: { at: Date; id: string } | null,
     limit: number,
   ): Promise<{ id: string; updatedAt: Date }[]>;
+  /**
+   * Опубликованные старты по `_id` ↑ строго после `after` до `until` включительно (`null` — без границы), не больше `limit` —
+   * карта сайта (sitemap-index).
+   */
+  sitemapRange(
+    range: { after: string | null; until: string | null },
+    limit: number,
+  ): Promise<{ id: string; updatedAt: Date }[]>;
 }

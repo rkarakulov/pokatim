@@ -266,7 +266,7 @@ test('строгий CSP (ADR-0025): ключевые страницы без н
   }
 });
 
-test('robots.txt: служебное закрыто, Sitemap от WEB_ORIGIN; sitemap.xml с API — лендинг (landing-seo)', async ({
+test('robots.txt: служебное закрыто, Sitemap от WEB_ORIGIN; sitemap.xml с API — индекс с картой лендинга (sitemap-index)', async ({
   request,
 }) => {
   const robots = await request.get('/robots.txt');
@@ -277,7 +277,9 @@ test('robots.txt: служебное закрыто, Sitemap от WEB_ORIGIN; si
   const sitemap = await request.get('/sitemap.xml');
   if (WITH_API) {
     expect(sitemap.status()).toBe(200);
-    expect(await sitemap.text()).toContain(`<loc>${BASE_URL}/welcome</loc>`);
+    expect(await sitemap.text()).toContain(`<loc>${BASE_URL}/sitemap.xml?kind=static</loc>`);
+    const landing = await request.get('/sitemap.xml?kind=static');
+    expect(await landing.text()).toContain(`<loc>${BASE_URL}/welcome</loc>`);
   } else {
     expect(sitemap.status()).toBe(503);
   }
