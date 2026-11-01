@@ -142,7 +142,8 @@ function layout(anchors: readonly number[]): number[] {
  * `2 · corridorGateRadiusM(widthM) + gateMarginM` или линия после выхода из этого радиуса снова подходит к своему
  * началу или концу (движок не засчитывает повторный вход в ворота): его точка разворота — самая дальняя от
  * возвращаемых ворот вершина до возврата (концы близко без возврата — самая дальняя от начала) — становится опорной
- * границей, если она дальше `minTailM` от всех опорных (старт, финиш, найденные развороты); шаг и хвост раскладываются
+ * границей, если она дальше `minTailM` от всех опорных (старт, финиш, найденные развороты) и участков с ней не больше
+ * `maxSections`; шаг и хвост раскладываются
  * в каждом плече между опорными отдельно, до устойчивости. «Туда-обратно» 2 × 17 км → 0–10, 10–17, 17–27, 27–34 км.
  * Оставшийся участок «у ворот» (разворот ближе `minTailM` к опорной) сливается со следующим (последний — с
  * предыдущим) до устойчивости. Итог < 2 или > `maxSections` — `[]`. Чистая и детерминированная: chainage линии — один
@@ -178,8 +179,10 @@ export function routeSections(line: readonly LonLat[], widthM: number): RouteSec
     for (let i = 0; i + 1 < bounds.length; i += 1) {
       const turn = turnOf(bounds[i]!, bounds[i + 1]!);
       if (turn === null || anchors.some((anchor) => Math.abs(anchor - turn) < minTailM)) continue;
-      anchors.push(turn);
-      anchors.sort((a, b) => a - b);
+      const next = [...anchors, turn].sort((a, b) => a - b);
+      // граница, после которой участков больше предела, не нужна: прежнее слияние даёт участки
+      if (layout(next).length - 1 > maxSections) continue;
+      anchors.splice(0, anchors.length, ...next);
       added = true;
     }
     if (!added) break;

@@ -3,7 +3,12 @@ import { describe, expect, it } from 'vitest';
 import { haversineMeters } from '../geo.ts';
 import { simplifyTrack } from '../simplify.ts';
 import { at, pointAt, type Xy } from './__testing__/synthetic.ts';
-import { ROUTE_SECTION_POLICY, routeSections, sectionLine } from './sections.ts';
+import {
+  ROUTE_SECTION_POLICY,
+  ROUTE_SECTIONS_VERSION,
+  routeSections,
+  sectionLine,
+} from './sections.ts';
 
 /** Линия на север длиной `lengthM` (вершины раз в 100 м + конец): по меридиану haversine = синтетике. */
 function northLine(lengthM: number): [number, number][] {
@@ -246,6 +251,26 @@ describe('routeSections: разбиение через каждые 10 км', ()
       [0, -20_000],
     ]);
     expect(routeSections(hook, 50)).toEqual([]);
+  });
+
+  it('петля 8 км на 142 км маршрута 308 км — разворот петли не граница сверх 30 участков, участки есть', () => {
+    const looped = path([
+      [0, 0],
+      [0, 142_000],
+      [2000, 142_000],
+      [2000, 144_000],
+      [0, 144_000],
+      [0, 142_000],
+      [0, 300_000],
+    ]);
+    const sections = routeSections(looped, 50);
+    expect(sections.length).toBeGreaterThanOrEqual(2);
+    expect(sections.length).toBeLessThanOrEqual(ROUTE_SECTION_POLICY.maxSections);
+    expectUngatedNone(looped, sections);
+  });
+
+  it('версия разбиения — 2 (route-rides-06: граница в развороте); смена границ → +1', () => {
+    expect(ROUTE_SECTIONS_VERSION).toBe(2);
   });
 
   it('детерминизм: два вызова и копия линии дают одно и то же', () => {

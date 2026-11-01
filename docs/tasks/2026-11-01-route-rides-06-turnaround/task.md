@@ -68,3 +68,19 @@
 `.claude/rules/pokatim-tests.md` (тесты разбиения), JSDoc `sections.ts`; follow-up 05 §12 — закрыт ссылкой.
 
 ## 12. Outcome (заполняет coder)
+
+- **tracks:** `corridor/sections.ts` — `ROUTE_SECTIONS_VERSION = 2`; `returnIndex` (вместо `returnsTo`),
+  `farthestAlong`, `layout` по плечам, цикл опорных границ (разворот дальше 5 км от опорных и ≤ 30 участков), прежнее
+  слияние для остатка; `sectionLineOn` — chainage один раз, публичный `sectionLine` без изменений результата.
+- **Тесты:** `sections.test.ts` — 2 × 17/15/12 км, 15 070–15 100 м, дважды по 5 км, разреженная линия и
+  `simplifyTrack`, разворот < 5 км у старта, петля на 308 км, версия 2; `analyze-sections.test.ts` — проезд 2 × 17 км,
+  все 4 участка засчитаны со временем нужного прохода; API int `route-ride-check` — «туда-обратно» 2 × 15 км → 4 ×
+  `passed`, версии в int-тестах — через `ROUTE_SECTIONS_VERSION`.
+- **Доки:** `docs/product/routes.md` (U1), `.claude/rules/pokatim-backend.md`, `pokatim-tests.md`; follow-up в 05 §12
+  закрыт ссылкой. Ревью — `findings.md` (Claude APPROVE), `codex-findings.md` (HIGH исправлен), разбор — в
+  `findings.md`.
+- **Отклонений от спеки нет**, кроме уточнения AC: граница не ставится, если участков с ней > 30 (ревью MEDIUM).
+
+Проверки (2026-11-01, node 24, Mongo `pokatim_rr06_test`, Redis db 10): `@pokatim/tracks` vitest — 29 файлов, все
+зелёные (бенч 300 км × 50k ≈ 0,6 с вне нагрузки); `@pokatim/api` `src/modules/route-rides` + `parse-thread` — 8 файлов
+/ 111 тестов; tsc `@pokatim/tracks`, `@pokatim/api`, eslint, prettier — чисто. Полный `pnpm check` — см. PR.
