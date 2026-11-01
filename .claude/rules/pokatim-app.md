@@ -430,7 +430,9 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   вошедшему и после найденного профиля, как `['riders','viewer',id]`), `['social','connections']`; блок K6
   `rider-social-block.tsx` под шапкой `/riders/[id]` («Я иду» строки «Идёт» — `useRideRsvp` + перезапрос
   `['social','rider',id]`; гость — «В свои» → вход с возвратом); «Свои · N» в `/profile` → экран `/social`
-  (`app/social.tsx` за `useSettingsShell`, `SEO_DISALLOW`): убранная строка остаётся с «В свои» (состояние экрана),
+  (`app/social.tsx` за `useSettingsShell`, `SEO_DISALLOW`): кнопки — действия («В свои» / «Убрать из своих»; в списке
+  «Убрать» / «Вернуть»), `reserveLabels` и `accessibilityLabel` с именем; убранная строка остаётся приглушённой
+  (`layout.mutedOpacity`, текст строки тот же, «Убраны из своих» — в a11y) с «Вернуть» (состояние экрана),
   уход (`useFocusEffect` cleanup) — `invalidateQueries(['social'])`. Подсказка K3 — `name-hint.tsx` (`NameHint`;
   условие — `publicId === null` из `['profile']`, `useNameMissing`): в `/profile` вместо прежней строки, на Главной —
   в слоте `socialSlotIndex` (`home/sections.ts`, слот P7) с «Не сейчас» на 14 дней (`pokatim.nameHint`,
