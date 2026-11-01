@@ -4,10 +4,11 @@ import type {
   CatalogRouteElevation,
   RouteExportFormat,
 } from '@pokatim/contracts';
+import type { AppThemeLayout } from '@pokatim/design-tokens';
 import { i18n, t } from '@pokatim/i18n';
 import { profileTickValues, routeDurationMin, routePaceKmh } from '@pokatim/route-view';
 
-import type { StatItem } from '@/components/stat-block';
+import type { StatItem, StatVariant } from '@/components/stat-block';
 import type { HeroDate } from '@/lib/minsk-format';
 import { domainLabel, formatDistances, meta } from '@/lib/minsk-format';
 
@@ -116,18 +117,25 @@ export function routeChips(
   return [...surfaces, routeShape(route.isLoop), ...(city ? [city] : [])];
 }
 
+/** Вариант цифр шапки шторки по раскладке темы (`layout.routeStats`, app-themes C2): каталог и свой маршрут. */
+export const ROUTE_STATS_VARIANT: Record<
+  AppThemeLayout['routeStats'],
+  Exclude<StatVariant, 'default'>
+> = {
+  classic: 'compact',
+  tiles: 'tiles',
+  numeral: 'numeral',
+};
+
 /**
- * Стат-блок карточки (P2): «Дистанция · 68 км · круговой», «Набор · 620 м · макс. 267 м» (нет набора — колонки
- * нет; нет профиля — без «макс.»), «В пути · 2 ч 30 мин · при 27 км/ч».
+ * «Дистанция · 68 км · круговой» и «Набор · 620 м · макс. 267 м» (нет набора — колонки нет; нет профиля — без
+ * «макс.»): общие для карточки каталога и своего маршрута (routes-07 — без профиля и «В пути»).
  */
-export function routeStatItems(
-  route: Pick<
-    CatalogRouteDetail,
-    'distanceM' | 'elevationGainM' | 'isLoop' | 'surfaces' | 'elevation'
-  >,
+export function routeDistanceGainItems(
+  route: Pick<CatalogRouteDetail, 'distanceM' | 'elevationGainM' | 'isLoop'> & {
+    elevation?: CatalogRouteDetail['elevation'];
+  },
 ): StatItem[] {
-  const pace = routePaceKmh(route.surfaces);
-  const duration = routeDurationMin(route.distanceM, pace);
   const items: StatItem[] = [
     {
       value: i18n.formatNumber(km(route.distanceM), { maximumFractionDigits: 1 }),
@@ -150,13 +158,27 @@ export function routeStatItems(
         : {}),
     });
   }
-  items.push({
-    value: routeDuration(duration),
-    parts: durationParts(duration),
-    label: t('routes.detail.stats.time'),
-    note: t('routes.detail.stats.pace', { pace }),
-  });
   return items;
+}
+
+/** Стат-блок карточки (P2): дистанция и набор (`routeDistanceGainItems`), «В пути · 2 ч 30 мин · при 27 км/ч». */
+export function routeStatItems(
+  route: Pick<
+    CatalogRouteDetail,
+    'distanceM' | 'elevationGainM' | 'isLoop' | 'surfaces' | 'elevation'
+  >,
+): StatItem[] {
+  const pace = routePaceKmh(route.surfaces);
+  const duration = routeDurationMin(route.distanceM, pace);
+  return [
+    ...routeDistanceGainItems(route),
+    {
+      value: routeDuration(duration),
+      parts: durationParts(duration),
+      label: t('routes.detail.stats.time'),
+      note: t('routes.detail.stats.pace', { pace }),
+    },
+  ];
 }
 
 /** Подпись оси X профиля: км от старта, доля длины оси (0…1) и текст («0», «20», «60 км» — единица у последней). */

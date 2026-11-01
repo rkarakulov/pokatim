@@ -1,7 +1,7 @@
 import { apiErrorOf } from '@pokatim/api-client';
 import { Uuid, type MyRoute } from '@pokatim/contracts';
 import { size, space } from '@pokatim/design-tokens';
-import { i18n, t } from '@pokatim/i18n';
+import { t } from '@pokatim/i18n';
 import {
   AsyncContent,
   Banner,
@@ -17,22 +17,33 @@ import {
 } from '@rkarakulov/ui';
 import { useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  type ScrollViewProps,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { BottomSheet } from '@/components/bottom-sheet';
 import { DetailHeader } from '@/components/detail-header';
 import { DocumentTitle } from '@/components/document-title';
+import { KeyboardAvoidingArea } from '@/components/keyboard-avoiding-area';
 import { OfflineBanner } from '@/components/offline-banner';
+import { StatBlock } from '@/components/stat-block';
 import { actionErrorMessage, apiErrorCode } from '@/features/auth/error-messages';
 import { useRouteRides } from '@/features/route-rides/queries';
 import { RouteRidesBlock } from '@/features/route-rides/route-rides-block';
 import { useMinskClock } from '@/lib/use-minsk-clock';
 import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
+import { useAppTheme } from '@/theme/use-app-theme';
 
 import { DetailRow } from './detail-row';
 import { routePublicationErrorMessage } from './error-messages';
-import { routeKm } from './format';
+import { ROUTE_STATS_VARIANT, routeDistanceGainItems, routeKm } from './format';
 import {
   myRouteRenameFrozen,
   myRouteStatus,
@@ -159,25 +170,37 @@ function DeleteAction({ route }: { route: MyRoute }) {
   );
 }
 
+/** Готовый маршрут с длиной — карта и шторка (routes-07); иначе — прокрутка без карты. */
+const isMapped = (route: MyRoute): route is MyRoute & { distanceM: number } =>
+  route.status === 'ready' && route.distanceM !== null;
+
 /**
- * Поля своего маршрута (M4): название, готовый — карта без коридора и строки «Длина», «Набор», «Петля», «Загружен»;
- * «Обрабатывается» и отказ — статус вместо карты. «Мои заезды» у готового (route-rides-02). «Переименовать», «Удалить».
- * Без «Поделиться» и OG (M3).
+ * «Переименовать» или подпись «название заморожено» (routes-06, A3: на проверке и в каталоге название не меняется).
  */
-function MyRouteView({
-  route,
-  rides,
-  now,
-}: {
-  route: MyRoute;
-  /** «Мои заезды» (route-rides-02) — только у готового маршрута */
-  rides: ReturnType<typeof useRouteRides>;
-  now: Date;
-}) {
+function RenameAction({ route, onRename }: { route: MyRoute; onRename: () => void }) {
+  const theme = useTheme();
+  if (myRouteRenameFrozen(route)) {
+    return (
+      <Text style={[textStyle('body'), { color: theme.text.secondary }]}>
+        {t('routes.publication.renameFrozen')}
+      </Text>
+    );
+  }
+  return (
+    <View style={styles.action}>
+      <TextAction label={t('routes.mine.detail.rename')} onPress={onRename} />
+    </View>
+  );
+}
+
+/**
+ * Свой маршрут без карты (M4): «Обрабатывается», отказ или незнакомый статус — подпись «Мой маршрут», название,
+ * статус, «Загружен», заявка в каталог, «Переименовать», «Удалить». Без «Поделиться» и OG (M3).
+ */
+function MyRouteView({ route }: { route: MyRoute }) {
   const theme = useTheme();
   const [renaming, setRenaming] = useState(false);
   const status = myRouteStatus(route);
-  const ready = route.status === 'ready' && route.distanceM !== null;
   return (
     <View style={styles.detail}>
       <Text style={[textStyle('label'), { color: theme.text.secondary }]}>
@@ -189,8 +212,92 @@ function MyRouteView({
           <Pill label={status.label} tone={status.tone} />
         </View>
       ) : null}
-      {ready && route.distanceM !== null ? (
-        <>
+      <DetailRow label={t('routes.mine.detail.uploadedAt')}>{myRouteUploadedAt(route)}</DetailRow>
+      <MyRoutePublication route={route} />
+      {renaming ? (
+        <RenameForm route={route} onDone={() => setRenaming(false)} />
+      ) : (
+        <RenameAction route={route} onRename={() => setRenaming(true)} />
+      )}
+      <DeleteAction route={route} />
+    </View>
+  );
+}
+
+/** Шапка шторки (routes-07, как routes-04d L3): «Дистанция» и «Набор» по раскладке темы; видна и в свёрнутой. */
+function MyRouteSheetHeader({ route }: { route: MyRoute & { distanceM: number } }) {
+  const variant = ROUTE_STATS_VARIANT[useAppTheme().layout.routeStats];
+  return (
+    <View style={styles.sheetHeader}>
+      <StatBlock
+        variant={variant}
+        items={routeDistanceGainItems({
+          distanceM: route.distanceM,
+          elevationGainM: route.elevationGainM,
+          isLoop: route.isLoop === true,
+        })}
+      />
+    </View>
+  );
+}
+
+/**
+ * Тело шторки (routes-07): без названия (оно в шапке экрана) — «Загружен», «Мои заезды» (route-rides-02), заявка в
+ * каталог, «Переименовать», «Удалить». Переименование — тело целиком становится формой: поле вверху, над клавиатурой.
+ */
+function MyRouteSheetBody({
+  route,
+  rides,
+  now,
+  renaming,
+  onRenamingChange,
+}: {
+  route: MyRoute;
+  rides: ReturnType<typeof useRouteRides>;
+  now: Date;
+  renaming: boolean;
+  onRenamingChange: (renaming: boolean) => void;
+}) {
+  if (renaming) return <RenameForm route={route} onDone={() => onRenamingChange(false)} />;
+  return (
+    <View style={styles.detail}>
+      <DetailRow label={t('routes.mine.detail.uploadedAt')}>{myRouteUploadedAt(route)}</DetailRow>
+      <RouteRidesBlock routeId={route.id} mine rides={rides} now={now} />
+      <MyRoutePublication route={route} />
+      <RenameAction route={route} onRename={() => onRenamingChange(true)} />
+      <DeleteAction route={route} />
+    </View>
+  );
+}
+
+/**
+ * Готовый маршрут (routes-07, как карточка каталога routes-04d): карта на всю область под шапкой и шторка поверх
+ * (состояние `expanded` — здесь, SSR — развёрнута; видимая высота шторки — отступ камеры, до измерения карта ждёт).
+ * Тело шторки — прокрутка с pull-to-refresh; ошибка обновления — баннер `AsyncContent` над данными. Область — в
+ * `KeyboardAvoidingArea`: при переименовании шторка поднимается над клавиатурой, касания «Сохранить» доходят.
+ */
+function MyRouteSheet({
+  route,
+  query,
+  rides,
+  now,
+  refresh,
+}: {
+  route: MyRoute & { distanceM: number };
+  query: ReturnType<typeof useMyRoute>;
+  rides: ReturnType<typeof useRouteRides>;
+  now: Date;
+  refresh: ScrollViewProps['refreshControl'];
+}) {
+  const [expanded, setExpanded] = useState(true);
+  const [sheetHeight, setSheetHeight] = useState<number | undefined>(undefined);
+  const [renaming, setRenaming] = useState(false);
+  return (
+    <KeyboardAvoidingArea testID="my-route-keyboard-area" style={styles.keyboard}>
+      {/* отступ клавиатуры уменьшает эту область: шторка (`absolute`, `bottom: 0`) поднимается с её низом —
+          абсолютные дети позиционируются от края padding-box, padding самого `KeyboardAvoidingView` их не двигает */}
+      <View testID="my-route-area" style={styles.area}>
+        <View style={StyleSheet.absoluteFill}>
           <RouteLineMap
             mapQuery={myRouteMapOptions(route.id)}
             accessibilityLabel={t('routes.mine.detail.map.label', {
@@ -198,44 +305,67 @@ function MyRouteView({
             })}
             failedMessage={t('routes.mine.detail.map.failed')}
             skeletonTestID="my-route-map-skeleton"
+            fill
+            bottomInset={sheetHeight}
           />
-          <DetailRow label={t('routes.detail.length')}>{routeKm(route.distanceM)}</DetailRow>
-          {route.elevationGainM !== null ? (
-            <DetailRow label={t('routes.detail.elevation')}>
-              {t('routes.detail.elevationValue', { gain: i18n.formatNumber(route.elevationGainM) })}
-            </DetailRow>
-          ) : null}
-          <DetailRow label={t('routes.detail.loop')}>
-            {route.isLoop ? t('routes.detail.yes') : t('routes.detail.no')}
-          </DetailRow>
-        </>
-      ) : null}
-      <DetailRow label={t('routes.mine.detail.uploadedAt')}>{myRouteUploadedAt(route)}</DetailRow>
-      {route.status === 'ready' ? (
-        <RouteRidesBlock routeId={route.id} mine rides={rides} now={now} />
-      ) : null}
-      <MyRoutePublication route={route} />
-      {/* routes-06 (A3): на проверке и в каталоге название заморожено */}
-      {myRouteRenameFrozen(route) ? (
-        <Text style={[textStyle('body'), { color: theme.text.secondary }]}>
-          {t('routes.publication.renameFrozen')}
-        </Text>
-      ) : renaming ? (
-        <RenameForm route={route} onDone={() => setRenaming(false)} />
-      ) : (
-        <View style={styles.action}>
-          <TextAction label={t('routes.mine.detail.rename')} onPress={() => setRenaming(true)} />
         </View>
-      )}
-      <DeleteAction route={route} />
-    </View>
+        <BottomSheet
+          expanded={expanded}
+          onExpandedChange={setExpanded}
+          onVisibleHeightChange={setSheetHeight}
+          collapseLabel={t('routes.detail.sheet.collapse')}
+          expandLabel={t('routes.detail.sheet.expand')}
+          header={<MyRouteSheetHeader route={route} />}
+        >
+          <ScrollView
+            testID="my-route-detail"
+            contentContainerStyle={styles.content}
+            keyboardShouldPersistTaps="handled"
+            refreshControl={refresh}
+          >
+            <AsyncContent query={query} skeleton={null}>
+              {(data) => (
+                <MyRouteSheetBody
+                  route={data}
+                  rides={rides}
+                  now={now}
+                  renaming={renaming}
+                  onRenamingChange={setRenaming}
+                />
+              )}
+            </AsyncContent>
+          </ScrollView>
+        </BottomSheet>
+      </View>
+    </KeyboardAvoidingArea>
+  );
+}
+
+/** Прокрутка без карты (404, загрузка, ошибка без данных, маршрут без карты) — с pull-to-refresh. */
+function StateScroll({
+  refresh,
+  children,
+}: {
+  refresh: ScrollViewProps['refreshControl'];
+  children: ReactNode;
+}) {
+  return (
+    <ScrollView
+      testID="my-route-detail"
+      contentContainerStyle={styles.content}
+      keyboardShouldPersistTaps="handled"
+      refreshControl={refresh}
+    >
+      {children}
+    </ScrollView>
   );
 }
 
 /**
  * Карточка своего маршрута (`/routes/mine/<id>`, routes-02) — защищённый экран (гость — гард на вход, RC-11), без
  * `loader`, мета и OG. Невалидный id — «Маршрут недоступен» без запроса; 404 (чужой, удалён, неизвестен — неотличимы)
- * — то же + «Мои маршруты»; сеть и сервер — `AsyncContent`. Опрос, пока «Обрабатывается»; pull-to-refresh.
+ * — то же + «Мои маршруты»; сеть и сервер — `AsyncContent`. Опрос, пока «Обрабатывается»; pull-to-refresh. Готовый —
+ * карта на всю область и шторка (routes-07), остальные статусы — прокрутка без карты.
  */
 export function MyRouteDetailScreen({ id }: { id: string }) {
   const theme = useTheme();
@@ -247,11 +377,17 @@ export function MyRouteDetailScreen({ id }: { id: string }) {
   const ready = valid && route.data?.status === 'ready';
   const rides = useRouteRides(id, ready);
   const now = useMinskClock([route.dataUpdatedAt, rides.dataUpdatedAt]);
-  // pull-to-refresh — карточка, карта (повтор после ошибки геометрии) и «Мои заезды»
+  // pull-to-refresh — карточка, карта (только повтор после ошибки: геометрия готового неизменна, как у каталога; в
+  // `fill` ошибка обновления при показанной карте не видна — routes-07, ревью pass 2) и «Мои заезды»
   const refetchers = useMemo(
     () => [
       route.refetch,
-      () => queryClient.refetchQueries({ queryKey: myRoutesKeys.map(id), type: 'active' }),
+      () =>
+        queryClient.refetchQueries({
+          queryKey: myRoutesKeys.map(id),
+          type: 'active',
+          predicate: (query) => query.state.data === undefined,
+        }),
       ...(ready ? [rides.refetch] : []),
     ],
     [route.refetch, queryClient, id, ready, rides.refetch],
@@ -263,6 +399,15 @@ export function MyRouteDetailScreen({ id }: { id: string }) {
   useEffect(() => {
     if (gone) queryClient.removeQueries({ queryKey: myRoutesKeys.map(id) });
   }, [gone, queryClient, id]);
+  const refresh = (
+    <RefreshControl
+      refreshing={refreshing}
+      onRefresh={() => void onRefresh()}
+      tintColor={theme.text.secondary}
+      colors={[theme.text.primary]}
+      progressBackgroundColor={theme.surface.raised}
+    />
+  );
 
   return (
     <SafeAreaView
@@ -275,21 +420,9 @@ export function MyRouteDetailScreen({ id }: { id: string }) {
         )}
       />
       <DetailHeader title={notFound ? undefined : route.data?.title} fallback={MY_ROUTES_HREF} />
-      <ScrollView
-        testID="my-route-detail"
-        contentContainerStyle={styles.content}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => void onRefresh()}
-            tintColor={theme.text.secondary}
-            colors={[theme.text.primary]}
-            progressBackgroundColor={theme.surface.raised}
-          />
-        }
-      >
-        <OfflineBanner hasData={route.data !== undefined && !notFound} style={styles.offline} />
-        {notFound ? (
+      <OfflineBanner hasData={route.data !== undefined && !notFound} style={styles.offline} />
+      {notFound ? (
+        <StateScroll refresh={refresh}>
           <EmptyState
             title={t('routes.mine.detail.notFound')}
             action={{
@@ -297,7 +430,11 @@ export function MyRouteDetailScreen({ id }: { id: string }) {
               onPress: () => router.navigate(MY_ROUTES_HREF),
             }}
           />
-        ) : (
+        </StateScroll>
+      ) : route.data !== undefined && isMapped(route.data) ? (
+        <MyRouteSheet route={route.data} query={route} rides={rides} now={now} refresh={refresh} />
+      ) : (
+        <StateScroll refresh={refresh}>
           <AsyncContent
             query={route}
             skeleton={
@@ -307,19 +444,23 @@ export function MyRouteDetailScreen({ id }: { id: string }) {
               </View>
             }
           >
-            {(data) => <MyRouteView route={data} rides={rides} now={now} />}
+            {(data) => <MyRouteView route={data} />}
           </AsyncContent>
-        )}
-      </ScrollView>
+        </StateScroll>
+      )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
+  keyboard: { flex: 1 },
   content: { paddingHorizontal: size.gutter, paddingBottom: space.s6 },
+  // область карты под шапкой: карта — на всю, шторка — поверх (касания до карты под ней не доходят)
+  area: { flex: 1, overflow: 'hidden' },
+  sheetHeader: { paddingHorizontal: size.gutter, paddingBottom: space.s3 },
   detail: { gap: space.s4 },
-  offline: { paddingBottom: space.s3 },
+  offline: { paddingHorizontal: size.gutter, paddingBottom: space.s3 },
   stack: { gap: space.s3 },
   action: { alignItems: 'flex-start' },
 });
