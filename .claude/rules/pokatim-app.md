@@ -390,10 +390,14 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
 - Аватар — только `components/rider-avatar.tsx` (`expo-image`, `cachePolicy: memory-disk` — URL `immutable`; нет фото
   или ошибка — иконка человека); размер шапки — `layout.avatarProfile` (`@pokatim/design-tokens`, follow-up
   `size.avatarLg` в базе), верхней панели — `size.avatarTopBar`.
-- Выбор фото — развилка `features/profile/pick-avatar(.web).ts`: native — `expo-image-picker` лениво
-  (`load-image-picker.ts`) после `imagePickerSupported()` (`requireOptionalNativeModule('ExponentImagePicker')`; нет —
-  «Обновите приложение»), системная обрезка 1:1, без `crop`; web — `expo-document-picker` (JPEG/PNG/WebP, пре-чек
-  формата и 10 МиБ) + `avatar-crop.web.tsx` (pointer events, кнопки и клавиши масштаба, без колеса; доли `x, y, size` в
+- Выбор фото — только общий `features/media/pick-image(.web).ts` (`pickImage({ maxBytes, square })`, аватар — обёртка
+  `features/profile/pick-avatar.ts`): native — `expo-image-picker` лениво
+  (`media/load-image-picker.ts`) после `imagePickerSupported()` (`requireOptionalNativeModule('ExponentImagePicker')`; нет —
+  «Обновите приложение»), `square` — системная обрезка 1:1, без `crop`; без `square` (фото райда) — без редактора, iOS —
+  `preferredAssetRepresentationMode: compatible` (HEIC → JPEG); формат на native по `asset.mimeType` не проверяется
+  (MIME исходника, а при `quality < 1` файл уже JPEG — Android HEIC), сигнатуру проверяет сервер; занятость кнопки на
+  время системного выбора — `PICK_IMAGE_BUSY_WHILE_OPEN` (native — да, web — нет: без `cancel` залипла бы); web —
+  `expo-document-picker` (JPEG/PNG/WebP, пре-чек формата и предела) + у аватара `avatar-crop.web.tsx` (pointer events, кнопки и клавиши масштаба, без колеса; доли `x, y, size` в
   ориентированном изображении — `avatar-crop-math.ts`). Блок «Фото» — `avatar-editor(.web).tsx` поверх
   `avatar-section.tsx`; удаление — инлайн-подтверждение. Загрузка — `api.uploadAvatar` в `withAccessToken`, без XHR и
   прогресса; тексты 413/415/422/429 — `avatar-errors.ts` (429 загрузки с паузой занятой обработки, 5 с, — «через
@@ -657,6 +661,18 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
     старта — `ride-points-style.ts`, только роли `theme.map.*`); native — `GeoJSONSource onPress`
     (`nativeEvent.features`), web — `on('click', layer)`; выбор точки — `RidePointCard` под картой; «Ещё N райдов без
     точки старта — в списке» → режим «Список». Запрос карты — только в режиме «Карта».
+- Фото организатора (ride-photo PR B, ADR-0028): блок «Своё фото» (`RidePhotoBlock`,
+  `features/rides/invite/ride-photo-section.tsx`) под `CardPanel` экрана приглашения — `AsyncContent` по `me`
+  (скелетон, ошибка с повтором, при ошибке обновления блок остаётся; 404 — без блока), после ответа — только при
+  `viewer.role === 'organizer' && viewer.canManage`; «Удалить фото» — только при `ride.photo`. Прошедший и отменённый
+  райд — «Удалить фото» в карточке `rides/[id]` (`ride-photo-delete.tsx`: организатор, без `canManage`, при
+  `ride.photo`); скрытый — `photo: null`, из приложения не удаляется; загрузка — `api.uploadRidePhoto` (Blob, как аватар), удаление — `api.deleteRidePhoto`, хуки
+  `useUploadRidePhoto`/`useDeleteRidePhoto` (ответ → `applyRideView`: кеш `me` + инвалидация `['rides']`, в т. ч. статус
+  карточек `['rides','invite',…]`); тексты — `ride-photo-errors.ts`. Герой — `SectionHero photo` (`RideHero`:
+  `api.ridePhotoUrl`): `expo-image` `cover` декоративно (`accessible={false}`, пустой alt) под `components/photo-scrim.tsx`
+  (полосы `View` по профилю `photoScrimHero` — без провала, порог контраста на всей высоте; у 4a — свой `photoScrim`; цвет
+  `overlay.scrim`, `aria-hidden`), текст и линия — `text.onPhoto`; ошибка картинки — типографский герой. Свой градиент
+  или значения затемнения — только через профили `photoScrim*` `@pokatim/design-tokens` (тест контраста зон текста).
 - Шит «Райд опубликован» (ride-published-og): форма создания ведёт на `/rides/<id>?published=1`; шит — только
   организатору (`viewer.role` сервера) будущего райда после монтирования (`components/modal-sheet.tsx` — модальный
   шит `Modal` RN поверх экрана: затемнение, `sheetSurface`, heading, `onRequestClose`; не `BottomSheet` карты).

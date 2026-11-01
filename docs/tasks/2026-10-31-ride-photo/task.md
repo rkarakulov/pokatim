@@ -333,6 +333,47 @@ RGB) + 3 буфера 1080×1920 RGBA (~25 МБ) — в пределах; `sharp
 - **D6. Проверки «свой будущий райд»** — `RidesService.ownRide` / `assertUpcoming` / `viewOf` стали публичными
   методами (вариант «вызывать через `RidesService`» §5.1), копий нет.
 
+Отклонения и уточнения PR B (coder, 2026-10-31):
+
+- **D8. Загрузка — `api.uploadRidePhoto` (fetch с Blob), не native upload task.** §11 упоминает
+  `ridePhotoUploadRequest` «как аватар», но аватар в приложении грузится `api.uploadAvatar` с Blob на всех платформах
+  (без XHR и прогресса, `pokatim-app.md`); фото райда — тот же путь. `ridePhotoUploadRequest` в приложении не нужен.
+- **D9. Общий выбор фото — `features/media/pick-image(.web).ts`.** `load-image-picker.ts` и `image-picker-support.ts`
+  перенесены из `features/profile` (пути в `jest.setup.ts` и тестах профиля — только импорты), `pick-avatar.web.ts`
+  удалён — развилка платформ теперь в `pickImage`, `pick-avatar.ts` — обёртка с ошибками аватара (тесты
+  `pick-avatar(.web).test.ts` без правок ожиданий). Для фото без обрезки на iOS — `preferredAssetRepresentationMode:
+  compatible` (без него `expo-image-picker` отдаёт HEIC как есть → 415). Ревью pass 1: формат на native по
+  `asset.mimeType` **не проверяется** — это MIME исходника, а при `quality < 1` Android уже перекодировал HEIC в JPEG
+  (ложный отказ); сигнатуру проверяет сервер, текст 415 тот же. Web — фильтр и пре-чек MIME `File` как раньше.
+- **D10. Затемнение героя — полосы `View` (48) по `photoScrimAlpha`,** не SVG-градиент: `react-native-svg` на native
+  грузится лениво с фолбэком (`useSvgLib`) — на время загрузки текст стоял бы на фото без скрима; полосы одинаковы на
+  всех платформах. Ревью pass 1: профиль 4a (`photoScrim`, провал на ~0,2 высоты) герою не подходит — кикер попадал в
+  провал; герой — отдельный токен **`photoScrimHero`**. Ревью pass 2: без провала — 0,58 → 0,64 на середине → 0,82
+  внизу, зона текста — вся высота (кикер у верха при длинном названии и крупном шрифте); тест контраста `onPhoto`
+  ≥ 4.5:1 поверх белого фото во всех темах. `photoScrimAlpha(at, profile)` — профиль вторым аргументом (по умолчанию 4a, API не менялся). Значения обоих профилей с прототипом не сверены —
+  прототипов в репозитории нет (R7), остаются `[ASSUMPTION]`.
+- **D11. «Удалить фото» — без подтверждения** (в отличие от аватара): спецификация его не требует, вернуть фото —
+  загрузить снова; кнопка только при фото и занята на время запроса (LOW findings PR A). Шаблон карточки после загрузки
+  не переключается на «Ночь» автоматически — подсказка блока говорит, где фото.
+- **D15 (ревью pass 2). Статус приглашения после смены фото:** первый запрос статуса в полёте TanStack при инвалидации
+  переиспользовал — токен карточки до смены фото становился свежим. Мутации фото (`applyRidePhotoView`) отменяют
+  запросы статуса приглашения этого райда (`cancelCardStatuses` — общий с `invalidateCardStatuses` смены темы, с
+  префиксом ключа), затем инвалидация `['rides']`. Тест: удержанный первый ответ → новый запрос и новый токен;
+  отрицательное доказательство — без отмены второго запроса нет (`Expected number of calls: 2, Received: 1`).
+- **D12 (ревью pass 1). Удаление своего фото после старта и отмены — в карточке райда.** Экран приглашения открывается
+  только у будущего райда, поэтому «Удалить фото» у прошедшего и отменённого — `RidePhotoDelete` в `rides/[id]`
+  (организатор, без `canManage`, при `ride.photo`; тот же `useDeleteRidePhoto`, кнопка занята на время запроса).
+  **Скрытый райд:** view отдаёт `photo: null` (P6, согласовано с 404 отдачи) — из приложения не удалить; принято:
+  фото снимает модератор («Удалить фото» в панели, PR C) или стирание аккаунта.
+- **D13 (ревью pass 1). Блок «Своё фото» — `AsyncContent` по `me`:** скелетон на первой загрузке, ошибка без данных
+  — «Нет соединения» / «Не удалось загрузить» с повтором, ошибка обновления — блок остаётся с баннером; 404 `me`
+  (скрытый, неизвестный) — без блока (карточка уже «Приглашение недоступно»); ответ без права — без блока. Не
+  организатор на первой загрузке видит скелетон блока до ответа `me` — принято. Лишний запрос `me` на экране
+  приглашения (публичная карточка грузится отдельно) — оставлен.
+- **D14 (ревью pass 1). Web: кнопка не занята на время диалога файла** (`PICK_IMAGE_BUSY_WHILE_OPEN = false`): без
+  события `cancel` у `<input type="file">` промис выбора не завершится; занята — только на время запроса (как у
+  аватара). Native — занята, пока открыта галерея (модальная, отмену сообщает).
+
 ## 8.3 Security checklist
 
 Зона `pokatim-security.md` (`modules/rides/**`, `modules/media/**`, `raw-body.ts`, `upload-slots.ts`) — чек-лист
@@ -537,3 +578,84 @@ ADR-0011/0015/0018/0019, `rides.md`, `admin-panel.md`, `pokatim-security/db/back
 - **LOW — правила:** `pokatim-contracts.md` (строка ride-photo), `pokatim-backend.md` (`renderVersion` 4).
 - **LOW (claude) — квота `rides-manage` тратится на no-op удаление фото** — без изменений (как удаление аватара);
   учесть в PR B: кнопка «Удалить фото» видна только при `ride.photo`, блокируется на время запроса.
+
+### PR B — приложение (coder, 2026-10-31)
+
+**Сделано** (ветка `feature/organizer-photo-app` поверх PR A): `f9bf17ad` — блок «Своё фото» на экране
+карточки-приглашения (`ride-photo-section.tsx`: только `viewer.role === 'organizer' && canManage`; «Добавить своё фото»
+/ «Заменить фото», «Удалить фото» только при фото, кнопки заняты на время выбора и запроса), хуки
+`useUploadRidePhoto`/`useDeleteRidePhoto` (`applyRideView`: кеш `me` + инвалидация `['rides']` → лента, Главная,
+деталь, статус карточек приглашения), тексты `ride-photo-errors.ts` и `rideInvite.photo.*`, общий выбор фото
+`features/media/pick-image(.web).ts` (аватар — обёртка); `c230b3e8` — `SectionHero photo` + `PhotoScrim` (токен
+`photoScrim`, текст `onPhoto`, фото декоративное, ошибка картинки — типографский герой), `RideHero` →
+`api.ridePhotoUrl`; `87474c49` — `rides.md`, `pokatim-app.md`; `bb893596` — 8.2 D8–D11, `pr-b.md`.
+
+**AC7.** `ride-invite.test.tsx` (не организатор и организатор без права — блока нет; добавление: `pickImage({ maxBytes:
+RIDE_PHOTO_MAX_BYTES, square: false })` → `uploadRidePhoto(token, id, blob)` → «Заменить фото», «Удалить фото», статус
+карточки перезапрошен; отмена выбора — без запроса; 422 `too_small` и 409 — текст баннером; удаление — кнопки заняты,
+затем «Добавить своё фото»), `ride-photo-errors.test.ts` (415/413/422/429/409, проверка до отправки, старый
+dev-клиент, удаление, сеть), `pick-image(.web).test.ts`, `photo-scrim.test.tsx`, `section-hero(.web).test.tsx` (фото
+`cover` с пустым alt, скрим `aria-hidden`, onPhoto, ошибка картинки), `home.test.tsx` и `rides.test.tsx` (герой с
+фото). Профиль — тесты аватара без правок ожиданий (только пути моков). CSP `img-src` с origin API — существующий
+`web-server.test.ts` (название кейса дополнено).
+
+**Проверки.**
+- Полный `pnpm check` (`MONGO_URL_TEST=…/ridephotoapp_test?replicaSet=rs0&directConnection=true`,
+  `REDIS_URL_TEST=redis://127.0.0.1:6479/12`, `TURBO_CONCURRENCY=4`) на **HEAD `bb893596`** — `EXIT=0`: prettier — «All
+  matched files use Prettier code style!»; depcruise — «no dependency violations found (2387 modules, 9512
+  dependencies cruised)»; typecheck — 9/9; тесты — 15/15 задач: app 272 набора / 2598 тестов, api 240 / 2676, admin
+  49 / 511, contracts 494, design-tokens 609, api-client 175, tracks 374, route-view 51, i18n 15.
+- Первый прогон (HEAD `87474c49`, load average ~40 от параллельных сессий) — `EXIT=1` только по таймаутам под
+  нагрузкой в нетронутых файлах (app: `route-detail`, `race-disputes`, `race-participation`, `ride-detail`,
+  `ticket-screen`, `devices-step`; api: `parse-thread`, `ride-invite.png`); отдельно — 6/6 наборов (223 теста) и 2/2
+  файла (13 тестов) зелёные; второй полный прогон — зелёный (выше).
+- После `bb893596` — только этот раздел (prettier — ok).
+- Визуальная проверка web-превью героя и ручная проверка на симуляторе/устройстве — **NOT VERIFIED**.
+
+**Риски / follow-up.** Значения скрима — `[ASSUMPTION]` (прототипов нет, D10); автопереключение шаблона на «Ночь» после
+загрузки не делалось (D11); ручной смоук загрузки HEIC с iPhone (`compatible` → JPEG) — на dev-сборке.
+
+### Правки по ревью PR B (findings-b-codex.md, findings-b.md)
+
+Ветка перенесена на свежий `develop` после merge PR A — `ride-photo-app` (хэши коммитов выше — до переноса).
+
+- **Pass 1** (`f0f99bf8` код, `1417c8af` доки): блок «Своё фото» — `AsyncContent` по `me` (D13); «Удалить фото» в
+  карточке прошедшего и отменённого райда (D12, скрытый — принято); native без проверки формата по `mimeType` (D9);
+  токен `photoScrimHero` (D10); текст `too_small`; web — кнопка не занята на время диалога файла (D14).
+- **Pass 2** (`6cee6dc6` код, `e589e8e7` доки): мутации фото отменяют запросы статуса приглашения райда перед
+  инвалидацией (`cancelCardStatuses`, D15, с отрицательным доказательством); `photoScrimHero` без провала — порог
+  контраста на всей высоте (D10).
+- **Тесты добавлены:** `ride-invite.test.tsx` (отказ `/me` и повтор, 404, ошибка обновления с блоком, удержанный первый
+  статус → новый токен), `ride-detail.test.tsx` (удаление у отменённого и прошедшего, 429, будущий/не организатор/без
+  фото — нет кнопки), `ride-photo-section.web.test.tsx`, `photo-scrim.test.ts` (design-tokens: монотонность и контраст
+  на всей высоте во всех темах), `pick-image.test.ts` (Android HEIC не отклоняется).
+- **Проверки.** Полный `pnpm check` (Mongo `ridephotoapp_test`, Redis db 12, `TURBO_CONCURRENCY=4`) на **HEAD
+  `e589e8e7`** — `EXIT=0`: prettier — ok; depcruise — «no dependency violations found (2392 modules, 9547 dependencies
+  cruised)»; typecheck — 9/9; тесты — 15/15 задач: app 275 наборов / 2619 тестов, api 240 / 2680, admin 49 / 511,
+  contracts 494, design-tokens 612, api-client 175, tracks 374, route-view 51, i18n 16. Предыдущие прогоны (load average
+  20–50 от параллельных сессий) падали только таймаутами в нетронутых файлах (api: `achievements`, `results-check`,
+  `route-rides` int; app: 12 наборов вне фото; i18n `index.test`), каждый отдельно — зелёный. После `e589e8e7` — только
+  этот раздел (prettier — ok).
+- Визуальная проверка web-превью и ручная проверка на устройстве — **NOT VERIFIED**.
+
+### PR C — панель (coder, 2026-10-31; смёржен #170)
+
+- Карточка модерации райда (`RideModerationScreen.tsx`): поле «Фото организатора» — превью (`ridePhotoUrl`) со скелетоном до
+  загрузки и «Фото недоступно» + «Повторить» / «Обновить карточку» при ошибке (сброс при смене `photo.id`); без фото —
+  «Нет фото»; скрытый райд — плашка «Фото скрыто вместе с райдом» (R11 a), картинка не запрашивается.
+- «Удалить фото» (danger, при наличии фото, любой статус): `ReasonDialog` с обязательной причиной → `resetRidePhoto(id,
+  { photoId, reason })`; 409 — свой баннер «Фото уже изменилось» + перечитывание (R10). Текст последствий — выданные
+  картинки приглашения и кэш браузеров живут до суток (findings-c-codex-pass2 MEDIUM).
+- Право — маршрут под `rides.moderate`; i18n — `admin.ridesModeration.*`; токен `--panel-ride-photo-preview`.
+- Ревью: Codex pass 1 REQUEST CHANGES (HIGH: состояния картинки) → исправлено, pass 2 APPROVE (MEDIUM — текст); Claude
+  APPROVE (LOW-1 — то же, LOW-2 — эта запись). `findings-c.md`, `findings-c-codex.md`, `findings-c-codex-pass2.md`, `pr-c.md`.
+- Проверки: тесты панели 520/520, полный `pnpm check` зелёный на исходном коммите; CI #170 — 9/9.
+- Вне PR: e2e-смоук панели (нет стенда с фото райда).
+
+### Итог задачи
+
+- PR A #169 (API, `media`, `ride_photos`, 4a с фото) и PR C #170 (панель) смёржены в `develop`; PR B (приложение) — этот
+  PR. ADR-0028, `rides.md`, `admin-panel.md`, правила — обновлены.
+- Follow-up: инвалидация уже выданных PNG приглашения при сбросе/скрытии/стирании (сейчас до 24 ч); OG-картинка и шапка
+  детали райда с фото; сверка значений затемнения с прототипом; ручная проверка HEIC на iPhone/Android dev-сборке;
+  запрет повторной загрузки после сбросов (если появится злоупотребление).

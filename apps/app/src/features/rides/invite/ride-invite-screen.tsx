@@ -4,7 +4,7 @@ import { t } from '@pokatim/i18n';
 import { EmptyState, useTheme } from '@rkarakulov/ui';
 import { useRouter } from 'expo-router';
 import { useMemo } from 'react';
-import { ScrollView, StyleSheet } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DetailHeader } from '@/components/detail-header';
@@ -13,11 +13,13 @@ import { CardPanel } from '@/features/sharing/card-panel';
 
 import { useRide } from '../queries';
 import { ridePath, rideInviteSource } from './ride-invite';
+import { RidePhotoBlock } from './ride-photo-section';
 
 /**
  * Карточка-приглашение кофе-райда (`/rides/invite/<райд>`, внутри `Stack.Protected`): общая панель карточки
  * (`CardPanel`, рендер сервера ADR-0018). Не будущий (409), скрытый и неизвестный (404) — «Приглашение недоступно» и
- * «К райду». Права — только сервер.
+ * «К райду». Права — только сервер. Блок «Своё фото» под карточкой — `RidePhotoBlock` (по `me`, только организатору с
+ * правом правки, ride-photo P3).
  */
 export function RideInviteScreen({ rideId }: { rideId: string }) {
   const theme = useTheme();
@@ -44,17 +46,20 @@ export function RideInviteScreen({ rideId }: { rideId: string }) {
       <DetailHeader title={t('rideInvite.title')} fallback={valid ? ridePath(rideId) : '/rides'} />
       <ScrollView testID="ride-invite" contentContainerStyle={styles.content}>
         {valid ? (
-          <CardPanel
-            source={source}
-            enabled={valid}
-            previewLabel={t('rideInvite.preview', {
-              ride: ride.data?.title ?? t('rideInvite.title'),
-            })}
-            shareTitle={t('rideInvite.title')}
-            hint={t('rideInvite.hint')}
-            empty={empty}
-            emptyOnNotFound
-          />
+          <View style={styles.stack}>
+            <CardPanel
+              source={source}
+              enabled={valid}
+              previewLabel={t('rideInvite.preview', {
+                ride: ride.data?.title ?? t('rideInvite.title'),
+              })}
+              shareTitle={t('rideInvite.title')}
+              hint={t('rideInvite.hint')}
+              empty={empty}
+              emptyOnNotFound
+            />
+            <RidePhotoBlock rideId={rideId} />
+          </View>
         ) : (
           empty
         )}
@@ -66,4 +71,5 @@ export function RideInviteScreen({ rideId }: { rideId: string }) {
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   content: { paddingHorizontal: size.gutter, paddingBottom: space.s6 },
+  stack: { gap: space.s6 },
 });

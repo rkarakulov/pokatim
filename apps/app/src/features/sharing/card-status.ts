@@ -56,8 +56,19 @@ const isCardStatus = (query: Query) => query.meta?.cardStatus === true;
  * отменяет (TanStack переиспользует его) — сначала явная отмена, затем инвалидация.
  */
 export async function invalidateCardStatuses(queryClient: QueryClient): Promise<void> {
-  await queryClient.cancelQueries({ predicate: isCardStatus });
+  await cancelCardStatuses(queryClient);
   await queryClient.invalidateQueries({ predicate: isCardStatus });
+}
+
+/**
+ * Отмена запросов статуса карточек (все или под префиксом `queryKey`) перед инвалидацией: первый запрос без данных
+ * TanStack при инвалидации переиспользует, и ответ, начатый до изменения (тема, фото райда), стал бы свежим.
+ */
+export async function cancelCardStatuses(
+  queryClient: QueryClient,
+  queryKey?: readonly unknown[],
+): Promise<void> {
+  await queryClient.cancelQueries({ predicate: isCardStatus, ...(queryKey ? { queryKey } : {}) });
 }
 
 /** Повтор — как у проекта (`shouldRetry`: без 4xx, в т.ч. 409 и 429); не готова / провал — без повторов. */
