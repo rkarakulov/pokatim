@@ -515,10 +515,13 @@ paths:
   — подними `OG_CARD_POLICY.renderVersion`** (новые URL, полный проход `og.sync`; сейчас 4 — фото райда).
 - Карта сайта (landing-seo, sitemap-index): `GET /v1/sitemap` — индекс страниц видов, `GET /v1/sitemap/:kind/:page` —
   объекты страницы (`PublicReadGuard`, `404` вне индекса, `400` неверные параметры) → `SitemapService` → порты владельцев
-  `sitemapAfter` / `sitemapSeasonsAfter` (`idAfter`, `ID_SORT` из `changed-since.ts`). Ключ страниц — `_id` ↑ (uuidv7:
+  `sitemapRange` / `sitemapSeasonsRange` (`IdRange`, `idWithin`, `ID_SORT` из `changed-since.ts`; репозиторий —
+  `sitemapCursor`, его план проверяет `db/migrations/sitemap-indexes.int.test.ts`). Ключ страниц — `_id` ↑ (uuidv7:
   стабилен), **не** `(updatedAt, _id)` и не «первые N»: индекс — полный проход, в памяти только границы страниц
-  (`SITEMAP_POLICY.pageSize`), страница — `(after, last]` (потолок `fileUrlMax`), последняя — открыта до `pageSize`.
-  Индексы `*_sitemap_idx` `(status, _id, updatedAt)` (`0051_sitemap_indexes`): гонки и старты — покрывающие.
+  (`SITEMAP_POLICY.pageSize`), страница — `(after, last]` (потолок `fileUrlMax`), последняя — затем новые после `last`
+  до `pageSize`. Страницы мемо — внутри поколения индекса. `lastmod` страницы — максимум `updatedAt`, при смене состава
+  (`after`, `last`, число строк) относительно прошлого поколения — момент сборки. Индексы `*_sitemap_idx`
+  `(status, _id, updatedAt)` (`0051_sitemap_indexes`): гонки и старты — покрывающие.
 - OG райда с фото (ride-photo-followups): `photoId` — в канонических фактах `ride`; `buildOgCard` берёт байты
   `invitePhoto` (снято — `skipped`), `renderOgCard(input, line, photo)` → `composeWithPhoto` (`sharing/photo-card.png.ts`
   — общая с 4a композиция: `onPhotoColors`, `scrimSvg`, `encodePhotoCard`, `PHOTO_CARD_PALETTES`; вторых скрима и

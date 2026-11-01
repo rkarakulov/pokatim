@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 
-import type { ChangedCursor, ChangedRow } from '../../changed-since';
+import type { ChangedCursor, ChangedRow, IdRange } from '../../changed-since';
 import type { RaceOgFacts, RacesForSharing, SeasonOgFacts } from './races-for-sharing.port';
 import { RacesRepository } from './races.repository';
 
@@ -43,11 +43,11 @@ export class RacesForSharingService implements RacesForSharing {
     return (await this.repository.liveSeasons(sinceLocalDate)).map((season) => season._id);
   }
 
-  sitemapAfter(afterId: string | null, limit: number): Promise<ChangedRow[]> {
-    return this.repository.sitemapAfter(afterId, limit);
+  sitemapRange(range: IdRange, limit: number): Promise<ChangedRow[]> {
+    return this.repository.sitemapRange(range, limit);
   }
 
-  sitemapSeasonsAfter(afterId: string | null, limit: number): Promise<ChangedRow[]> {
-    return this.repository.sitemapSeasonsAfter(afterId, limit);
+  sitemapSeasonsRange(range: IdRange, limit: number): Promise<ChangedRow[]> {
+    return this.repository.sitemapSeasonsRange(range, limit);
   }
 }

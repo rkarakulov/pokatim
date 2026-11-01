@@ -277,8 +277,8 @@ test('robots.txt: служебное закрыто, Sitemap от WEB_ORIGIN; si
   const sitemap = await request.get('/sitemap.xml');
   if (WITH_API) {
     expect(sitemap.status()).toBe(200);
-    expect(await sitemap.text()).toContain(`<loc>${BASE_URL}/sitemap/static.xml</loc>`);
-    const landing = await request.get('/sitemap/static.xml');
+    expect(await sitemap.text()).toContain(`<loc>${BASE_URL}/sitemap.xml?kind=static</loc>`);
+    const landing = await request.get('/sitemap.xml?kind=static');
     expect(await landing.text()).toContain(`<loc>${BASE_URL}/welcome</loc>`);
   } else {
     expect(sitemap.status()).toBe(503);

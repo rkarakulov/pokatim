@@ -1,21 +1,19 @@
 import { SitemapIndex, SitemapPage } from '@pokatim/contracts';
-import type { FindCursor } from 'mongodb';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { createHarness, MINUTE, type Harness } from '../../../test/harness';
-import { seedRace, seedStart, startsDb } from '../../../test/og';
+import { seedRace, seedStart } from '../../../test/og';
 import { racesDb } from '../../../test/races';
-import { routesDb, seedRiderRoute } from '../../../test/routes';
+import { seedRiderRoute } from '../../../test/routes';
 import { createRide, rider, seedTeamRoute } from '../../../test/rides';
 import { seedSeason } from '../../../test/standings';
-import { SITEMAP_INDEXES } from '../../db/migrations/0051_sitemap_indexes';
 import { SITEMAP_POLICY } from './sharing.policy';
 import { SitemapService } from './sitemap.service';
 
 /**
  * Карта сайта (landing-seo, sitemap-index): `GET /v1/sitemap` — индекс страниц видов, `GET /v1/sitemap/:kind/:page` —
  * объекты страницы по `_id` ↑; только опубликованные гонки, сезоны, маршруты каталога и старты календаря; мемо
- * процесса; план keyset без `SORT`. MongoDB — настоящая.
+ * процесса (план keyset — `db/migrations/sitemap-indexes.int.test.ts`). MongoDB — настоящая.
  */
 let h: Harness;
 let ip = 0;
@@ -139,54 +137,5 @@ describe('GET /v1/sitemap и /v1/sitemap/:kind/:page', () => {
     expect(await everything()).toEqual([`race:${first}`]);
     h.clock.advance(2 * MINUTE);
     expect((await everything()).sort()).toEqual([`race:${first}`, `race:${second}`].sort());
-  });
-});
-
-describe('план keyset карты сайта (sitemap-index)', () => {
-  const after = { _id: { $gt: id(0) } };
-  const projection = { _id: 1, updatedAt: 1 };
-  /** Победивший план `find` keyset по `_id` (как `sitemapAfter` репозиториев). */
-  const winning = async (cursor: FindCursor) => {
-    const explain = await cursor.sort({ _id: 1 }).limit(SITEMAP_POLICY.scanPage).explain();
-    return JSON.stringify(explain.queryPlanner.winningPlan);
-  };
-
-  it('гонки и старты — IXSCAN по *_sitemap_idx без SORT и FETCH (покрывающий)', async () => {
-    for (const n of [1, 2, 3]) {
-      await seedRace(h, { _id: id(n) });
-      await seedStart(h, { _id: id(n) });
-    }
-    const races = await winning(
-      racesDb(h).races.find({ status: 'published', ...after }, { projection }),
-    );
-    const starts = await winning(
-      startsDb(h).find({ status: 'published', ...after }, { projection }),
-    );
-    for (const [plan, name] of [
-      [races, SITEMAP_INDEXES.races.options.name],
-      [starts, SITEMAP_INDEXES.calendar.options.name],
-    ] as const) {
-      expect(plan).toContain(`"indexName":"${name}"`);
-      expect(plan).not.toContain('"SORT"');
-      expect(plan).not.toContain('"FETCH"');
-    }
-  });
-
-  it('маршруты каталога (условие `IN_CATALOG`) — IXSCAN по routes_sitemap_idx без SORT', async () => {
-    await seedTeamRoute(h);
-    await seedTeamRoute(h, [27.5, 53.9], 'Второе кольцо');
-    const inCatalog = {
-      status: 'ready' as const,
-      'catalog.publishedAt': { $type: 'date' as const },
-      $or: [
-        { origin: 'platform' as const },
-        { origin: 'rider' as const, 'publication.status': 'approved' },
-      ],
-    };
-    const plan = await winning(
-      routesDb(h).routes.find({ $and: [inCatalog, after] }, { projection }),
-    );
-    expect(plan).toContain(`"indexName":"${SITEMAP_INDEXES.routes.options.name}"`);
-    expect(plan).not.toContain('"SORT"');
   });
 });

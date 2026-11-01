@@ -98,21 +98,37 @@ const SITEMAP_NS = 'http://www.sitemaps.org/schemas/sitemap/0.9';
 const xmlDocument = (root: 'urlset' | 'sitemapindex', entries: readonly string[]) =>
   `${[XML_HEADER, `<${root} xmlns="${SITEMAP_NS}">`, ...entries, `</${root}>`].join('\n')}\n`;
 
-/** Дочерняя карта статических страниц. */
-export const STATIC_SITEMAP_PATH = '/sitemap/static.xml';
+/*
+ * Дочерние карты — в корне сайта, тот же маршрут `sitemap.xml` с query (протокол sitemaps.org: карта перечисляет только
+ * URL ниже своего каталога, а `/sitemap/…` перечисляла бы `/races/…`): без параметров — индекс, `?kind=static` —
+ * статические страницы, `?kind=<вид>&page=<n>` — страница вида.
+ */
+export type SitemapTarget =
+  { type: 'index' } | { type: 'static' } | { type: 'page'; kind: SitemapKind; page: number };
 
-/** Путь дочерней карты страницы вида: `/sitemap/<kind>/<n>.xml` (маршрут `src/app/sitemap/[kind]/[page]+api.ts`). */
-export const sitemapPagePath = (kind: SitemapKind, page: number) => `/sitemap/${kind}/${page}.xml`;
+const SITEMAP_PATH = '/sitemap.xml';
+const PAGE_IN_QUERY = /^[1-9]\d{0,5}$/;
 
-/** Сегменты пути дочерней карты → вид и номер (с 1, без ведущих нулей); иначе `null` (без запроса к API). */
-export function parseSitemapPagePath(
-  kind: unknown,
-  file: unknown,
-): { kind: SitemapKind; page: number } | null {
-  if (typeof kind !== 'string' || typeof file !== 'string') return null;
-  if (!(SITEMAP_KINDS as readonly string[]).includes(kind)) return null;
-  const match = /^([1-9]\d{0,5})\.xml$/.exec(file);
-  return match ? { kind: kind as SitemapKind, page: Number(match[1]) } : null;
+/** Адрес дочерней карты (без экранирования XML). */
+export const sitemapHref = (target: Exclude<SitemapTarget, { type: 'index' }>): string =>
+  target.type === 'static'
+    ? `${SITEMAP_PATH}?kind=static`
+    : `${SITEMAP_PATH}?kind=${target.kind}&page=${target.page}`;
+
+/**
+ * Query `sitemap.xml` → карта; лишний, повторный или неверный параметр (вид, номер с 1 без ведущих нулей) — `null`
+ * (без запроса к API).
+ */
+export function parseSitemapQuery(query: URLSearchParams): SitemapTarget | null {
+  const keys = [...query.keys()];
+  if (keys.length === 0) return { type: 'index' };
+  const kind = query.get('kind');
+  if (kind === 'static') return keys.length === 1 ? { type: 'static' } : null;
+  const page = query.get('page');
+  if (keys.length !== 2 || kind === null || page === null) return null;
+  if (!(SITEMAP_KINDS as readonly string[]).includes(kind) || !PAGE_IN_QUERY.test(page))
+    return null;
+  return { type: 'page', kind: kind as SitemapKind, page: Number(page) };
 }
 
 /** `lastmod` вида (дата UTC); у сезона нет — таблица сезона меняется с результатами, дата сезона её не отражает. */
@@ -121,16 +137,16 @@ const lastmodOf = (kind: SitemapKind, updatedAt: string) =>
 
 /**
  * `sitemap.xml` — индекс (протокол sitemaps.org): статические страницы и страницы видов API, `lastmod` страницы —
- * последнее изменение её объектов (кроме сезонов).
+ * из индекса API (кроме сезонов). `&` адреса экранируется (`&amp;`).
  */
 export function sitemapIndexXml(origin: string, pages: readonly SitemapIndexPage[]): string {
   const sitemap = (loc: string, lastmod?: string) =>
     `<sitemap><loc>${xml(loc)}</loc>${lastmod ? `<lastmod>${lastmod}</lastmod>` : ''}</sitemap>`;
   return xmlDocument('sitemapindex', [
-    sitemap(`${origin}${STATIC_SITEMAP_PATH}`),
+    sitemap(`${origin}${sitemapHref({ type: 'static' })}`),
     ...pages.map((page) =>
       sitemap(
-        `${origin}${sitemapPagePath(page.kind, page.page)}`,
+        `${origin}${sitemapHref({ type: 'page', kind: page.kind, page: page.page })}`,
         lastmodOf(page.kind, page.updatedAt),
       ),
     ),

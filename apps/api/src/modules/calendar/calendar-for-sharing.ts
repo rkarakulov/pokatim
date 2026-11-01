@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 
-import type { ChangedCursor, ChangedRow } from '../../changed-since';
+import type { ChangedCursor, ChangedRow, IdRange } from '../../changed-since';
 import type { CalendarForSharing, CalendarOgFacts } from './calendar-for-sharing.port';
 import { CalendarRepository } from './calendar.repository';
 
@@ -26,7 +26,7 @@ export class CalendarForSharingService implements CalendarForSharing {
     return this.repository.changedForOg(after, limit);
   }
 
-  sitemapAfter(afterId: string | null, limit: number): Promise<ChangedRow[]> {
-    return this.repository.sitemapAfter(afterId, limit);
+  sitemapRange(range: IdRange, limit: number): Promise<ChangedRow[]> {
+    return this.repository.sitemapRange(range, limit);
   }
 }

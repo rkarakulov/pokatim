@@ -70,10 +70,25 @@ export function uuidv7Floor(at: Date): string {
 }
 
 /**
- * Keyset по стабильному ключу `_id` ↑ (карта сайта, sitemap-index): строго после `afterId`; `null` — с начала. uuidv7 —
- * новые строки в конце, правка строки её не переносит.
+ * Диапазон keyset по стабильному ключу `_id` ↑ (карта сайта, sitemap-index): строго после `after`, до `until`
+ * включительно; `null` — без границы. uuidv7 — новые строки в конце, правка строки её не переносит.
  */
-export const idAfter = (afterId: string | null): Filter<{ _id: string }> =>
-  afterId === null ? {} : { _id: { $gt: afterId } };
+export interface IdRange {
+  after: string | null;
+  until: string | null;
+}
+
+export function idWithin({ after, until }: IdRange): Filter<{ _id: string }> {
+  const bounds: { $gt?: string; $lte?: string } = {};
+  if (after !== null) bounds.$gt = after;
+  if (until !== null) bounds.$lte = until;
+  return after === null && until === null ? {} : { _id: bounds };
+}
 
 export const ID_SORT = { _id: 1 } as const;
+
+/** Проекция строки «изменилось» — `_id` и `updatedAt` (покрывающий индекс карты сайта). */
+export const CHANGED_ROW_PROJECTION = { _id: 1, updatedAt: 1 } as const;
+
+export const changedRows = (docs: readonly { _id: string; updatedAt: Date }[]): ChangedRow[] =>
+  docs.map((doc) => ({ id: doc._id, updatedAt: doc.updatedAt }));

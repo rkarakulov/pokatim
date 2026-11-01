@@ -7,23 +7,29 @@ import {
 } from '@pokatim/contracts';
 import { CLOCK, type Clock } from '@rkarakulov/api-kit/core';
 
-import type { ChangedRow } from '../../changed-since';
+import type { ChangedRow, IdRange } from '../../changed-since';
 import { CALENDAR_FOR_SHARING, type CalendarForSharing } from '../calendar';
 import { RACES_FOR_SHARING, type RacesForSharing } from '../races';
 import { ROUTES_FOR_SHARING, type RoutesForSharing } from '../routes';
 import { SITEMAP_POLICY } from './sharing.policy';
 
-/** Страница вида: строго после `after` (`null` — с начала) до `last` включительно; `updatedAt` — максимум строк. */
+/** Строки страницы при сборке индекса: строго после `after` (`null` — с начала) до `last` включительно. */
 interface PageBounds {
   after: string | null;
   last: string;
-  updatedAt: Date;
+  count: number;
+  /** максимум `updatedAt` строк */
+  maxAt: Date;
+  /** `lastmod` страницы в индексе */
+  lastmod: Date;
 }
 type Bounds = Record<SitemapKind, PageBounds[]>;
-type Source = (afterId: string | null, limit: number) => Promise<ChangedRow[]>;
-interface Memo<T> {
-  expiresAt: number;
-  value: Promise<T>;
+type Source = (range: IdRange, limit: number) => Promise<ChangedRow[]>;
+
+/** Поколение индекса: границы и мемо страниц живут и истекают вместе. */
+interface Generation {
+  bounds: Bounds;
+  pages: Map<string, Promise<SitemapPage>>;
 }
 
 /**
@@ -32,15 +38,21 @@ interface Memo<T> {
  * и профилей нет — их страницы `noindex`.
  *
  * Индекс — полный проход по каждому виду, в памяти только границы страниц по `pageSize` (O(страниц)). Страница `n` —
- * keyset `(after, last]` границ индекса (не больше `fileUrlMax`), последняя — `(after, ∞)` не больше `pageSize`: новые
- * объекты после сборки индекса — в следующем окне. Индекс и страницы запоминаются в процессе на `memoMs` (страниц — не
- * больше `pageMemoMax`, ключ — границы: новый индекс не смешивается со старыми страницами); одновременные запросы при
- * пустом мемо делят одно чтение; сбой не запоминается.
+ * `(after, last]` границ индекса (не больше `fileUrlMax`: uuidv7 случаен внутри миллисекунды, вставка внутрь диапазона
+ * возможна и не теряется); последняя — ещё и новые после `last`, пока страница не больше `pageSize`.
+ *
+ * `lastmod` страницы — максимум `updatedAt` её строк; если состав страницы (`after`, `last`, число строк) изменился
+ * относительно прошлого поколения (публикация старого черновика, снятие, сдвиг границ) — момент сборки индекса. Первое
+ * поколение процесса прошлого не знает — максимум `updatedAt`.
+ *
+ * Поколение (границы и страницы) запоминается в процессе на `memoMs`; страницы — внутри поколения (не больше
+ * `pageMemoMax`) и истекают вместе с ним. Одновременные запросы делят одно чтение; сбой не запоминается.
  */
 @Injectable()
 export class SitemapService {
-  private readonly boundsMemo = new Map<string, Memo<Bounds>>();
-  private readonly pageMemo = new Map<string, Memo<SitemapPage>>();
+  private generation: { expiresAt: number; value: Promise<Generation> } | null = null;
+  /** границы последнего собранного поколения — для `lastmod` следующего */
+  private previous: Bounds | null = null;
   private readonly sources: Record<SitemapKind, Source>;
 
   constructor(
@@ -50,21 +62,21 @@ export class SitemapService {
     @Inject(CLOCK) private readonly clock: Clock,
   ) {
     this.sources = {
-      race: (afterId, limit) => races.sitemapAfter(afterId, limit),
-      season: (afterId, limit) => races.sitemapSeasonsAfter(afterId, limit),
-      route: (afterId, limit) => routes.sitemapAfter(afterId, limit),
-      calendar: (afterId, limit) => calendar.sitemapAfter(afterId, limit),
+      race: (range, limit) => races.sitemapRange(range, limit),
+      season: (range, limit) => races.sitemapSeasonsRange(range, limit),
+      route: (range, limit) => routes.sitemapRange(range, limit),
+      calendar: (range, limit) => calendar.sitemapRange(range, limit),
     };
   }
 
   async index(): Promise<SitemapIndex> {
-    const bounds = await this.bounds();
+    const { bounds } = await this.current();
     return {
       pages: SITEMAP_KINDS.flatMap((kind) =>
         bounds[kind].map((page, n) => ({
           kind,
           page: n + 1,
-          updatedAt: page.updatedAt.toISOString(),
+          updatedAt: page.lastmod.toISOString(),
         })),
       ),
     };
@@ -72,43 +84,75 @@ export class SitemapService {
 
   /** Страница `page` (с 1) вида; вне индекса — `null` без чтения коллекции. */
   async page(kind: SitemapKind, page: number): Promise<SitemapPage | null> {
-    const pages = (await this.bounds())[kind];
+    const generation = await this.current();
+    const pages = generation.bounds[kind];
     const bounds = pages[page - 1];
     if (!bounds) return null;
-    const final = page === pages.length;
-    const key = `${kind}:${bounds.after ?? ''}:${bounds.last}:${final ? 'final' : ''}`;
-    return this.remember(this.pageMemo, key, SITEMAP_POLICY.pageMemoMax, () =>
-      this.read(kind, bounds, final),
-    );
+    const key = `${kind}:${page}`;
+    const hit = generation.pages.get(key);
+    if (hit) return hit;
+    if (generation.pages.size >= SITEMAP_POLICY.pageMemoMax) {
+      // старейшая запись — первая (Map хранит порядок вставки)
+      const oldest = generation.pages.keys().next().value;
+      if (oldest !== undefined) generation.pages.delete(oldest);
+    }
+    const value = this.read(kind, bounds, page === pages.length);
+    generation.pages.set(key, value);
+    value.catch(() => {
+      if (generation.pages.get(key) === value) generation.pages.delete(key);
+    });
+    return value;
   }
 
   /** Только для тестов: сбросить мемо (`h.reset()` возвращает часы назад — окно прежнего теста ещё открыто). */
   forget(): void {
-    this.boundsMemo.clear();
-    this.pageMemo.clear();
+    this.generation = null;
+    this.previous = null;
   }
 
-  private bounds(): Promise<Bounds> {
-    return this.remember(this.boundsMemo, 'index', 1, async () => {
-      const scanned = await Promise.all(SITEMAP_KINDS.map((kind) => this.scanBounds(kind)));
-      return Object.fromEntries(SITEMAP_KINDS.map((kind, n) => [kind, scanned[n]!])) as Bounds;
+  private current(): Promise<Generation> {
+    const now = this.clock.now();
+    const memo = this.generation;
+    if (memo && memo.expiresAt > now.getTime()) return memo.value;
+    const value = this.build(now);
+    const next = { expiresAt: now.getTime() + SITEMAP_POLICY.memoMs, value };
+    this.generation = next;
+    value.catch(() => {
+      if (this.generation === next) this.generation = null;
     });
+    return value;
   }
 
-  private async scanBounds(kind: SitemapKind): Promise<PageBounds[]> {
-    const pages: PageBounds[] = [];
+  private async build(builtAt: Date): Promise<Generation> {
+    const scanned = await Promise.all(SITEMAP_KINDS.map((kind) => this.scanBounds(kind)));
+    const previous = this.previous;
+    const bounds = Object.fromEntries(
+      SITEMAP_KINDS.map((kind, n) => [
+        kind,
+        scanned[n]!.map((page, i) => ({
+          ...page,
+          lastmod: lastmodOf(page, previous?.[kind][i], previous !== null, builtAt),
+        })),
+      ]),
+    ) as Bounds;
+    this.previous = bounds;
+    return { bounds, pages: new Map() };
+  }
+
+  private async scanBounds(kind: SitemapKind): Promise<Omit<PageBounds, 'lastmod'>[]> {
+    const pages: Omit<PageBounds, 'lastmod'>[] = [];
     let pageAfter: string | null = null;
     let count = 0;
     let maxAt: Date | null = null;
     let last: string | null = null;
     for (;;) {
-      const rows = await this.sources[kind](last, SITEMAP_POLICY.scanPage);
+      const rows = await this.sources[kind]({ after: last, until: null }, SITEMAP_POLICY.scanPage);
       for (const row of rows) {
         count += 1;
         last = row.id;
         if (!maxAt || row.updatedAt > maxAt) maxAt = row.updatedAt;
         if (count === SITEMAP_POLICY.pageSize) {
-          pages.push({ after: pageAfter, last: row.id, updatedAt: maxAt });
+          pages.push({ after: pageAfter, last: row.id, count, maxAt });
           pageAfter = row.id;
           count = 0;
           maxAt = null;
@@ -116,49 +160,49 @@ export class SitemapService {
       }
       if (rows.length < SITEMAP_POLICY.scanPage) break;
     }
-    if (count > 0 && last !== null && maxAt)
-      pages.push({ after: pageAfter, last, updatedAt: maxAt });
+    if (count > 0 && last !== null && maxAt) pages.push({ after: pageAfter, last, count, maxAt });
     return pages;
   }
 
+  /**
+   * Строки `(after, last]` (не больше `fileUrlMax`, без чтения за `last`); у последней страницы — затем новые после
+   * `last`, пока строк не больше `pageSize` (строки своих границ не вытесняются).
+   */
   private async read(kind: SitemapKind, bounds: PageBounds, final: boolean): Promise<SitemapPage> {
-    const cap = final ? SITEMAP_POLICY.pageSize : SITEMAP_POLICY.fileUrlMax;
     const items: SitemapPage['items'] = [];
-    let after = bounds.after;
-    while (items.length < cap) {
-      const limit = Math.min(SITEMAP_POLICY.scanPage, cap - items.length);
-      const rows = await this.sources[kind](after, limit);
-      // uuidv7 — строчные hex: порядок строк JS = порядок `_id` в MongoDB
-      const inPage = final ? rows : rows.filter((row) => row.id <= bounds.last);
-      items.push(...inPage.map((row) => ({ id: row.id, updatedAt: row.updatedAt.toISOString() })));
-      const tail = rows.at(-1);
-      if (!tail || rows.length < limit || (!final && tail.id >= bounds.last)) break;
-      after = tail.id;
-    }
+    const collect = async (until: string | null, cap: number) => {
+      let after = until === null ? bounds.last : bounds.after;
+      while (items.length < cap) {
+        const limit = Math.min(SITEMAP_POLICY.scanPage, cap - items.length);
+        const rows = await this.sources[kind]({ after, until }, limit);
+        items.push(...rows.map((row) => ({ id: row.id, updatedAt: row.updatedAt.toISOString() })));
+        const tail = rows.at(-1);
+        if (!tail || rows.length < limit) break;
+        after = tail.id;
+      }
+    };
+    await collect(bounds.last, SITEMAP_POLICY.fileUrlMax);
+    if (final) await collect(null, SITEMAP_POLICY.pageSize);
     return { items };
   }
+}
 
-  private remember<T>(
-    pool: Map<string, Memo<T>>,
-    key: string,
-    max: number,
-    load: () => Promise<T>,
-  ): Promise<T> {
-    const now = this.clock.now().getTime();
-    const hit = pool.get(key);
-    if (hit && hit.expiresAt > now) return hit.value;
-    pool.delete(key);
-    if (pool.size >= max) {
-      // старейшая запись — первая (Map хранит порядок вставки)
-      const oldest = pool.keys().next().value;
-      if (oldest !== undefined) pool.delete(oldest);
-    }
-    const value = load();
-    const memo = { expiresAt: now + SITEMAP_POLICY.memoMs, value };
-    pool.set(key, memo);
-    value.catch(() => {
-      if (pool.get(key) === memo) pool.delete(key);
-    });
-    return value;
-  }
+/**
+ * `lastmod` страницы: состав не изменился относительно прошлого поколения — прежний (или новее по строкам); изменился —
+ * момент сборки; прошлого поколения нет (первое в процессе) — максимум `updatedAt` строк.
+ */
+function lastmodOf(
+  page: Omit<PageBounds, 'lastmod'>,
+  before: PageBounds | undefined,
+  known: boolean,
+  builtAt: Date,
+): Date {
+  if (!known) return page.maxAt;
+  const same =
+    before !== undefined &&
+    before.after === page.after &&
+    before.last === page.last &&
+    before.count === page.count;
+  if (!same) return builtAt > page.maxAt ? builtAt : page.maxAt;
+  return before.lastmod > page.maxAt ? before.lastmod : page.maxAt;
 }

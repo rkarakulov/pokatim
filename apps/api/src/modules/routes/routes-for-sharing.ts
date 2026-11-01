@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { LonLat } from '@pokatim/contracts';
 
-import type { ChangedCursor, ChangedRow } from '../../changed-since';
+import type { ChangedCursor, ChangedRow, IdRange } from '../../changed-since';
 import { RideRoutesService } from './ride-routes';
 import type { RouteOgFacts, RoutesForSharing } from './routes-for-sharing.port';
 import { RoutesRepository } from './routes.repository';
@@ -38,7 +38,7 @@ export class RoutesForSharingService implements RoutesForSharing {
     return this.repository.changedForOg(after, limit);
   }
 
-  sitemapAfter(afterId: string | null, limit: number): Promise<ChangedRow[]> {
-    return this.repository.sitemapAfter(afterId, limit);
+  sitemapRange(range: IdRange, limit: number): Promise<ChangedRow[]> {
+    return this.repository.sitemapRange(range, limit);
   }
 }

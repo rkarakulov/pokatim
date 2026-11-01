@@ -1,6 +1,6 @@
 /*
- * Ответы API-маршрутов карты сайта (landing-seo, sitemap-index) — только web-сервер: `sitemap.xml+api.ts` (индекс),
- * `sitemap/static.xml+api.ts`, `sitemap/[kind]/[page]+api.ts`.
+ * Ответы API-маршрута карты сайта `sitemap.xml+api.ts` (landing-seo, sitemap-index): индекс и дочерние карты по query —
+ * только web-сервер.
  */
 
 /** XML карты: кэш 10 мин (у API — мемо 10 мин, у SSR-чтения — кэш процесса 60 с). */

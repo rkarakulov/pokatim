@@ -8,8 +8,11 @@ import {
   type ChangedCursor,
   changedAfter,
   type ChangedRow,
+  CHANGED_ROW_PROJECTION,
+  changedRows,
   ID_SORT,
-  idAfter,
+  type IdRange,
+  idWithin,
 } from '../../changed-since';
 import type { DbSession } from '../../db';
 import { calendarCollections, type CalendarStartDoc } from './calendar.collection';
@@ -144,16 +147,18 @@ export class CalendarRepository {
   }
 
   /**
-   * Опубликованные старты строго после `afterId` по `_id` ↑ (карта сайта, sitemap-index) — покрывающий индекс
-   * `calendar_starts_sitemap_idx`.
+   * Опубликованные старты диапазона `_id` ↑ (карта сайта, sitemap-index) — покрывающий индекс
+   * `calendar_starts_sitemap_idx`. Курсор — для `sitemapRange` и проверки плана в тесте.
    */
-  async sitemapAfter(afterId: string | null, limit: number): Promise<ChangedRow[]> {
-    const docs = await this.starts
-      .find({ status: 'published', ...idAfter(afterId) }, { projection: { _id: 1, updatedAt: 1 } })
+  sitemapCursor(range: IdRange, limit: number) {
+    return this.starts
+      .find({ status: 'published', ...idWithin(range) }, { projection: CHANGED_ROW_PROJECTION })
       .sort(ID_SORT)
-      .limit(limit)
-      .toArray();
-    return docs.map((doc) => ({ id: doc._id, updatedAt: doc.updatedAt }));
+      .limit(limit);
+  }
+
+  async sitemapRange(range: IdRange, limit: number): Promise<ChangedRow[]> {
+    return changedRows(await this.sitemapCursor(range, limit).toArray());
   }
 
   /** Опубликованный старт по id (публичная карточка). */

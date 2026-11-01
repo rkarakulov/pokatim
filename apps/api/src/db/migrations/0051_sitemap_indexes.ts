@@ -10,7 +10,7 @@ type IndexDef = { key: IndexSpecification; options: CreateIndexesOptions & { nam
 const SITEMAP_KEY = { status: 1, _id: 1, updatedAt: 1 } as const;
 
 /**
- * Карта сайта (sitemap-index): keyset публичных объектов по `_id` ↑ (`sitemapAfter` репозиториев) — без `SORT`;
+ * Карта сайта (sitemap-index): keyset публичных объектов по `_id` ↑ (`sitemapCursor` репозиториев) — без `SORT`;
  * у гонок и стартов покрывающий (`_id`, `updatedAt` из индекса), у маршрутов условия каталога — по документу.
  * Сезоны — по `_id_`.
  */

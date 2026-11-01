@@ -3,10 +3,8 @@ import { readdirSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 
 import { GET as robotsGet } from '../app/robots.txt+api';
-import { GET as sitemapPageGet } from '../app/sitemap/[kind]/[page]+api';
-import { GET as staticSitemapGet } from '../app/sitemap/static.xml+api';
-import { GET as sitemapGet } from '../app/sitemap.xml+api';
-import { parseSitemapPagePath, robotsTxt, SEO_DISALLOW, sitemapPageXml } from '../lib/seo';
+import { GET as sitemapRoute } from '../app/sitemap.xml+api';
+import { parseSitemapQuery, robotsTxt, SEO_DISALLOW, sitemapPageXml } from '../lib/seo';
 import { resetPublicSsrCache } from '../lib/public-ssr';
 
 /**
@@ -134,11 +132,11 @@ function expectUnavailable(res: Response) {
   expect(res.headers.get('Cache-Control')).toBe('no-store');
 }
 
-const pageGet = (kind: string, page: string) =>
-  sitemapPageGet(new Request(`${ORIGIN}/sitemap/${kind}/${page}`), { kind, page });
+/** `GET /sitemap.xml<query>`. */
+const sitemap = (query = '') => sitemapRoute(new Request(`${ORIGIN}/sitemap.xml${query}`));
 
 describe('sitemap.xml — индекс (sitemap-index, AC1)', () => {
-  it('static.xml и страницы API — абсолютные loc от WEB_ORIGIN, lastmod (кроме сезона)', async () => {
+  it('static и страницы API — абсолютные loc в корне сайта, & экранирован, lastmod (кроме сезона)', async () => {
     fetchMock.mockImplementation(() =>
       json(200, {
         pages: [
@@ -149,24 +147,24 @@ describe('sitemap.xml — индекс (sitemap-index, AC1)', () => {
         ],
       }),
     );
-    const res = await sitemapGet();
+    const res = await sitemap();
     expect(fetchMock).toHaveBeenCalledWith(`${API}/v1/sitemap`, expect.anything());
     await expectXml(res, [
       ...XML_HEAD,
-      `<sitemap><loc>${ORIGIN}/sitemap/static.xml</loc></sitemap>`,
-      `<sitemap><loc>${ORIGIN}/sitemap/race/1.xml</loc><lastmod>2026-10-29</lastmod></sitemap>`,
-      `<sitemap><loc>${ORIGIN}/sitemap/race/2.xml</loc><lastmod>2026-10-30</lastmod></sitemap>`,
-      `<sitemap><loc>${ORIGIN}/sitemap/season/1.xml</loc></sitemap>`,
-      `<sitemap><loc>${ORIGIN}/sitemap/calendar/1.xml</loc><lastmod>2026-10-29</lastmod></sitemap>`,
+      `<sitemap><loc>${ORIGIN}/sitemap.xml?kind=static</loc></sitemap>`,
+      `<sitemap><loc>${ORIGIN}/sitemap.xml?kind=race&amp;page=1</loc><lastmod>2026-10-29</lastmod></sitemap>`,
+      `<sitemap><loc>${ORIGIN}/sitemap.xml?kind=race&amp;page=2</loc><lastmod>2026-10-30</lastmod></sitemap>`,
+      `<sitemap><loc>${ORIGIN}/sitemap.xml?kind=season&amp;page=1</loc></sitemap>`,
+      `<sitemap><loc>${ORIGIN}/sitemap.xml?kind=calendar&amp;page=1</loc><lastmod>2026-10-29</lastmod></sitemap>`,
       '</sitemapindex>',
     ]);
   });
 
-  it('объектов нет — индекс с одной static.xml', async () => {
+  it('объектов нет — индекс с одной картой static', async () => {
     fetchMock.mockImplementation(() => json(200, { pages: [] }));
-    await expectXml(await sitemapGet(), [
+    await expectXml(await sitemap(), [
       ...XML_HEAD,
-      `<sitemap><loc>${ORIGIN}/sitemap/static.xml</loc></sitemap>`,
+      `<sitemap><loc>${ORIGIN}/sitemap.xml?kind=static</loc></sitemap>`,
       '</sitemapindex>',
     ]);
   });
@@ -178,22 +176,21 @@ describe('sitemap.xml — индекс (sitemap-index, AC1)', () => {
     ]) {
       resetPublicSsrCache();
       fetchMock.mockImplementation(reply);
-      expectUnavailable(await sitemapGet());
+      expectUnavailable(await sitemap());
     }
   });
 
   it('без WEB_ORIGIN — 404 без запроса к API', async () => {
     delete process.env.WEB_ORIGIN;
-    expect((await sitemapGet()).status).toBe(404);
-    expect(staticSitemapGet().status).toBe(404);
-    expect((await pageGet('race', '1.xml')).status).toBe(404);
+    for (const query of ['', '?kind=static', '?kind=race&page=1'])
+      expect([query, (await sitemap(query)).status]).toEqual([query, 404]);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 
-describe('sitemap/static.xml (sitemap-index)', () => {
+describe('sitemap.xml?kind=static (sitemap-index)', () => {
   it('лендинг /welcome без API', async () => {
-    await expectXml(staticSitemapGet(), [
+    await expectXml(await sitemap('?kind=static'), [
       ...URLSET_HEAD,
       `<url><loc>${ORIGIN}/welcome</loc></url>`,
       '</urlset>',
@@ -202,10 +199,10 @@ describe('sitemap/static.xml (sitemap-index)', () => {
   });
 });
 
-describe('sitemap/<kind>/<n>.xml (sitemap-index, AC2)', () => {
+describe('sitemap.xml?kind=<вид>&page=<n> (sitemap-index, AC2)', () => {
   it('объекты страницы API — URL страниц вида, lastmod (кроме сезона)', async () => {
     fetchMock.mockImplementation(() => json(200, { items: [{ id: RACE, updatedAt: AT }] }));
-    const res = await pageGet('race', '2.xml');
+    const res = await sitemap('?kind=race&page=2');
     expect(fetchMock).toHaveBeenCalledWith(`${API}/v1/sitemap/race/2`, expect.anything());
     await expectXml(res, [
       ...URLSET_HEAD,
@@ -222,34 +219,38 @@ describe('sitemap/<kind>/<n>.xml (sitemap-index, AC2)', () => {
     ] as const) {
       resetPublicSsrCache();
       fetchMock.mockImplementation(() => json(200, { items: [{ id, updatedAt: AT }] }));
-      expect(await (await pageGet(kind, '1.xml')).text()).toContain(
+      expect(await (await sitemap(`?kind=${kind}&page=1`)).text()).toContain(
         `<url><loc>${ORIGIN}${loc}</loc>${lastmod ? '<lastmod>2026-10-29</lastmod>' : ''}</url>`,
       );
     }
   });
 
-  it('чужой вид, номер 0, ведущий ноль, без .xml, лишнее — 404 без запроса', async () => {
-    for (const [kind, page] of [
-      ['ride', '1.xml'],
-      ['rider', '1.xml'],
-      ['race', '0.xml'],
-      ['race', '01.xml'],
-      ['race', '1'],
-      ['race', '1.xml.gz'],
-      ['race', '..%2F1.xml'],
+  it('чужой вид, номер 0, ведущий ноль, без номера, лишний или повторный параметр — 404 без запроса', async () => {
+    for (const query of [
+      '?kind=ride&page=1',
+      '?kind=rider&page=1',
+      '?kind=race&page=0',
+      '?kind=race&page=01',
+      '?kind=race&page=1.xml',
+      '?kind=race',
+      '?page=1',
+      '?kind=static&page=1',
+      '?kind=race&page=1&x=1',
+      '?kind=race&page=1&page=2',
+      '?kind=..%2Frace&page=1',
     ]) {
-      expect([kind, page, (await pageGet(kind!, page!)).status]).toEqual([kind, page, 404]);
+      expect([query, (await sitemap(query)).status]).toEqual([query, 404]);
     }
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('страницы нет в индексе API — 404; API недоступен или не по контракту — 503', async () => {
     fetchMock.mockImplementation(() => json(404, { code: 'NOT_FOUND' }));
-    expect((await pageGet('race', '9.xml')).status).toBe(404);
+    expect((await sitemap('?kind=race&page=9')).status).toBe(404);
     for (const reply of [() => json(500, {}), () => json(200, { items: [{ id: 'x' }] })]) {
       resetPublicSsrCache();
       fetchMock.mockImplementation(reply);
-      expectUnavailable(await pageGet('race', '1.xml'));
+      expectUnavailable(await sitemap('?kind=race&page=1'));
     }
   });
 });
@@ -261,10 +262,12 @@ describe('seo: дочерние карты', () => {
     ).toContain(`<loc>https://x.by/?a=1&amp;b=&lt;2&gt;/races/${RACE}</loc>`);
   });
 
-  it('разбор пути: вид и номер; иное — null', () => {
-    expect(parseSitemapPagePath('route', '12.xml')).toEqual({ kind: 'route', page: 12 });
-    expect(parseSitemapPagePath('route', '1234567.xml')).toBeNull();
-    expect(parseSitemapPagePath(undefined, '1.xml')).toBeNull();
-    expect(parseSitemapPagePath('race', ['1.xml'])).toBeNull();
+  it('разбор query: индекс, static, страница; иное — null', () => {
+    const q = (query: string) => parseSitemapQuery(new URLSearchParams(query));
+    expect(q('')).toEqual({ type: 'index' });
+    expect(q('kind=static')).toEqual({ type: 'static' });
+    expect(q('kind=route&page=12')).toEqual({ type: 'page', kind: 'route', page: 12 });
+    expect(q('kind=route&page=1234567')).toBeNull();
+    expect(q('kind=static&kind=static')).toBeNull();
   });
 });
