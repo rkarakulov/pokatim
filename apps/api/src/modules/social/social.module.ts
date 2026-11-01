@@ -8,8 +8,10 @@ import { ProfileCoreModule } from '../profile';
 import { ResultsCoreModule } from '../results';
 import { RidesCoreModule } from '../rides';
 import { RoutesCoreModule } from '../routes';
+import { TracksCoreModule } from '../tracks';
 import { AttendanceRepository } from './attendance.repository';
 import { SocialAttendanceService } from './attendance.service';
+import { AutoAttendanceIntake } from './auto-attendance-intake';
 import { ConnectionsRepository } from './connections.repository';
 import { SocialConnectionsService } from './connections.service';
 import { InviteCodeController } from './invite-code.controller';
@@ -17,6 +19,8 @@ import { InviteCodesRepository } from './invite-codes.repository';
 import { InviteCodes } from './invite-codes.service';
 import { InviteIntake } from './invite-intake';
 import { ReactionsRepository } from './reactions.repository';
+import { LoggingRideAskDue, RIDE_ASK_DUE } from './ride-ask.port';
+import { RideAskSweep } from './ride-ask-sweep';
 import { RideParticipantsController } from './ride-participants.controller';
 import { SocialRideParticipantsService } from './ride-participants.service';
 import { SocialReactionsService } from './reactions.service';
@@ -27,6 +31,7 @@ import { RiderSocialService } from './rider-social.service';
 import { SocialConnectionsController } from './social-connections.controller';
 import { SocialErasure } from './social-erasure';
 import { SocialIntakeProcessor } from './social-intake.processor';
+import { SocialMaintenanceProcessor, SocialSchedules } from './social-maintenance.processor';
 
 /**
  * Ядро «Свои» без HTTP (ADR-0027): единственные писатели связей, явки, реакций и кодов приглашений, сервисы домена и
@@ -55,6 +60,8 @@ import { SocialIntakeProcessor } from './social-intake.processor';
     SocialRideParticipantsService,
     // порт кодов приглашений: адрес на карточке `sharing` (RC-P6-4) и intake приглашений (P6)
     InviteCodes,
+    // захват «Как прошёл райд?» регламента `SocialWorkerModule` (P5); вне модуля `social` не уходит
+    AttendanceRepository,
   ],
 })
 export class SocialCoreModule {}
@@ -86,15 +93,27 @@ export class SocialCoreModule {}
 export class SocialModule {}
 
 /**
- * Задачи «Свои» в worker (якорь `WorkerModule`, RC-13): `social-intake` — приглашения (P6), автоявка (P5);
- * `social-maintenance` — P7. Живость аккаунтов — порт `IdentityAccounts`.
+ * Задачи «Свои» в worker (якорь `WorkerModule`, RC-13): `social-intake` — приглашения (P6), автоявка (P5: порты
+ * `ACTIVITY_STARTS`, `RIDES_FOR_SOCIAL`); `social-maintenance` — отбор «Как прошёл райд?» P5, отправка P7 (точка
+ * `RIDE_ASK_DUE`, до P7 — заглушка `LoggingRideAskDue`). Живость аккаунтов — порт `IdentityAccounts`.
  */
 @Module({
   imports: [
     SocialCoreModule,
     IdentityAccountsModule,
-    BullModule.registerQueue({ name: QUEUE.socialIntake }),
+    TracksCoreModule,
+    RidesCoreModule,
+    BullModule.registerQueue({ name: QUEUE.socialIntake }, { name: QUEUE.socialMaintenance }),
   ],
-  providers: [InviteIntake, SocialIntakeProcessor],
+  providers: [
+    InviteIntake,
+    SocialIntakeProcessor,
+    AutoAttendanceIntake,
+    RideAskSweep,
+    LoggingRideAskDue,
+    { provide: RIDE_ASK_DUE, useExisting: LoggingRideAskDue },
+    SocialMaintenanceProcessor,
+    SocialSchedules,
+  ],
 })
 export class SocialWorkerModule {}

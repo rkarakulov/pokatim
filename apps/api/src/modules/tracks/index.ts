@@ -38,3 +38,5 @@ export {
 export { TrackErasure } from './track-erasure';
 /** Порт «Обзора» панели (admin-overview): загрузки заездов за период. */
 export { TracksOverview } from './tracks-overview';
+/** Порт для `social` (автоявка, ADR-0027 п. 4, P5): старт основной группы дублей активности. */
+export { ACTIVITY_STARTS, type ActivityStart, type ActivityStarts } from './activity-starts.port';
