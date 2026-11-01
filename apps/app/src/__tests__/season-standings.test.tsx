@@ -280,11 +280,12 @@ describe('таблица сезона на экране сезона (08c)', () 
     await fireEvent.press(block().getByRole('button', { name: 'Показать ещё' }));
     expect(await block().findByText('Новый лидер')).toBeOnTheScreen();
     expect(block().queryByText('Анна К.')).toBeNull();
-    expect(getTable).toHaveBeenLastCalledWith(SEASON_ID, {
-      bikeClass: 'road',
-      group: 'm_u40',
-      limit: 50,
-    });
+    // сброс снимка — в обход HTTP-кэша на всех платформах (iOS NSURLCache, small-followups-api)
+    expect(getTable).toHaveBeenLastCalledWith(
+      SEASON_ID,
+      { bikeClass: 'road', group: 'm_u40', limit: 50 },
+      { fresh: true },
+    );
   });
 
   it('таблицы нет в снимке (RC-12) — пустая таблица без ошибки', async () => {

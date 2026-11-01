@@ -109,6 +109,16 @@ if ! grep -q 'GLIBC_TUNABLES' "${WORK}/base/docker-compose.yml"; then
   mv "${WORK}/base/docker-compose.rseq.yml" "${WORK}/base/docker-compose.yml"
   grep -q 'GLIBC_TUNABLES' "${WORK}/base/docker-compose.yml" || fail 'обход rseq не добавлен в compose базовой ветки'
 fi
+# новые обязательные секреты ветки (`@secret` в её env.template, которых нет в базовой): образы стека (а) — этой ветки,
+# а compose и шаблон — базовой ветки, которая их не передаёт (старый образ на сервере их не требует). Стеку (а) —
+# фиктивное значение прямо в окружении api; в .env ключа нет — проверка (б) «новый секрет сгенерирован» настоящая.
+for name in $(grep -oE '^[A-Z0-9_]+=@secret' "${REPO}/infra/deploy/env.template" | cut -d= -f1); do
+  grep -q "^${name}=" "${WORK}/base/env.template" && continue
+  awk -v line="  ${name}: rehearsal-base-placeholder-0000000000000000" '{ print } /^x-api-env: &api-env/ { print line }' \
+    "${WORK}/base/docker-compose.yml" >"${WORK}/base/docker-compose.secret.yml"
+  mv "${WORK}/base/docker-compose.secret.yml" "${WORK}/base/docker-compose.yml"
+  grep -q "^  ${name}: " "${WORK}/base/docker-compose.yml" || fail "секрет ${name} не добавлен в compose базовой ветки"
+done
 run_deploy "${WORK}/base/deploy.sh" base || {
   show_log base 80
   diagnose
