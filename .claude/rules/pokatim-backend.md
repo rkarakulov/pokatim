@@ -692,6 +692,20 @@ RC-A1, ADR-0019).
   `RouteRidesModule` (`ProfileCoreModule`); `RouteRidesCoreModule` (account, achievements, worker) о `profile` не
   знает. Правила — `ROUTE_RIDE_LEADERBOARD_POLICY`; скан читает `scanRiders + 1` — лог
   `route_rides.leaderboard_truncated` только при фактическом усечении.
+- Участки маршрута (route-rides-05, `docs/product/routes.md` U1–U4): разбиение — `routeSections(line, widthM)`
+  (`packages/tracks/src/corridor/sections.ts`, чистая, только серверный вход): границы через 10 км по chainage
+  `matchLine`, хвост < 5 км — к последнему, < 15 км или > 30 участков — `[]`, концы участка ≤ `2·corridorGateRadiusM +
+  50` м или линия, снова подходящая к своему началу/концу ближе этого (`returnsTo`, Q1: движок завершает попытку на
+  повторном входе в ворота), — слияние с соседним; < 2 после слияний — без участков (разворот внутри участка), разворот
+  на границе — участки есть. Сверка — `analyzeSections` (белый список `PARSE_FUNCTIONS`): неизменённые
+  `prepareCorridor`/`matchCorridor` на подлиниях (`sectionLine`, `isLoop: false`), файл разбирается один раз; версия —
+  `ROUTE_SECTIONS_VERSION`, отдельно от `CORRIDOR_ENGINE_VERSION` (движок и golden не меняются). В `RouteRideEvaluator`
+  — второй вызов потока **после** итога движка: `evaluate(ride, { sections })`, ручная проверка — `always`,
+  автопроверка — `ifPassed` (RC-9: без итога движка — `sections: null`); маршрут `distanceM` < 15 км — пусто без потока
+  (RC-8); отказ потока — `failure` тем же маппингом `THREAD_FAILURES`, исключение — `failure: 'error'` без ретрая
+  (RC-10: вердикт маршрута уже получен). «Лучший» и дельты участков — на чтении: `sectionsOf` (`route-rides.policy.ts`,
+  те же `fromM/toM` и версия, ключ — `compareRides`, только видимые свои заезды), `detail.sections` — только у
+  `passed`/`not_passed`. Лог — `route-ride <id> sections: <n> items, <k> passed[, failure <code>] in <T> ms`.
 
 ## Уведомления (`notifications`, ADR-0017)
 

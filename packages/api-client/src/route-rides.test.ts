@@ -106,6 +106,24 @@ describe('приложение: заезд по маршруту (route-rides-01
     expect(client.calls[0]?.headers.get('authorization')).toBe('Bearer access');
   });
 
+  it('деталь (route-rides-05): старый ответ без участков → sections []; участки разбираются', async () => {
+    await expect(app(200, detail).api.getRouteRide('access', ROUTE, RIDE)).resolves.toMatchObject({
+      sections: [],
+    });
+    const section = {
+      fromM: 0,
+      toM: 10_000,
+      status: 'future',
+      elapsedSec: null,
+      isBest: false,
+      bestElapsedSec: null,
+      deltaToBestSec: null,
+    };
+    await expect(
+      app(200, { ...detail, sections: [section] }).api.getRouteRide('access', ROUTE, RIDE),
+    ).resolves.toMatchObject({ sections: [{ ...section, status: 'unknown' }] });
+  });
+
   it('невалидный ответ и 409 — ошибка', async () => {
     const invalid = app(200, { ...detail, id: 'x' });
     await expect(invalid.api.getRouteRide('access', ROUTE, RIDE)).rejects.toBeDefined();

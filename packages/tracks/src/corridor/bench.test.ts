@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   analyzeAttempt,
+  analyzeSections,
   encodeTrackStream,
   TrackParseError,
   type TrackStreamV1,
@@ -31,12 +32,19 @@ const TIME_LIMIT_MS = 3000 * CI_BUDGET_FACTOR;
  * таймаута потока разбора (30 с), а не бюджет обычного трека. На CI машина в ~8–10 раз медленнее локальной.
  */
 const ADVERSARIAL_TIME_LIMIT_MS = 8000 * CI_BUDGET_FACTOR;
+/**
+ * Участки маршрута (route-rides-05): 30 прогонов движка (предел участков) по всему треку 50 000 точек на маршруте
+ * 300 км. Замер локально ≈ 550–600 мс (и в полном наборе пакета под load ≈ 13), но под параллельным `pnpm check`
+ * (turbo: jest/vitest других пакетов) — до 5,5 с; бюджет — как у худшего случая (`ADVERSARIAL_TIME_LIMIT_MS`): запас до
+ * таймаута потока 30 с, исход которого изолирован (`sections.failure: 'timeout'`, вердикт маршрута не меняется).
+ */
+const SECTIONS_TIME_LIMIT_MS = ADVERSARIAL_TIME_LIMIT_MS;
 const MEMORY_LIMIT_BYTES = 64 * 1024 * 1024 * CI_BUDGET_FACTOR;
 
-/** Маршрут 200 км «змейкой»: 20 × (9,5 км на восток/запад + 0,5 км на север); вершины линии — раз в 100 м. */
-function longRoute(): Xy[] {
+/** Маршрут `legs × 10` км «змейкой»: legs × (9,5 км на восток/запад + 0,5 км на север); вершины — раз в 100 м. */
+function longRoute(legs = 20): Xy[] {
   const corners: Xy[] = [[0, 0]];
-  for (let i = 0; i < 20; i += 1) {
+  for (let i = 0; i < legs; i += 1) {
     const [x, y] = corners[corners.length - 1]!;
     const east = i % 2 === 0 ? 9500 : -9500;
     corners.push([x + east, y], [x + east, y + 500]);
@@ -326,5 +334,35 @@ describe('AC14: длинный трек — 200 000 точек на маршру
     expect(match.segment!.offCorridorM).toBe(0);
     expect(elapsedMs).toBeLessThanOrEqual(ADVERSARIAL_TIME_LIMIT_MS);
     process.stdout.write(`стоянка у края коридора: ${Math.round(elapsedMs)} мс\n`);
+  }, 60_000);
+
+  it(`analyzeSections: маршрут 300 км (30 участков — предел) × 50 000 точек ≤ ${SECTIONS_TIME_LIMIT_MS} мс`, () => {
+    const route300 = longRoute(30);
+    const total = polylineLength(route300);
+    const sectionPoints = 50_000;
+    const bytes = encodeTrackStream({
+      v: 1,
+      provider: 'garmin',
+      sport: 'road_cycling',
+      hasHeartRate: false,
+      hasPower: false,
+      points: Array.from({ length: sectionPoints }, (_, k) => {
+        const [lon, lat] = at(pointAt(route300, (k * total) / (sectionPoints - 1)));
+        return [T0 + k * 1000, lat, lon, null];
+      }),
+    });
+    const startedAt = performance.now();
+    const result = analyzeSections(
+      bytes,
+      'stream',
+      corridorOf(route300),
+      window,
+      new Date(T0 + 3 * 86_400_000),
+    );
+    const elapsedMs = performance.now() - startedAt;
+    expect(result.items).toHaveLength(30);
+    expect(result.items.every((item) => item.verdict === 'counted')).toBe(true);
+    expect(elapsedMs).toBeLessThanOrEqual(SECTIONS_TIME_LIMIT_MS);
+    process.stdout.write(`analyzeSections 300 км × 50k: ${Math.round(elapsedMs)} мс\n`);
   }, 60_000);
 });

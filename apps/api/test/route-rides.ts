@@ -1,3 +1,4 @@
+import type { CorridorGeometry } from '@pokatim/tracks';
 import type { OutboxJobData } from '@rkarakulov/api-kit/core';
 import { uuidv7 } from '@rkarakulov/api-kit/mongo';
 import type { Job } from 'bullmq';
@@ -87,6 +88,126 @@ export async function ownCorridorRoute(
     });
   }
   return id;
+}
+
+/** Длинные маршруты участков (route-rides-05): линия 25,5 км на север или «туда-обратно» 2 × 15 км. */
+export type LongRouteKind = 'line' | 'outAndBack';
+
+/** Метров в градусе меридиана (сфера `haversineMeters`). */
+const M_LAT = (6_371_008.8 * Math.PI) / 180;
+const [LON0, LAT0] = CORRIDOR.line[0]!;
+const M_LON = M_LAT * Math.cos((LAT0 * Math.PI) / 180);
+/** Точка [lon, lat] по смещению в метрах от старта эталона (x — восток, y — север). */
+const lonLatOf = ([x, y]: [number, number]): [number, number] => [
+  LON0 + x / M_LON,
+  LAT0 + y / M_LAT,
+];
+
+/** Ломаная по углам с вершинами раз в 100 м. */
+function densePath(corners: readonly [number, number][]): [number, number][] {
+  const points: [number, number][] = [corners[0]!];
+  for (let i = 1; i < corners.length; i += 1) {
+    const [ax, ay] = corners[i - 1]!;
+    const [bx, by] = corners[i]!;
+    const length = Math.hypot(bx - ax, by - ay);
+    for (let d = 100; d < length; d += 100) {
+      points.push([ax + ((bx - ax) * d) / length, ay + ((by - ay) * d) / length]);
+    }
+    points.push(corners[i]!);
+  }
+  return points;
+}
+
+const LONG_ROUTES: Record<LongRouteKind, { corners: [number, number][]; isLoop: boolean }> = {
+  // участки 0–10, 10–20, 20–25,5 км
+  line: {
+    corners: [
+      [0, 0],
+      [0, 25_500],
+    ],
+    isLoop: false,
+  },
+  // участок с разворотом проходит у своих ворот — слияния до одного участка, участков нет (§8.2 Q1)
+  outAndBack: {
+    corners: [
+      [0, 0],
+      [0, 15_000],
+      [0, 0],
+    ],
+    isLoop: true,
+  },
+};
+
+/** Геометрия длинного маршрута (линия сверки = линия показа). */
+export function longGeometry(kind: LongRouteKind): Omit<CorridorGeometry, 'widthM'> {
+  const { corners, isLoop } = LONG_ROUTES[kind];
+  const line = densePath(corners).map(lonLatOf);
+  let distanceM = 0;
+  for (let i = 1; i < corners.length; i += 1) {
+    distanceM += Math.hypot(
+      corners[i]![0] - corners[i - 1]![0],
+      corners[i]![1] - corners[i - 1]![1],
+    );
+  }
+  return { line, isLoop, distanceM };
+}
+
+/** Маршрут команды в каталоге с длинной линией (≥ 25 км, есть участки). */
+export async function longCorridorRoute(
+  h: Harness,
+  ownerUserId: string,
+  kind: LongRouteKind = 'line',
+): Promise<string> {
+  const id = await corridorRoute(h, ownerUserId, longGeometry(kind));
+  await routesDb(h).routes.updateOne(
+    { _id: id },
+    { $set: { catalog: { city: 'minsk', surfaces: ['asphalt'], publishedAt: h.clock.now() } } },
+  );
+  return id;
+}
+
+/**
+ * Синтетический GPX заезда по длинному маршруту (без фикстур-файлов): с 95 м до старта через весь маршрут и 95 м за
+ * финиш (у «туда-обратно» — в сторону), точка раз в 5 с, 8 м/с; `stopAtM` — остановка на этом метре маршрута.
+ */
+export function longRideGpx(
+  kind: LongRouteKind,
+  startAt: Date,
+  { stopAtM }: { stopAtM?: number } = {},
+): Buffer {
+  const { corners } = LONG_ROUTES[kind];
+  const path: [number, number][] = [[0, -95], ...corners];
+  const [ex, ey] = corners.at(-1)!;
+  path.push(kind === 'line' ? [ex, ey + 95] : [ex - 95, ey]);
+  const lengths = path.slice(1).map((p, i) => Math.hypot(p[0] - path[i]![0], p[1] - path[i]![1]));
+  const total = lengths.reduce((sum, length) => sum + length, 0);
+  const end = stopAtM === undefined ? total : Math.min(total, stopAtM + 95);
+  const at = (along: number): [number, number] => {
+    let rest = along;
+    for (let i = 0; i < lengths.length; i += 1) {
+      if (rest <= lengths[i]! || i === lengths.length - 1) {
+        const u = rest / lengths[i]!;
+        const [ax, ay] = path[i]!;
+        const [bx, by] = path[i + 1]!;
+        return [ax + (bx - ax) * u, ay + (by - ay) * u];
+      }
+      rest -= lengths[i]!;
+    }
+    return path[0]!;
+  };
+  const points: string[] = [];
+  for (let k = 0; k * 40 <= end; k += 1) {
+    const [lon, lat] = lonLatOf(at(k * 40));
+    const time = new Date(startAt.getTime() + k * 5000).toISOString();
+    points.push(
+      `<trkpt lat="${lat.toFixed(8)}" lon="${lon.toFixed(8)}"><time>${time}</time></trkpt>`,
+    );
+  }
+  return Buffer.from(
+    '<?xml version="1.0" encoding="UTF-8"?>\n' +
+      '<gpx version="1.1" creator="pokatim tests" xmlns="http://www.topografix.com/GPX/1/1">' +
+      `<trk><name>Длинный заезд</name><type>cycling</type><trkseg>${points.join('')}</trkseg></trk></gpx>`,
+  );
 }
 
 /** Задача outbox для прямого вызова процессора `route-rides`. */

@@ -1,6 +1,11 @@
 import { readFileSync } from 'node:fs';
 
-import type { CorridorMatch, RouteAnalysis, RouteDerived } from '@pokatim/tracks/parse';
+import type {
+  CorridorMatch,
+  RouteAnalysis,
+  RouteDerived,
+  RouteSectionsAnalysis,
+} from '@pokatim/tracks/parse';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -146,6 +151,30 @@ describe('runParseThread', { timeout: 20_000 }, () => {
         DEFAULT_PARSE_LIMITS,
       ),
     ).resolves.toEqual({ ok: false, code: 'corridor_invalid' });
+  });
+
+  it('analyzeSections в потоке (route-rides-05): в белом списке; короткий маршрут — участков нет без разбора', async () => {
+    const window = {
+      startsAt: new Date('2026-06-14T05:00:00Z'),
+      closesAt: new Date('2026-06-21T06:00:00Z'),
+    };
+    const corridor = {
+      line: [
+        [27.559, 53.9006],
+        [27.60479122, 53.9006],
+        [27.60479122, 53.94556605],
+      ],
+      widthM: 50,
+      isLoop: false,
+      distanceM: 8000,
+    };
+    await expect(
+      runParseThread<RouteSectionsAnalysis>(
+        'analyzeSections',
+        [new Uint8Array([1, 2, 3]), 'gpx', corridor, window, new Date('2026-10-27T00:00:00Z')],
+        DEFAULT_PARSE_LIMITS,
+      ),
+    ).resolves.toEqual({ ok: true, result: { version: 1, items: [] } });
   });
 
   it('семафор: одновременно не больше PARSE_THREADS_MAX потоков, остальные ждут (FIFO)', async () => {

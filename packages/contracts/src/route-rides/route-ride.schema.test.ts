@@ -7,6 +7,8 @@ import {
   ROUTE_RIDE_LEADERBOARD_MAX,
   ROUTE_RIDE_MAX_PER_ROUTE,
   ROUTE_RIDE_ORIGINS,
+  ROUTE_RIDE_SECTION_STATUSES,
+  ROUTE_RIDE_SECTIONS_MAX,
   ROUTE_RIDE_STATUSES,
   RouteRideCandidates,
   RouteRideDetail,
@@ -111,6 +113,40 @@ describe('заезд по маршруту (route-rides-01): контракты'
     expect(fresh.origin).toBe('auto');
     expect(RouteRideDetail.parse({ ...detail, origin: 'x' }).origin).toBe('unknown');
     expect(RouteRideDetail.safeParse({ ...detail, activityId: 'nope' }).success).toBe(false);
+  });
+
+  it('деталь (route-rides-05): участки — аддитивно, старый ответ → [], статус tolerantEnum, ≤ 30', () => {
+    expect(ROUTE_RIDE_SECTION_STATUSES).toEqual(['passed', 'not_passed']);
+    expect(ROUTE_RIDE_SECTIONS_MAX).toBe(30);
+    expect(RouteRideDetail.parse(detail).sections).toEqual([]);
+    const section = {
+      fromM: 0,
+      toM: 10_000,
+      status: 'passed',
+      elapsedSec: 1200,
+      isBest: true,
+      bestElapsedSec: 1200,
+      deltaToBestSec: 0,
+    };
+    expect(RouteRideDetail.parse({ ...detail, sections: [section] }).sections).toEqual([section]);
+    expect(
+      RouteRideDetail.parse({ ...detail, sections: [{ ...section, status: 'x' }] }).sections[0]
+        ?.status,
+    ).toBe('unknown');
+    const notPassed = {
+      ...section,
+      status: 'not_passed',
+      elapsedSec: null,
+      isBest: false,
+      deltaToBestSec: null,
+    };
+    expect(RouteRideDetail.safeParse({ ...detail, sections: [notPassed] }).success).toBe(true);
+    expect(
+      RouteRideDetail.safeParse({ ...detail, sections: Array(31).fill(section) }).success,
+    ).toBe(false);
+    expect(
+      RouteRideDetail.safeParse({ ...detail, sections: [{ ...section, fromM: 0.5 }] }).success,
+    ).toBe(false);
   });
 
   it('запрос — ровно одно поле: activityId или uploadId (UUID)', () => {

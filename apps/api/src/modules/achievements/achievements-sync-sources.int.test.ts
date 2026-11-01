@@ -210,6 +210,7 @@ describe('RIDER_ROUTE_RIDES.passedRidersAfter — засчитанные зае�
         engineVersion: 1,
         trackMap: null,
         checkedAt: ago(10),
+        sections: null,
       },
       ago(3),
     );

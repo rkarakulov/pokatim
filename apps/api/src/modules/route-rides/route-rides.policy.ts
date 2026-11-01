@@ -3,6 +3,7 @@ import type {
   AttemptRejection,
   RouteRideCandidate,
   RouteRideRef,
+  RouteRideSection,
 } from '@pokatim/contracts';
 import { boundsNear, type Bounds } from '@pokatim/tracks';
 import { uuidv7 } from '@rkarakulov/api-kit/mongo';
@@ -275,6 +276,53 @@ export function comparisonOf(rides: readonly RouteRideFacts[], ride: RouteRideFa
   };
 }
 
+/**
+ * Участки заезда со сравнением (route-rides-05, U3): для каждого участка — пройденные участки с теми же `fromM`/`toM`
+ * у своих заездов с той же версией разбиения (включая этот; маршрут может быть «Не пройден»), лучший — `compareRides`
+ * (время участка → дата заезда → `_id`). `isBest` и `deltaToBestSec` — только у `passed`; `bestElapsedSec` — у
+ * любого статуса, если есть пройденный. Нет участков (поля нет, `null`, отказ) — `[]`. `rides` — видимые заезды.
+ */
+export function sectionsOf(
+  rides: readonly RouteRideFacts[],
+  ride: RouteRideFacts,
+): RouteRideSection[] {
+  const own = ride.sections;
+  if (!own) return [];
+  const pool = rides.some((other) => other._id === ride._id) ? rides : [...rides, ride];
+  return own.items.map((item): RouteRideSection => {
+    const keys: RideRankKey[] = [];
+    for (const other of pool) {
+      if (other.sections?.version !== own.version) continue;
+      const same = other.sections.items.find(
+        (candidate) =>
+          candidate.fromM === item.fromM &&
+          candidate.toM === item.toM &&
+          candidate.status === 'passed' &&
+          candidate.elapsedSec !== null,
+      );
+      if (same) {
+        keys.push({
+          elapsedSec: same.elapsedSec!,
+          startedAt: other.activity.startedAt,
+          id: other._id,
+        });
+      }
+    }
+    keys.sort(compareRides);
+    const best = keys[0] ?? null;
+    const elapsedSec = item.status === 'passed' ? item.elapsedSec : null;
+    return {
+      fromM: item.fromM,
+      toM: item.toM,
+      status: item.status,
+      elapsedSec,
+      isBest: elapsedSec !== null && best?.id === ride._id,
+      bestElapsedSec: best?.elapsedSec ?? null,
+      deltaToBestSec: elapsedSec !== null && best ? elapsedSec - best.elapsedSec : null,
+    };
+  });
+}
+
 /** Сводка: все видимые заезды, пройденные, лучший. */
 export function summaryOf(rides: readonly RouteRideFacts[]) {
   const best = bestOf(rides);
@@ -369,6 +417,7 @@ export function newRideDoc(input: {
     engineVersion: null,
     trackMap: null,
     checkedAt: null,
+    sections: null,
     ...result,
     createdAt: now,
     updatedAt: now,

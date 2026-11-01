@@ -9,8 +9,9 @@ import { haversineMeters, trackLengthMeters } from './geo.ts';
 import { parseGpx } from './gpx.ts';
 import { parseKml } from './kml.ts';
 import { kmlFromKmz } from './kmz.ts';
-import { matchCorridorDetailed } from './corridor/match.ts';
+import { matchCorridor, matchCorridorDetailed } from './corridor/match.ts';
 import { prepareCorridor } from './corridor/prepare.ts';
+import { ROUTE_SECTIONS_VERSION, routeSections, sectionLine } from './corridor/sections.ts';
 import { trackMapOf, type TrackMap } from './corridor/track-map.ts';
 import type { CorridorMatch, MatchWindow } from './corridor/types.ts';
 import { checkPlausibility } from './plausibility.ts';
@@ -84,6 +85,13 @@ export { routeGpx } from './route-gpx.ts';
 export { routeKml } from './route-kml.ts';
 export { ROUTE_TCX_PACE_KMH, ROUTE_TCX_START, routeTcx } from './route-tcx.ts';
 export { CorridorError, prepareCorridor } from './corridor/prepare.ts';
+export {
+  ROUTE_SECTION_POLICY,
+  ROUTE_SECTIONS_VERSION,
+  routeSections,
+  sectionLine,
+  type RouteSection,
+} from './corridor/sections.ts';
 export {
   CORRIDOR_REJECTIONS,
   type CorridorMatch,
@@ -397,4 +405,57 @@ export function analyzeSeries(
 ): DisputeSeries {
   const { points } = loadTrack(bytes, format, now);
   return buildSeries(points, window);
+}
+
+/** Итог сверки одного участка маршрута (route-rides-05). */
+export interface RouteSectionResult {
+  /** м по линии сверки от старта (целые) */
+  fromM: number;
+  toM: number;
+  verdict: 'counted' | 'rejected';
+  /** время участка, с — только у `counted` */
+  elapsedSec: number | null;
+}
+
+/** Итог сверки участков: `ROUTE_SECTIONS_VERSION`, участки по порядку (`[]` — у маршрута участков нет). */
+export interface RouteSectionsAnalysis {
+  version: number;
+  items: RouteSectionResult[];
+}
+
+/**
+ * Сверка участков маршрута для worker (route-rides-05, U2) — отдельный вызов потока разбора после основной сверки:
+ * `routeSections(corridor.line, corridor.widthM)` → участков нет — итог без разбора файла; иначе `loadTrack` один раз
+ * → по участку неизменённые `prepareCorridor` (подлиния, `isLoop: false`) и `matchCorridor` (подготовленный коридор
+ * участка не копится). Движок, его версия и golden не меняются — версия участков `ROUTE_SECTIONS_VERSION`. Ошибки
+ * файла — `TrackParseError`; нарушение инвариантов коридора участка — `CorridorError` (весь набор отвергается).
+ * Результат сериализуем, без координат и времени точек.
+ */
+export function analyzeSections(
+  bytes: Uint8Array,
+  format: TrackFormat,
+  corridor: CorridorGeometry,
+  window: MatchWindow,
+  now: Date,
+): RouteSectionsAnalysis {
+  const sections = routeSections(corridor.line, corridor.widthM);
+  if (sections.length === 0) return { version: ROUTE_SECTIONS_VERSION, items: [] };
+  const { points } = loadTrack(bytes, format, now);
+  const items = sections.map(({ fromM, toM }): RouteSectionResult => {
+    const prepared = prepareCorridor({
+      line: sectionLine(corridor.line, fromM, toM),
+      widthM: corridor.widthM,
+      isLoop: false,
+      distanceM: toM - fromM,
+    });
+    const match = matchCorridor(points, prepared, window);
+    const counted = match.verdict === 'counted';
+    return {
+      fromM,
+      toM,
+      verdict: match.verdict,
+      elapsedSec: counted ? match.segment!.elapsedSec : null,
+    };
+  });
+  return { version: ROUTE_SECTIONS_VERSION, items };
 }
