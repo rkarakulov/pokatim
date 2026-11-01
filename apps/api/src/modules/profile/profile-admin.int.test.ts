@@ -44,8 +44,11 @@ afterAll(async () => {
 const NAME = 'Анна К.';
 const REASON = 'Оскорбительное имя';
 const resetUrl = (userId: string) => `/v1/admin/profiles/${userId}/name-reset`;
-const resetBy = (token: string | undefined, userId: string, body: unknown = { reason: REASON }) =>
-  panelCall(h, token, 'POST', resetUrl(userId), body);
+const resetBy = (
+  token: string | undefined,
+  userId: string,
+  body: unknown = { reason: 'other', comment: REASON },
+) => panelCall(h, token, 'POST', resetUrl(userId), body);
 async function setName(who: Rider, body: Record<string, unknown>) {
   const res = await call(h, 'PATCH', '/v1/profile', body, bearer(who.token));
   if (res.status !== 200) throw new Error(`PATCH /v1/profile: ${res.status}`);
@@ -133,10 +136,13 @@ describe('POST /v1/admin/profiles/:userId/name-reset (AC6)', () => {
   });
 
   it.each([
-    ['userId не Uuid', 'not-a-uuid', { reason: REASON }],
+    ['userId не Uuid', 'not-a-uuid', { reason: 'name' }],
     ['без причины', null, {}],
-    ['короткая причина', null, { reason: 'ab' }],
-    ['лишний ключ', null, { reason: REASON, publicName: null }],
+    ['свободный текст вместо кода', null, { reason: REASON }],
+    ['«Другое» без текста', null, { reason: 'other' }],
+    ['«Другое» с короткой причиной', null, { reason: 'other', comment: 'ab' }],
+    ['текст у не-«Другое»', null, { reason: 'name', comment: REASON }],
+    ['лишний ключ', null, { reason: 'name', publicName: null }],
   ])('%s → 400 VALIDATION_FAILED, имя на месте', async (_name, userId, body) => {
     const res = await resetBy(moderator.token, userId ?? named.userId, body);
     expect(res.status).toBe(400);

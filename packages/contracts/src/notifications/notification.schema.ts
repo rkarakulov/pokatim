@@ -60,6 +60,8 @@ export const NOTIFICATION_KINDS = [
   'ride_photo_reset',
   // race-cancelled: гонка отменена панелью (группа `races`) — участникам с активной заявкой
   'race_cancelled',
+  // profile-moderation-d11: решение по жалобе на профиль — автору жалобы (группа `rides`, без цели)
+  'profile_report_resolved',
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 

@@ -32,3 +32,5 @@ export { ProfilesOverview } from './profiles-overview';
 export { ReservedRiderLines } from './reserved-rider-lines';
 /** Событие для `notifications` (profile-moderation-followups): модератор сбросил поле профиля. */
 export { PROFILE_FIELD_RESET, ProfileFieldReset } from './profile.events';
+/** Событие для `notifications` (profile-moderation-d11): модератор закрыл жалобы на профиль — авторам жалоб. */
+export { PROFILE_REPORTS_RESOLVED, ProfileReportsResolved } from './profile.events';

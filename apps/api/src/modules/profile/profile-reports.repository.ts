@@ -59,6 +59,20 @@ export class ProfileReportsRepository {
     return result.modifiedCount;
   }
 
+  /**
+   * Авторы открытых жалоб на профиль без дублей (profile-moderation-d11): читается в транзакции действия **до**
+   * `closeOpen` — та же транзакция уже записала профиль (новая жалоба конфликтует), набор совпадает с закрытыми.
+   */
+  async openReporters(tx: DbSession, targetUserId: string): Promise<string[]> {
+    const docs = await this.reports
+      .find(
+        { targetUserId, resolvedAt: null },
+        { projection: { _id: 0, reporterUserId: 1 }, session: tx },
+      )
+      .toArray();
+    return [...new Set(docs.map((doc) => doc.reporterUserId))];
+  }
+
   /** Последние жалобы на профиль, новые сверху (`_id` — uuidv7), не больше 100. */
   latest(targetUserId: string): Promise<ProfileReportDoc[]> {
     return this.reports

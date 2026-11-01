@@ -2004,7 +2004,7 @@ export const ru = {
   'admin.results.action.resetName': 'Сбросить имя',
   'admin.results.dialog.resetName': 'Сбросить имя участника?',
   'admin.results.dialog.resetNameConsequences':
-    'Имя исчезнет из таблиц результатов — участник будет показан как «Участник». Он сможет задать новое имя в профиле. Открытые жалобы на профиль участника закроются — и на фото и клуб тоже. Не повторяйте имя в причине: она навсегда остаётся в журнале действий.',
+    'Имя исчезнет из таблиц результатов — участник будет показан как «Участник». Он сможет задать новое имя в профиле. Открытые жалобы на профиль участника закроются — и на фото и клуб тоже.',
   'admin.audit.action.profile.name_reset': 'Сброшено имя участника',
   // profile-moderation: сброс фото и клуба, отклонение жалоб на профиль
   'admin.audit.action.profile.avatar_reset': 'Сброшено фото участника',
@@ -2770,6 +2770,9 @@ export const ru = {
   'admin.riderProfiles.dismissTitle': 'Отклонить жалобы на {label}?',
   'admin.riderProfiles.dismissConsequences':
     'Открытые жалобы закроются, профиль не изменится. Райдеры смогут пожаловаться снова.',
+  // profile-moderation-d11: причина сброса — из справочника причин жалоб, текст — только у «Другое»
+  'admin.riderProfiles.resetReason': 'Причина сброса',
+  'admin.audit.details.resetReason': 'причина — {reason}',
   'admin.riderProfiles.reasonWarning':
     'Не повторяйте имя или клуб в причине: она навсегда остаётся в журнале действий.',
   'admin.riderProfiles.conflict': 'Пришли новые жалобы, обновите карточку',

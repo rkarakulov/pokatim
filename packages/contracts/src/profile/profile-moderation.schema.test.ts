@@ -140,12 +140,18 @@ describe('модерация профилей райдеров (profile-moderati
     expect(RiderAvatarUnblockResult.safeParse({}).success).toBe(false);
   });
 
-  it('тела действий: причина 3–500; «Отклонить жалобы» — с reportRevision', () => {
-    expect(RiderProfileResetRequest.parse({ reason: 'Мат в клубе' })).toEqual({
-      reason: 'Мат в клубе',
+  it('тела действий: сброс — код причины (текст — у «Другое»); «Отклонить жалобы» — причина 3–500 и reportRevision', () => {
+    expect(RiderProfileResetRequest.parse({ reason: 'club' })).toEqual({ reason: 'club' });
+    expect(RiderProfileResetRequest.parse({ reason: 'other', comment: 'Мат в клубе' })).toEqual({
+      reason: 'other',
+      comment: 'Мат в клубе',
     });
-    expect(RiderProfileResetRequest.safeParse({ reason: 'x' }).success).toBe(false);
-    expect(RiderProfileResetRequest.safeParse({ reason: 'abc', extra: 1 }).success).toBe(false);
+    expect(RiderProfileResetRequest.safeParse({ reason: 'other' }).success).toBe(false);
+    expect(RiderProfileResetRequest.safeParse({ reason: 'photo', comment: 'Фото' }).success).toBe(
+      false,
+    );
+    expect(RiderProfileResetRequest.safeParse({ reason: 'Мат в клубе' }).success).toBe(false);
+    expect(RiderProfileResetRequest.safeParse({ reason: 'club', extra: 1 }).success).toBe(false);
     expect(
       DismissRiderProfileReportsRequest.parse({ reason: 'Всё в порядке', reportRevision: 0 }),
     ).toEqual({ reason: 'Всё в порядке', reportRevision: 0 });

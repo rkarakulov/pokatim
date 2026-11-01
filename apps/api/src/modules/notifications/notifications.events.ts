@@ -22,7 +22,7 @@ import {
 } from '../rides';
 import { ROUTE_PUBLICATION_DECIDED } from '../routes';
 import { TICKETS_REMINDER_DUE } from '../tickets';
-import { PROFILE_FIELD_RESET } from '../profile';
+import { PROFILE_FIELD_RESET, PROFILE_REPORTS_RESOLVED } from '../profile';
 import { ACHIEVEMENTS_GRANT_NOTICED } from '../achievements';
 import { RACES_RACE_CANCELLED } from '../races';
 import {
@@ -65,6 +65,8 @@ export const notificationsOutboxRoutes = {
   [SOCIAL_RIDE_ASK_DUE]: QUEUE.notificationsIntake,
   // race-cancelled: гонка отменена панелью (получатели — порт `RESULTS_NOTICES`)
   [RACES_RACE_CANCELLED]: QUEUE.notificationsIntake,
+  // profile-moderation-d11: модератор закрыл жалобы на профиль (авторам жалоб, payload самодостаточен)
+  [PROFILE_REPORTS_RESOLVED]: QUEUE.notificationsIntake,
 } as const;
 
 export type NotificationSourceEvent = keyof typeof notificationsOutboxRoutes;

@@ -51,7 +51,7 @@ const resetAvatar = async () => {
     moderator.token,
     'POST',
     `/${target.userId}/avatar-reset`,
-    { reason: 'Недопустимое фото' },
+    { reason: 'photo' },
   );
   if (res.status !== 200) throw new Error(`avatar-reset: ${res.status}`);
   return res;
@@ -135,7 +135,7 @@ describe('порядок уведомлений о сбросе фото — р�
         moderator.token,
         'POST',
         `/${target.userId}/avatar-reset`,
-        { reason: 'Недопустимое фото' },
+        { reason: 'photo' },
       );
       await g.reached;
       // B — позже по часам, коммитится первым (второй сброс в окне, без запрета)

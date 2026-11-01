@@ -178,7 +178,7 @@ describe('openReasons профиля (profile-moderation-followups, RC-F1)', () 
 
     const moderator = await staff(h, 'moderator@example.by', 'moderator');
     await profileModerationCall(h, moderator.token, 'POST', `/${target.userId}/club-reset`, {
-      reason: 'Мат в клубе',
+      reason: 'club',
     });
     expect((await profileOf(target.userId))?.openReasons).toEqual([]);
 
@@ -278,7 +278,7 @@ describe('гонка «жалоба ↔ сброс» (запись профил�
       await Promise.all([
         ...reporters.map((reporter) => reportRider(h, reporter.token, who.publicId)),
         profileModerationCall(h, moderator.token, 'POST', `/${who.userId}/club-reset`, {
-          reason: 'Мат в клубе',
+          reason: 'club',
         }),
       ]);
       expect((await profileOf(who.userId))?.openReportCount ?? 0).toBe(await openCount(who.userId));

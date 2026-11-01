@@ -28,7 +28,7 @@ import { twoToneImage } from '../../../test/avatars';
 import { heldUpload } from '../../../test/uploads';
 import { UploadSlots } from '../../upload-slots';
 import { rider } from '../../../test/rides';
-import { PROFILE_FIELD_RESET } from './profile.events';
+import { PROFILE_FIELD_RESET, PROFILE_REPORTS_RESOLVED } from './profile.events';
 
 /**
  * Модерация профилей в панели (profile-moderation, AC3–AC7): очередь (только с открытыми жалобами, порядок, курсор,
@@ -51,6 +51,8 @@ afterAll(async () => {
 });
 
 const REASON = 'Неприличное содержимое';
+/** Тело сброса «Другое» с текстом — журнал пишет текст как раньше; код без текста — отдельные тесты (d11). */
+const RESET = { reason: 'other', comment: REASON };
 const mod = (method: 'GET' | 'POST', path: string, body?: unknown) =>
   profileModerationCall(h, moderator.token, method, path, body);
 const auditOf = (action: AuditAction) => panel(h).audit.find({ action }).toArray();
@@ -58,7 +60,8 @@ const profileOf = (userId: string) => profilesDb(h).findOne({ _id: userId });
 
 /** Жалобы от новых райдеров на профиль (по одной на райдера). */
 let reporterSeq = 0;
-async function reportsOn(who: PublicRider, reasons: readonly string[]): Promise<void> {
+async function reportsOn(who: PublicRider, reasons: readonly string[]): Promise<string[]> {
+  const reporters: string[] = [];
   for (const [i, reason] of reasons.entries()) {
     reporterSeq += 1;
     const reporter = await rider(h, `reporter-${reporterSeq}@example.by`);
@@ -67,7 +70,9 @@ async function reportsOn(who: PublicRider, reasons: readonly string[]): Promise<
       comment: `Комментарий ${i}`,
     });
     if (res.status !== 200) throw new Error(`жалоба: ${res.status}`);
+    reporters.push(reporter.userId);
   }
+  return reporters;
 }
 
 describe('GET /v1/admin/rider-profiles — очередь (AC3)', () => {
@@ -190,7 +195,7 @@ describe('POST avatar-reset и club-reset (AC5–AC6)', () => {
     await reportsOn(target, ['photo', 'other']);
     expect((await fetchAvatar(h, avatar.id)).status).toBe(200);
 
-    const res = await mod('POST', `/${target.userId}/avatar-reset`, { reason: REASON });
+    const res = await mod('POST', `/${target.userId}/avatar-reset`, RESET);
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ reset: true });
 
@@ -224,7 +229,7 @@ describe('POST avatar-reset и club-reset (AC5–AC6)', () => {
 
   it('avatar-reset повтор (фото нет) — { reset: false } без журнала, жалобы открыты', async () => {
     await reportsOn(target, ['photo']);
-    const res = await mod('POST', `/${target.userId}/avatar-reset`, { reason: REASON });
+    const res = await mod('POST', `/${target.userId}/avatar-reset`, RESET);
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ reset: false });
     expect(await auditOf('profile.avatar_reset')).toHaveLength(0);
@@ -236,7 +241,7 @@ describe('POST avatar-reset и club-reset (AC5–AC6)', () => {
 
   it('club-reset: club: null, жалобы actioned, журнал; повтор — { reset: false } без журнала', async () => {
     await reportsOn(target, ['club']);
-    expect((await mod('POST', `/${target.userId}/club-reset`, { reason: REASON })).body).toEqual({
+    expect((await mod('POST', `/${target.userId}/club-reset`, RESET)).body).toEqual({
       reset: true,
     });
     expect(await profileOf(target.userId)).toMatchObject({
@@ -255,7 +260,7 @@ describe('POST avatar-reset и club-reset (AC5–AC6)', () => {
     expect(audit[0]).toMatchObject({ reason: REASON, details: { reportCount: 1 } });
     expect(JSON.stringify(audit)).not.toContain('Секретный клуб');
 
-    expect((await mod('POST', `/${target.userId}/club-reset`, { reason: REASON })).body).toEqual({
+    expect((await mod('POST', `/${target.userId}/club-reset`, RESET)).body).toEqual({
       reset: false,
     });
     expect(await auditOf('profile.club_reset')).toHaveLength(1);
@@ -263,22 +268,23 @@ describe('POST avatar-reset и club-reset (AC5–AC6)', () => {
 
   it('профиля нет — 404; organizer — 403; без сессии — 401; короткая причина — 400', async () => {
     for (const action of ['avatar-reset', 'club-reset']) {
-      expect((await mod('POST', `/${uuidv7()}/${action}`, { reason: REASON })).status).toBe(404);
+      expect((await mod('POST', `/${uuidv7()}/${action}`, RESET)).status).toBe(404);
       expect((await mod('POST', `/${target.userId}/${action}`, { reason: 'ab' })).status).toBe(400);
       const organizer = await staff(h, `org-${action}@example.by`, 'organizer');
       expect(
         (
-          await profileModerationCall(h, organizer.token, 'POST', `/${target.userId}/${action}`, {
-            reason: REASON,
-          })
+          await profileModerationCall(
+            h,
+            organizer.token,
+            'POST',
+            `/${target.userId}/${action}`,
+            RESET,
+          )
         ).status,
       ).toBe(403);
       expect(
-        (
-          await profileModerationCall(h, undefined, 'POST', `/${target.userId}/${action}`, {
-            reason: REASON,
-          })
-        ).status,
+        (await profileModerationCall(h, undefined, 'POST', `/${target.userId}/${action}`, RESET))
+          .status,
       ).toBe(401);
     }
     expect((await profileOf(target.userId))?.club).toBe('Секретный клуб');
@@ -287,7 +293,7 @@ describe('POST avatar-reset и club-reset (AC5–AC6)', () => {
   it('лог: действие и модератор — без userId райдера, клуба и причины', async () => {
     const log = vi.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
     try {
-      await mod('POST', `/${target.userId}/club-reset`, { reason: REASON });
+      await mod('POST', `/${target.userId}/club-reset`, RESET);
       const lines = log.mock.calls.map((args) => String(args[0])).join('\n');
       expect(lines).toContain(`profile club reset by ${moderator.userId} reset=true`);
       expect(lines).not.toContain(target.userId);
@@ -349,7 +355,7 @@ describe('POST dismiss-reports (AC7)', () => {
 
   it('открытых нет — { dismissed: false } без журнала; профиля нет — 404; без reportRevision — 400', async () => {
     await reportsOn(target, ['photo']);
-    await mod('POST', `/${target.userId}/club-reset`, { reason: REASON });
+    await mod('POST', `/${target.userId}/club-reset`, RESET);
     const res = await mod('POST', `/${target.userId}/dismiss-reports`, {
       reason: 'Нарушений нет',
       reportRevision: 1,
@@ -406,7 +412,7 @@ describe('очередь по причине (profile-moderation-followups, AC1)
     await reportsOn(target, ['name']);
     const second = await publicRider(h, 'second@example.by', 'Борис');
     await reportsOn(second, ['name']);
-    await mod('POST', `/${target.userId}/club-reset`, { reason: REASON });
+    await mod('POST', `/${target.userId}/club-reset`, RESET);
     await mod('POST', `/${second.userId}/dismiss-reports`, { reason: REASON, reportRevision: 1 });
     expect(RiderProfileModerationPage.parse((await mod('GET', '?reason=name')).body).items).toEqual(
       [],
@@ -458,10 +464,10 @@ describe('событие сброса для уведомления (profile-mod
   it('сброс имени, фото и клуба (reset: true) — по одному событию; payload без причины и значений', async () => {
     await seedAvatar(h, target.userId);
     expect((await resetName()).body).toEqual({ reset: true });
-    expect((await mod('POST', `/${target.userId}/avatar-reset`, { reason: REASON })).body).toEqual({
+    expect((await mod('POST', `/${target.userId}/avatar-reset`, RESET)).body).toEqual({
       reset: true,
     });
-    expect((await mod('POST', `/${target.userId}/club-reset`, { reason: REASON })).body).toEqual({
+    expect((await mod('POST', `/${target.userId}/club-reset`, RESET)).body).toEqual({
       reset: true,
     });
     const events = await eventsOfType(h, PROFILE_FIELD_RESET);
@@ -482,16 +488,102 @@ describe('событие сброса для уведомления (profile-mod
   });
 
   it('reset: false — без события', async () => {
-    await mod('POST', `/${target.userId}/avatar-reset`, { reason: REASON });
+    await mod('POST', `/${target.userId}/avatar-reset`, RESET);
     expect(await eventsOfType(h, PROFILE_FIELD_RESET)).toEqual([]);
+  });
+});
+
+describe('причина сброса — код справочника (profile-moderation-d11, AC2)', () => {
+  it('код без текста: журнал — resetReason, reason: null; «Другое» — код и текст', async () => {
+    await reportsOn(target, ['club']);
+    expect((await mod('POST', `/${target.userId}/club-reset`, { reason: 'club' })).body).toEqual({
+      reset: true,
+    });
+    expect((await auditOf('profile.club_reset'))[0]).toMatchObject({
+      reason: null,
+      details: { reportCount: 1, resetReason: 'club' },
+    });
+    await seedAvatar(h, target.userId);
+    expect((await mod('POST', `/${target.userId}/avatar-reset`, RESET)).body).toEqual({
+      reset: true,
+    });
+    expect((await auditOf('profile.avatar_reset'))[0]).toMatchObject({
+      reason: REASON,
+      details: { reportCount: 0, resetReason: 'other' },
+    });
+    expect((await resetName()).body).toEqual({ reset: true });
+    expect((await auditOf('profile.name_reset'))[0]).toMatchObject({
+      reason: REASON,
+      details: { resetReason: 'other' },
+    });
+  });
+
+  it('«Другое» без текста, текст у кода, свободный текст вместо кода — 400, профиль на месте', async () => {
+    for (const body of [
+      { reason: 'other' },
+      { reason: 'club', comment: REASON },
+      { reason: REASON },
+    ]) {
+      const res = await mod('POST', `/${target.userId}/club-reset`, body);
+      expect(res.status).toBe(400);
+      expect(res.body).toMatchObject({ code: 'VALIDATION_FAILED' });
+    }
+    expect((await profileOf(target.userId))?.club).toBe('Секретный клуб');
+    expect(await auditOf('profile.club_reset')).toHaveLength(0);
+  });
+});
+
+describe('событие решения по жалобам (profile-moderation-d11, AC2)', () => {
+  it('сброс — actioned, авторы закрытых жалоб без дублей; без причины, имени и клуба', async () => {
+    const reporters = await reportsOn(target, ['club', 'name']);
+    expect((await mod('POST', `/${target.userId}/club-reset`, { reason: 'club' })).body).toEqual({
+      reset: true,
+    });
+    const events = await eventsOfType(h, PROFILE_REPORTS_RESOLVED);
+    expect(events).toHaveLength(1);
+    const payload = events[0]?.payload as { reporterUserIds: string[] };
+    expect({ ...payload, reporterUserIds: [...payload.reporterUserIds].sort() }).toEqual({
+      targetUserId: target.userId,
+      resolution: 'actioned',
+      reporterUserIds: [...reporters].sort(),
+    });
+    const json = JSON.stringify(events);
+    expect(json).not.toContain('Секретный клуб');
+    expect(json).not.toContain('Анна К.');
+    expect(json).not.toContain('club');
+  });
+
+  it('«Отклонить жалобы» — dismissed; закрытые раньше жалобы в событие не попадают', async () => {
+    const [first] = await reportsOn(target, ['spam']);
+    await mod('POST', `/${target.userId}/club-reset`, { reason: 'club' });
+    const [second] = await reportsOn(target, ['spam']);
+    const detail = RiderProfileModerationDetail.parse((await mod('GET', `/${target.userId}`)).body);
+    await mod('POST', `/${target.userId}/dismiss-reports`, {
+      reason: 'Нарушений нет',
+      reportRevision: detail.reportRevision,
+    });
+    const events = await eventsOfType(h, PROFILE_REPORTS_RESOLVED);
+    expect(events.map((event) => event.payload)).toEqual([
+      { targetUserId: target.userId, resolution: 'actioned', reporterUserIds: [first] },
+      { targetUserId: target.userId, resolution: 'dismissed', reporterUserIds: [second] },
+    ]);
+  });
+
+  it('сброс без открытых жалоб и reset: false — без события', async () => {
+    expect((await mod('POST', `/${target.userId}/club-reset`, { reason: 'club' })).body).toEqual({
+      reset: true,
+    });
+    await reportsOn(target, ['photo']);
+    expect((await mod('POST', `/${target.userId}/avatar-reset`, { reason: 'photo' })).body).toEqual(
+      { reset: false },
+    );
+    expect(await eventsOfType(h, PROFILE_REPORTS_RESOLVED)).toEqual([]);
   });
 });
 
 /** Сброс имени — `ProfileAdminController` (тот же модератор). */
 const resetName = () =>
-  panelCall(h, moderator.token, 'POST', `/v1/admin/profiles/${target.userId}/name-reset`, {
-    reason: REASON,
-  });
+  panelCall(h, moderator.token, 'POST', `/v1/admin/profiles/${target.userId}/name-reset`, RESET);
 
 const AVATAR = '/v1/profile/avatar';
 const ownProfile = async () =>
@@ -524,7 +616,7 @@ async function advance(ms: number) {
 /** Фото и его сброс модератором; ответ сброса. */
 async function avatarResetRound() {
   await seedAvatar(h, target.userId);
-  return mod('POST', `/${target.userId}/avatar-reset`, { reason: REASON });
+  return mod('POST', `/${target.userId}/avatar-reset`, RESET);
 }
 
 describe('запрет загрузки фото (profile-moderation-followups, AC5–AC6)', () => {

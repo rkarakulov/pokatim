@@ -1,3 +1,4 @@
+import { PROFILE_REPORT_RESOLUTIONS } from '@pokatim/contracts';
 import { z } from 'zod';
 
 /**
@@ -20,3 +21,18 @@ export const ProfileFieldReset = z.strictObject({
   avatarBlockedUntil: z.iso.datetime().nullable(),
 });
 export type ProfileFieldReset = z.infer<typeof ProfileFieldReset>;
+
+/**
+ * Модератор закрыл открытые жалобы на профиль (profile-moderation-d11): сброс имени, фото или клуба (`actioned`) или
+ * «Отклонить жалобы» (`dismissed`) — уведомление авторам закрытых жалоб. Пишется в транзакции действия, только если
+ * закрыта хотя бы одна жалоба. Payload самодостаточен (порта у `profile` нет, RC-F3): id профиля, решение и id
+ * авторов без дублей; без имени, клуба, причины модератора и id жалоб. Живость авторов проверяет запись
+ * (`liveUserIds`).
+ */
+export const PROFILE_REPORTS_RESOLVED = 'profile.reports-resolved';
+export const ProfileReportsResolved = z.strictObject({
+  targetUserId: z.uuid(),
+  resolution: z.enum(PROFILE_REPORT_RESOLUTIONS),
+  reporterUserIds: z.array(z.uuid()).min(1),
+});
+export type ProfileReportsResolved = z.infer<typeof ProfileReportsResolved>;

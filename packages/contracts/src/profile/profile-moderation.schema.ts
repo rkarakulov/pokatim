@@ -88,7 +88,7 @@ export const RiderProfileModerationDetail = z.object({
 });
 export type RiderProfileModerationDetail = z.infer<typeof RiderProfileModerationDetail>;
 
-/** `POST …/:userId/avatar-reset` и `…/club-reset` — тело как у сброса имени (причина в журнал). */
+/** `POST …/:userId/avatar-reset` и `…/club-reset` — тело как у сброса имени (код причины, текст — у «Другое»). */
 export const RiderProfileResetRequest = ResetRiderNameRequest;
 export type RiderProfileResetRequest = ResetRiderNameRequest;
 
@@ -111,11 +111,11 @@ export const RiderProfileReportsDismissResult = z.object({ dismissed: z.boolean(
 export type RiderProfileReportsDismissResult = z.infer<typeof RiderProfileReportsDismissResult>;
 
 /**
- * `POST …/:userId/avatar-unblock` — снять запрет загрузки фото (profile-moderation-followups); тело как у сброса.
- * История сбросов не очищается.
+ * `POST …/:userId/avatar-unblock` — снять запрет загрузки фото (profile-moderation-followups); причина — свободный
+ * текст в журнал. История сбросов не очищается.
  */
-export const UnblockRiderAvatarRequest = ResetRiderNameRequest;
-export type UnblockRiderAvatarRequest = ResetRiderNameRequest;
+export const UnblockRiderAvatarRequest = z.strictObject({ reason: ActionReason });
+export type UnblockRiderAvatarRequest = z.infer<typeof UnblockRiderAvatarRequest>;
 
 /** `unblocked: false` — запрета нет или он истёк (идемпотентный успех без журнала). */
 export const RiderAvatarUnblockResult = z.object({ unblocked: z.boolean() });

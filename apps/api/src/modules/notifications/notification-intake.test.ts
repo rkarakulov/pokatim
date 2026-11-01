@@ -183,6 +183,42 @@ describe('NotificationIntake: напоминание о событии (PR D)', 
   });
 });
 
+describe('NotificationIntake: решение по жалобам на профиль (profile-moderation-d11, без порта)', () => {
+  const RESOLVED = 'profile.reports-resolved';
+  const TARGET = '0190a6f4-0000-7000-8000-000000000003';
+  const A = '0190a6f4-0000-7000-8000-000000000004';
+  const B = '0190a6f4-0000-7000-8000-000000000005';
+
+  it('авторам без дублей и без самого райдера; без цели и схлопывания', async () => {
+    const payload = {
+      targetUserId: TARGET,
+      resolution: 'actioned',
+      reporterUserIds: [A, B, A, TARGET],
+    };
+    expect(await intakeWith(null).drafts(RESOLVED, payload, NOW, EVENT_ID)).toEqual([
+      {
+        text: { kind: 'profile_report_resolved', resolution: 'actioned' },
+        target: null,
+        recipients: [A, B],
+      },
+    ]);
+  });
+
+  it.each([
+    [
+      'решение вне справочника',
+      { targetUserId: TARGET, resolution: 'hidden', reporterUserIds: [A] },
+    ],
+    ['пустые авторы', { targetUserId: TARGET, resolution: 'dismissed', reporterUserIds: [] }],
+    [
+      'лишний ключ (причина)',
+      { targetUserId: TARGET, resolution: 'dismissed', reporterUserIds: [A], reason: 'club' },
+    ],
+  ])('%s — invalid_payload', async (_name, payload) => {
+    expect(await intakeWith(null).drafts(RESOLVED, payload, NOW, EVENT_ID)).toBe('invalid_payload');
+  });
+});
+
 describe('NotificationIntake: сброс поля профиля (profile-moderation-followups, RC-F3 — без порта)', () => {
   const RESET = 'profile.field-reset';
   const USER = '0190a6f4-0000-7000-8000-000000000003';

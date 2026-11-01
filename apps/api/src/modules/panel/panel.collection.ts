@@ -9,6 +9,7 @@ import type {
   AuditSubjectKind,
   MemberStatus,
   PanelRole,
+  ProfileReportReason,
   RaceCancelReason,
   RouteRejectionReason,
 } from '@pokatim/contracts';
@@ -203,6 +204,8 @@ export interface AuditDetailsDoc {
   /** admin-failed-jobs: очередь и имя (тип) задачи BullMQ */
   queue?: string;
   jobName?: string;
+  /** profile-moderation-d11: код причины сброса имени, фото или клуба (текст «Другое» — в `reason`) */
+  resetReason?: ProfileReportReason;
 }
 
 /**

@@ -1,6 +1,7 @@
 import type {
   RiderProfileModerationDetail,
   RiderProfileModerationReport,
+  RiderProfileResetRequest,
 } from '@pokatim/contracts';
 import { t } from '@pokatim/i18n';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -28,6 +29,7 @@ import {
 import { NoAccessScreen } from '../no-access/NoAccessScreen';
 import { riderLabel } from '../results/results-format';
 import { RiderAchievementsSection } from './RiderAchievementsSection';
+import { ResetReasonDialog } from './ResetReasonDialog';
 import { actionErrorText } from './rider-profiles-format';
 import { RIDER_PROFILES_QUERY_KEY, riderProfileQuery } from './rider-profiles-query';
 
@@ -36,8 +38,11 @@ const column = createColumnHelper<RiderProfileModerationReport>();
 
 type Action = 'resetAvatar' | 'resetClub' | 'resetName' | 'dismiss' | 'unblockAvatar';
 type ResetAction = Exclude<Action, 'dismiss' | 'unblockAvatar'>;
+type ReasonAction = Exclude<Action, ResetAction>;
 
 const RESETS: readonly ResetAction[] = ['resetAvatar', 'resetClub', 'resetName'];
+const isReset = (action: Action | undefined): action is ResetAction =>
+  RESETS.includes(action as ResetAction);
 
 const reportColumns = [
   column.accessor('reason', {
@@ -118,8 +123,9 @@ function Preview({ profile, label }: { profile: RiderProfileModerationDetail; la
 /**
  * Карточка модерации профиля райдера (`profiles.moderate`, profile-moderation): фото (и у скрытого профиля, S-2),
  * подпись (имя — по Q2), клуб, статус публичности, жалобы без автора. «Сбросить фото / клуб / имя» неактивны, когда
- * сбрасывать нечего; «Отклонить жалобы» — при открытых, шлёт `reportRevision`. Каждое действие — `ReasonDialog` с
- * предупреждением не повторять имя и клуб (D11); 409 `CONFLICT` — `ConflictBanner` с перечитыванием карточки; 404
+ * сбрасывать нечего; «Отклонить жалобы» — при открытых, шлёт `reportRevision`. Сброс — `ResetReasonDialog` (причина
+ * из справочника жалоб, текст и предупреждение D11 — только у «Другое», D11-1), «Отклонить жалобы» и «Снять запрет» —
+ * `ReasonDialog` с предупреждением не повторять имя и клуб (D11); 409 `CONFLICT` — `ConflictBanner` с перечитыванием карточки; 404
  * (профиль стёрт) — перечитывание и «Профиль не найден». Запрет загрузки фото — счётчик сбросов за 180 дней и строка
  * «Загрузка фото запрещена до …» (дата и время по Минску); «Снять запрет» — только при запрете, тот же `ReasonDialog`
  * (`{ unblocked: false }` — запрет уже снят или истёк: просто перечитывание). Ошибка перечитывания при показанных
@@ -182,6 +188,7 @@ export function RiderProfileScreen({ userId }: { userId: string }) {
   const data = profile.data;
   const label = riderLabel(data.userId, data.name);
   const blocked = RESETS.some((value) => !canReset(data, value));
+  const reasonAction: ReasonAction | undefined = isReset(action) ? undefined : action;
 
   const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey: RIDER_PROFILES_QUERY_KEY });
@@ -191,18 +198,21 @@ export function RiderProfileScreen({ userId }: { userId: string }) {
     const result = await profile.refetch();
     if (result.isSuccess) setStale(false);
   };
-  const run = async (reason: string) => {
+  const send = (current: ReasonAction | undefined, reason: string) => {
+    if (current === 'unblockAvatar') return api.unblockRiderAvatar(data.userId, { reason });
+    return api.dismissRiderProfileReports(data.userId, {
+      reason,
+      reportRevision: data.reportRevision,
+    });
+  };
+  const sendReset = (current: ResetAction, body: RiderProfileResetRequest) => {
+    if (current === 'resetAvatar') return api.resetRiderAvatar(data.userId, body);
+    if (current === 'resetClub') return api.resetRiderClub(data.userId, body);
+    return api.resetRiderName(data.userId, body);
+  };
+  const run = async (call: () => Promise<unknown>) => {
     try {
-      if (action === 'resetAvatar') await api.resetRiderAvatar(data.userId, { reason });
-      else if (action === 'resetClub') await api.resetRiderClub(data.userId, { reason });
-      else if (action === 'resetName') await api.resetRiderName(data.userId, { reason });
-      else if (action === 'unblockAvatar') await api.unblockRiderAvatar(data.userId, { reason });
-      else if (action === 'dismiss') {
-        await api.dismissRiderProfileReports(data.userId, {
-          reason,
-          reportRevision: data.reportRevision,
-        });
-      }
+      await call();
     } catch (error) {
       // 404 — профиль стёрт между открытием карточки и действием: перечитывание покажет «Профиль не найден»
       if (httpStatus(error) === 404) {
@@ -292,15 +302,25 @@ export function RiderProfileScreen({ userId }: { userId: string }) {
         />
         {canManageAchievements ? <RiderAchievementsSection userId={data.userId} /> : null}
       </div>
-      <ReasonDialog
-        open={action !== undefined}
-        title={action ? t(`admin.riderProfiles.${action}Title`, { label }) : ''}
-        consequences={action ? t(`admin.riderProfiles.${action}Consequences`) : ''}
-        extraFields={<Banner tone="warning">{t('admin.riderProfiles.reasonWarning')}</Banner>}
-        confirmLabel={action ? t(`admin.riderProfiles.${action}`) : ''}
-        destructive={action !== undefined && action !== 'dismiss' && action !== 'unblockAvatar'}
+      <ResetReasonDialog
+        open={isReset(action)}
+        title={isReset(action) ? t(`admin.riderProfiles.${action}Title`, { label }) : ''}
+        consequences={isReset(action) ? t(`admin.riderProfiles.${action}Consequences`) : ''}
+        confirmLabel={isReset(action) ? t(`admin.riderProfiles.${action}`) : ''}
         errorText={actionErrorText}
-        onConfirm={run}
+        onConfirm={(body) =>
+          isReset(action) ? run(() => sendReset(action, body)) : Promise.resolve()
+        }
+        onClose={() => setAction(undefined)}
+      />
+      <ReasonDialog
+        open={action !== undefined && !isReset(action)}
+        title={reasonAction ? t(`admin.riderProfiles.${reasonAction}Title`, { label }) : ''}
+        consequences={reasonAction ? t(`admin.riderProfiles.${reasonAction}Consequences`) : ''}
+        extraFields={<Banner tone="warning">{t('admin.riderProfiles.reasonWarning')}</Banner>}
+        confirmLabel={reasonAction ? t(`admin.riderProfiles.${reasonAction}`) : ''}
+        errorText={actionErrorText}
+        onConfirm={(reason) => run(() => send(reasonAction, reason))}
         onClose={() => setAction(undefined)}
       />
     </>

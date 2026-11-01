@@ -51,6 +51,7 @@ describe('groupOf: kind → группа настроек (N4)', () => {
       social_ride_ask: 'social',
       ride_photo_reset: 'rides',
       race_cancelled: 'races',
+      profile_report_resolved: 'rides',
     });
   });
 

@@ -312,7 +312,7 @@ describe('сброс имени модератором (profile-02, AC6)', () =>
       token,
       'POST',
       `/v1/admin/profiles/${riders[0]!.userId}/name-reset`,
-      { reason: 'Оскорбительное имя' },
+      { reason: 'name' },
     );
     expect(reset.status).toBe(200);
     expect((await table(raceId)).body.items.map((row) => row.riderName)).toEqual([

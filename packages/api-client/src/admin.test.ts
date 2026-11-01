@@ -534,7 +534,7 @@ describe('createAdminApiClient: модерация райдов (05b)', () => {
 describe('createAdminApiClient: сброс имени райдера (profile-02)', () => {
   it('POST name-reset: путь, тело, cookie панели, разбор ответа', async () => {
     const { calls, api } = admin(200, { reset: true });
-    await expect(api.resetRiderName(USER_ID, { reason: 'Оскорбительное имя' })).resolves.toEqual({
+    await expect(api.resetRiderName(USER_ID, { reason: 'name' })).resolves.toEqual({
       reset: true,
     });
     expect(calls).toHaveLength(1);
@@ -542,13 +542,13 @@ describe('createAdminApiClient: сброс имени райдера (profile-02
       url: `/v1/admin/profiles/${USER_ID}/name-reset`,
       method: 'POST',
       credentials: 'same-origin',
-      body: { reason: 'Оскорбительное имя' },
+      body: { reason: 'name' },
     });
   });
 
   it('ответ не по схеме — ошибка разбора', async () => {
     const { api } = admin(200, { ok: true });
-    await expect(api.resetRiderName(USER_ID, { reason: 'Оскорбительное имя' })).rejects.toThrow();
+    await expect(api.resetRiderName(USER_ID, { reason: 'name' })).rejects.toThrow();
   });
 });
 
@@ -591,17 +591,19 @@ describe('createAdminApiClient: модерация профилей райдер
 
   it('сбросы фото и клуба, «Отклонить жалобы» — POST с телом и cookie панели', async () => {
     const avatar = admin(200, { reset: true });
-    await expect(
-      avatar.api.resetRiderAvatar(USER_ID, { reason: 'Неприличное фото' }),
-    ).resolves.toEqual({ reset: true });
+    await expect(avatar.api.resetRiderAvatar(USER_ID, { reason: 'photo' })).resolves.toEqual({
+      reset: true,
+    });
     expect(avatar.calls[0]).toMatchObject({
       url: `/v1/admin/rider-profiles/${USER_ID}/avatar-reset`,
       method: 'POST',
       credentials: 'same-origin',
-      body: { reason: 'Неприличное фото' },
+      body: { reason: 'photo' },
     });
     const club = admin(200, { reset: false });
-    await expect(club.api.resetRiderClub(USER_ID, { reason: 'Мат в клубе' })).resolves.toEqual({
+    await expect(
+      club.api.resetRiderClub(USER_ID, { reason: 'other', comment: 'Мат в клубе' }),
+    ).resolves.toEqual({
       reset: false,
     });
     expect(club.calls[0]).toMatchObject({
