@@ -299,6 +299,19 @@ export class RouteRidesRepository {
     return true;
   }
 
+  /**
+   * Отметка вставки автозаезда в плане события (route-rides-07): `$inc insertedRides` — только пока маршрут в плане;
+   * запись в документ плана конфликтует с `$pull` из `deleteOwn` в параллельной транзакции. `false` — маршрута нет.
+   */
+  async markPlannedInsert(session: DbSession, eventId: string, routeId: string): Promise<boolean> {
+    const result = await this.c.autoPlans.updateOne(
+      { _id: eventId, routeIds: routeId },
+      { $inc: { insertedRides: 1 } },
+      { session },
+    );
+    return result.matchedCount === 1;
+  }
+
   /** План автопроверки события (route-rides-03); нет — `null`. */
   async autoPlanOf(eventId: string): Promise<string[] | null> {
     const doc = await this.c.autoPlans.findOne({ _id: eventId }, { projection: { routeIds: 1 } });

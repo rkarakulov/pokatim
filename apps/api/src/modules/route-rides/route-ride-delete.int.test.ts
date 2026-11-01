@@ -180,4 +180,29 @@ describe('POST /v1/routes/:routeId/rides/:rideId/delete', () => {
     });
     expect(await routeRidesDb(h).rides.countDocuments({ routeId: own })).toBe(0);
   });
+
+  it('AC5: ручной заезд той же активности создан и удалён после последних проверок прогона — автозаезда нет', async () => {
+    const me = await rider(h);
+    const own = await ownCorridorRoute(h, me.userId);
+    const upload = await uploadRide(h, me.auth, rideGpx('clean.gpx', daysAgo(h, 1)));
+    const [event] = (await autoEvents(h)).filter(
+      (item) => (item.payload as { activityId: string }).activityId === upload.activityId,
+    );
+    const repository = routeRidesRepository(h);
+    const mark = repository.markPlannedInsert.bind(repository);
+    vi.spyOn(repository, 'markPlannedInsert').mockImplementationOnce(async (tx, id, routeId) => {
+      // окно между проверками процессора и вставкой: ручной заезд той же активности и его удаление
+      const manual = await seedRouteRide(h, me.userId, routeId, 900, daysAgo(h, 1), {
+        activityId: upload.activityId!,
+      });
+      expect((await remove(me.auth, routeId, manual.rideId)).status).toBe(204);
+      return mark(tx, id, routeId);
+    });
+    const auto = h.worker.get(RouteRideAutoProcessor);
+    expect(await auto.process(outboxJob(event!.type, event!._id))).toEqual({
+      planned: 1,
+      passed: 0,
+    });
+    expect(await routeRidesDb(h).rides.countDocuments({ routeId: own })).toBe(0);
+  });
 });

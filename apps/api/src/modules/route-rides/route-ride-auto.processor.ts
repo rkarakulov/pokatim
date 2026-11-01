@@ -2,7 +2,7 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Inject, Logger } from '@nestjs/common';
 import { MY_ROUTE_MAX_COUNT } from '@pokatim/contracts';
 import { CLOCK, type Clock, type OutboxJobData } from '@rkarakulov/api-kit/core';
-import { MongoOutboxReader } from '@rkarakulov/api-kit/mongo';
+import { isDuplicateKey, MongoOutboxReader, MongoTransactions } from '@rkarakulov/api-kit/mongo';
 import type { Job } from 'bullmq';
 
 import { QUEUE } from '../../queues';
@@ -25,8 +25,8 @@ import {
   ROUTE_RIDE_AUTO_POLICY,
   ROUTE_RIDE_POLICY,
 } from './route-rides.policy';
-import type { RouteRideResult } from './route-rides.collection';
-import { RouteRidesRepository } from './route-rides.repository';
+import type { RouteRideDoc, RouteRideResult } from './route-rides.collection';
+import { ROUTE_RIDES_UNIQUE_INDEX, RouteRidesRepository } from './route-rides.repository';
 
 /** Итог задачи: `skipped` — активность не годится или пропала; иначе — число прогонов движка и созданных заездов. */
 export type RouteRideAutoOutcome = 'skipped' | { planned: number; passed: number };
@@ -50,6 +50,7 @@ export class RouteRideAutoProcessor extends WorkerHost {
   constructor(
     private readonly repository: RouteRidesRepository,
     private readonly outbox: MongoOutboxReader,
+    private readonly transactions: MongoTransactions,
     private readonly evaluator: RouteRideEvaluator,
     @Inject(ROUTE_RIDE_ROUTES) private readonly routes: RouteRideRoutes,
     @Inject(ACTIVITY_SOURCE) private readonly activities: ActivitySource,
@@ -174,10 +175,7 @@ export class RouteRideAutoProcessor extends WorkerHost {
     );
   }
 
-  /**
-   * Сверка по маршруту; `true` — создан заезд `passed`. Перед вставкой план события перечитывается: райдер удалил
-   * автозаезд этого маршрута во время прогона (route-rides-07, `deleteOwn` снимает маршрут из плана) — не создавать.
-   */
+  /** Сверка по маршруту; `true` — создан заезд `passed`. */
   private async checkRoute(
     userId: string,
     routeId: string,
@@ -217,15 +215,36 @@ export class RouteRideAutoProcessor extends WorkerHost {
     if (rides.filter((ride) => live.has(ride.activityId)).length >= ROUTE_RIDE_POLICY.maxPerRoute) {
       return false;
     }
-    if (eventId && !(await this.repository.autoPlanOf(eventId))?.includes(routeId)) return false;
     const now = this.clock.now();
     const doc = {
       ...newRideDoc({ userId, routeId, activity: primary, origin: 'auto', now, result }),
       _id: draft._id,
     };
-    if (!(await this.repository.insertChecked(doc))) return false;
+    const inserted = eventId
+      ? await this.insertPlanned(eventId, doc)
+      : await this.repository.insertChecked(doc);
+    if (!inserted) return false;
     this.logger.log(`route-ride ${doc._id} auto passed`);
     return true;
+  }
+
+  /**
+   * Вставка автозаезда по плану события (route-rides-07): в одной транзакции — отметка в документе плана, только пока
+   * маршрут в нём есть, и вставка. `deleteOwn` снимает маршрут из плана той же транзакцией, что удаляет заезд, —
+   * запись в один документ сериализует их (конфликт записи): удалённый во время прогона заезд не создаётся снова.
+   * `false` — маршрута в плане нет или заезд группы уже есть (дубль ключа).
+   */
+  private async insertPlanned(eventId: string, doc: RouteRideDoc): Promise<boolean> {
+    try {
+      return await this.transactions.run(async (tx) => {
+        if (!(await this.repository.markPlannedInsert(tx, eventId, doc.routeId))) return false;
+        await this.repository.insert(tx, doc);
+        return true;
+      });
+    } catch (error) {
+      if (isDuplicateKey(error, ROUTE_RIDES_UNIQUE_INDEX)) return false;
+      throw error;
+    }
   }
 
   /** Свои заезды маршрута и живые из них (основная группы сейчас). */

@@ -118,6 +118,8 @@ export interface RouteRideAutoPlanDoc {
   _id: string;
   userId: string;
   routeIds: string[];
+  /** вставленных по плану автозаездов (route-rides-07: запись сериализует вставку с удалением заезда) */
+  insertedRides?: number;
   createdAt: Date;
   expiresAt: Date;
 }
