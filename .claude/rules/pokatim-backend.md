@@ -743,14 +743,16 @@ RC-A1, ADR-0019).
 
 ## Уведомления (`notifications`, ADR-0017)
 
-- Источники (`results`, `disputes`, `rides`, `routes`, `tickets`) пишут только outbox в своих транзакциях (payload — id и
+- Источники (`results`, `disputes`, `rides`, `routes`, `tickets`, `races`) пишут только outbox в своих транзакциях (payload — id и
   коды) и дают порт чтения через `index.ts`: `ResultsNotices`, `DisputeNotices`, `RideNotices`, `RouteNotices`,
   `TicketNotices`; плюс `RaceRegistry`,
   `IdentityAccounts.liveUserIds/emailsOf`. Чужих коллекций `notifications` не читает; источники о нём не знают.
   `profile` — источник без порта: `PROFILE_FIELD_RESET` и схема `ProfileFieldReset` из `profile/index.ts`, payload
   самодостаточен, живость получателя — `liveUserIds`; Nest-импорт `ProfileCoreModule` — в `NotificationsModule` и
   `NotificationsWorkerModule` (не в `NotificationsCoreModule`) ради порта `RIDER_NAMES` для имён «Своих» (social-p1); схлопывание `profile:<uid>:<field>` по `seq`, событие без `seq` — `invalid_payload`.
-- Маршруты объявляет подписчик: `notificationsOutboxRoutes` (20 типов → `notifications-intake`; `rides.photo-reset` (ride-photo-followups); social-p7 — четыре
+- Маршруты объявляет подписчик: `notificationsOutboxRoutes` (21 тип → `notifications-intake`; `rides.photo-reset` (ride-photo-followups);
+  `races.race-cancelled` (`{ raceId, reason }`, транзакция `RacesService.cancel` после журнала) — `RaceRegistry.get`
+  (`cancelled`, иначе `state`) + `ResultsNotices.protocolAudience`, без письма; social-p7 — четыре
   `social.*`, черновики — `socialNoticeDraft`, `drafts(type, payload, now, eventId)`: процессор передаёт id события;
   «Свои идут» — вторая ветка `rides.participant-joined` (записавшийся — участник с `seq` события, только публичный,
   аудитория — `SOCIAL_NOTICES.goingAudience` без организатора и участников); названия — `RIDE_NOTICES`,

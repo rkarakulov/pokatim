@@ -182,6 +182,18 @@ describe('«Уведомления»: нажатие и «Прочитать в�
     expect(markRead).toHaveBeenCalledWith(liveSession.accessToken, notice().id);
   });
 
+  it('«Гонка отменена» — текст сервера с причиной; нажатие ведёт на карточку гонки', async () => {
+    const body = '«Гравийный коридор»: гонка отменена. Причина — неблагоприятная погода.';
+    list.mockResolvedValue(
+      page([notice({ kind: 'race_cancelled', title: 'Гонка отменена', body })]),
+    );
+    const router = await open('/notifications');
+    const row = await screen.findByRole('button', { name: /^Гонка отменена\./ });
+    expect(screen.getByText(body)).toBeOnTheScreen();
+    await fireEvent.press(row);
+    await waitFor(() => expect(router.getPathname()).toBe(`/races/${RACE}`));
+  });
+
   it('новое достижение — переход на экран достижения (сезонное — с сезоном)', async () => {
     list.mockResolvedValue(
       page([

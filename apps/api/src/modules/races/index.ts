@@ -24,3 +24,5 @@ export {
 } from './races-for-sharing.port';
 /** Порт «Обзора» панели (admin-overview): гонки с открытым окном и ждущие протокола. */
 export { type OverviewRaces, RacesOverview } from './races-overview';
+/** Событие отмены гонки (race-cancelled): подписчик — `notifications`. */
+export { RACES_RACE_CANCELLED, RacesRaceCancelled } from './races.events';

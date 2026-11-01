@@ -97,6 +97,7 @@ describe('справочники уведомлений (только в кон�
       'social_invite_registered',
       'social_ride_ask',
       'ride_photo_reset',
+      'race_cancelled',
     ]);
     expect(PUSH_PLATFORMS).toEqual(['ios', 'android']);
   });
@@ -173,7 +174,10 @@ describe('ответы (tolerantEnum, неизвестная цель)', () => {
   });
 
   it('вид ride_photo_reset в сборке без него — unknown, заголовок и текст с сервера (ride-photo-followups)', () => {
-    const OLD_KINDS = NOTIFICATION_KINDS.slice(0, -1) as unknown as readonly [string, ...string[]];
+    const OLD_KINDS = NOTIFICATION_KINDS.slice(
+      0,
+      NOTIFICATION_KINDS.indexOf('ride_photo_reset'),
+    ) as unknown as readonly [string, ...string[]];
     expect(OLD_KINDS).not.toContain('ride_photo_reset');
     const old = NotificationView.extend({ kind: tolerantEnum(OLD_KINDS) });
     const item = view({

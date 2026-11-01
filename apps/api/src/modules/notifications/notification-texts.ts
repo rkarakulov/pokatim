@@ -5,6 +5,7 @@ import {
   type DisputeOutcome,
   type NotificationKind,
   PLATFORM_TIME_ZONE,
+  type RaceCancelReason,
   type RouteRejectionReason,
 } from '@pokatim/contracts';
 
@@ -38,6 +39,8 @@ export type NoticeText =
       race: string;
     }
   | { kind: 'dispute_decided'; race: string; outcome: DisputeOutcome }
+  /** гонка отменена панелью (race-cancelled): причина — шаблон отмены (D-20), не текст организатора */
+  | { kind: 'race_cancelled'; race: string; reason: RaceCancelReason }
   | { kind: 'ride_cancelled' | 'ride_rescheduled'; ride: string; startsAt: Date }
   | { kind: 'ride_joined'; ride: string; goingCount: number }
   | { kind: 'ride_report_resolved'; ride: string }
@@ -111,6 +114,15 @@ const REJECTION: Record<RouteRejectionReason, string> = {
   other: 'Подробности — в карточке маршрута.',
 };
 
+/** Шаблон причины отмены гонки (D-20) — короче подписи карточки, в продолжение фразы «Причина — …». */
+const RACE_CANCEL: Record<RaceCancelReason, string> = {
+  weather: 'неблагоприятная погода',
+  route_unavailable: 'маршрут недоступен (ремонт или перекрытие дороги)',
+  platform_issue: 'техническая проблема на платформе',
+  season_change: 'изменение календаря сезона',
+  organizational: 'организационные обстоятельства',
+};
+
 const TITLES: Record<
   Exclude<NotificationKind, 'achievement_granted' | SocialNoticeKind>,
   string
@@ -136,6 +148,7 @@ const TITLES: Record<
   profile_avatar_reset: 'Фото профиля удалено',
   profile_club_reset: 'Клуб в профиле сброшен',
   ride_photo_reset: 'Фото райда удалено',
+  race_cancelled: 'Гонка отменена',
 };
 
 function bodyOf(input: Exclude<NoticeText, SocialNoticeText>): string {
@@ -160,6 +173,8 @@ function bodyOf(input: Exclude<NoticeText, SocialNoticeText>): string {
       return `${quoted(input.race)}: райдер ответил. Решение примет модератор.`;
     case 'dispute_decided':
       return `${quoted(input.race)}: спор рассмотрен — ${OUTCOME[input.outcome]}.`;
+    case 'race_cancelled':
+      return `${quoted(input.race)}: гонка отменена. Причина — ${RACE_CANCEL[input.reason]}.`;
     case 'ride_cancelled':
       return `${quoted(input.ride)} ${dayTime(input.startsAt)} отменён.`;
     case 'ride_rescheduled':

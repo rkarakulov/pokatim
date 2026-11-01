@@ -31,8 +31,12 @@
    без push: `push.skipped`, `reason: 'in_app'` (`NoticeDraft.inApp`, `initialDelivery(…, { inApp })`); серверная
    сверка (`origin: 'server'`, PR N2) — по тумблеру группы. Схлопывание `achievement:<grantId>` по рангу (`seq`): одно
    уведомление на (выдача, уровень), новый уровень заменяет прежний.
+   **Дополнено (race-cancelled, 2026-11-01):** группа «Гонки» — `race_cancelled` («Гонка отменена», центр и push, без
+   письма). Новый источник `races.race-cancelled { raceId, reason }` (21 тип в `notificationsOutboxRoutes` после social-p7 и ride-photo-followups) — в
+   транзакции отмены панелью после журнала; получатели — активные заявки (`ResultsNotices.protocolAudience`), гонка —
+   `RaceRegistry.get` (не `cancelled` — `state`).
 2. **Модуль `notifications`** — единственный потребитель событий для уведомлений. Модули-источники (`results`,
-   `disputes`, `rides`, `routes`) пишут только outbox в своих транзакциях (payload — id и коды, без `userId` и текстов) и дают
+   `disputes`, `rides`, `routes`, `races`) пишут только outbox в своих транзакциях (payload — id и коды, без `userId` и текстов) и дают
    порт чтения получателей и полей текста через `index.ts`. Чужих коллекций `notifications` не читает.
 3. **Текст рендерит сервер при создании** и хранит снимком (словарь модуля, не `@pokatim/i18n`); цель перехода — тип
    и id из белого списка (`race`, `ride`, `dispute-response`, `my-route`; позже `ticket`, `profile-edit`,

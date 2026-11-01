@@ -703,3 +703,58 @@ describe('NotificationIntake: «Свои» K10 (social-p7)', () => {
     );
   });
 });
+
+describe('NotificationIntake: гонка отменена (race-cancelled)', () => {
+  const CANCELLED = 'races.race-cancelled';
+  const RACE = '0190a6f4-0000-7000-8000-000000000030';
+  const RIDERS = ['0190a6f4-0000-7000-8000-000000000031', '0190a6f4-0000-7000-8000-000000000032'];
+
+  function raceIntake(race: { status: 'published' | 'cancelled' } | null) {
+    const results = { protocolAudience: async () => RIDERS } as unknown as ResultsNotices;
+    const races = {
+      get: async () => race && { id: RACE, title: 'Минское кольцо', ...race },
+    } as unknown as RaceRegistry;
+    const unused = {} as never;
+    return new NotificationIntake(
+      results,
+      unused,
+      unused,
+      unused,
+      races,
+      unused,
+      unused,
+      unused,
+      unused,
+    );
+  }
+
+  it('битый payload и чужой код причины — invalid_payload; гонки нет — gone; не отменена — state', async () => {
+    const intake = raceIntake({ status: 'cancelled' });
+    expect(await intake.drafts(CANCELLED, { raceId: RACE }, NOW, EVENT_ID)).toBe('invalid_payload');
+    expect(await intake.drafts(CANCELLED, { raceId: RACE, reason: 'rain' }, NOW, EVENT_ID)).toBe(
+      'invalid_payload',
+    );
+    const payload = { raceId: RACE, reason: 'weather' };
+    expect(await raceIntake(null).drafts(CANCELLED, payload, NOW, EVENT_ID)).toBe('gone');
+    expect(
+      await raceIntake({ status: 'published' }).drafts(CANCELLED, payload, NOW, EVENT_ID),
+    ).toBe('state');
+  });
+
+  it('активным заявкам: текст с кодом причины, цель — карточка гонки, без схлопывания', async () => {
+    expect(
+      await raceIntake({ status: 'cancelled' }).drafts(
+        CANCELLED,
+        { raceId: RACE, reason: 'route_unavailable' },
+        NOW,
+        EVENT_ID,
+      ),
+    ).toEqual([
+      {
+        text: { kind: 'race_cancelled', race: 'Минское кольцо', reason: 'route_unavailable' },
+        target: { type: 'race', raceId: RACE },
+        recipients: RIDERS,
+      },
+    ]);
+  });
+});
