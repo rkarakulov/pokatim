@@ -864,6 +864,12 @@ export class RidesRepository {
     return doc !== null;
   }
 
+  /** Фото — текущее фото райда любого статуса (отдача фото карточке модерации, ride-photo-followups). */
+  async hasPhoto(rideId: string, photoId: string): Promise<boolean> {
+    const doc = await this.rides.findOne({ _id: rideId, photoId }, { projection: { _id: 1 } });
+    return doc !== null;
+  }
+
   /** Стирание аккаунта (ADR-0015): ссылка на фото снимается во всех райдах организатора (любой статус). */
   async clearPhotosOf(organizerUserId: string, now: Date): Promise<number> {
     const result = await this.rides.updateMany(

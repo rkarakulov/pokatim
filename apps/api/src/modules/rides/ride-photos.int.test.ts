@@ -5,7 +5,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { brokenJpeg, GIF_BYTES, hasGpsIfd, hugePng, twoToneImage } from '../../../test/avatars';
 import { createHarness, DAY, type Harness } from '../../../test/harness';
 import { bearer, call, gate, retried, untilBlocked } from '../../../test/identity';
-import { panel, panelCall } from '../../../test/panel';
+import { panel, panelCall, panelCookie } from '../../../test/panel';
 import { staff } from '../../../test/races';
 import {
   authed,
@@ -430,6 +430,71 @@ describe('сброс модератором (AC3, R10)', () => {
       (await panelCall(h, undefined, 'POST', `${MODERATION}/${ride.id}/photo-reset`, {})).status,
     ).toBe(401);
     expect((await fetchPhoto(id)).status).toBe(200);
+  });
+});
+
+describe('GET /v1/admin/rides/:id/photo — фото для модерации (ride-photo-followups AC5)', () => {
+  let moderator: { userId: string; token: string };
+  beforeEach(async () => {
+    moderator = await staff(h, 'moderator@example.by', 'moderator');
+  });
+  const adminPhoto = async (url: string, token: string | null = moderator.token) =>
+    parse(await h.app.inject({ method: 'GET', url, headers: token ? panelCookie(token) : {} }));
+  const urlOf = (rideId: string, photoId: string) =>
+    `${MODERATION}/${rideId}/photo?photoId=${encodeURIComponent(photoId)}`;
+  const expectJpeg = (res: Raw) => {
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toBe('image/jpeg');
+    expect(res.headers['cache-control']).toBe('private, no-store');
+    expect(res.headers['x-content-type-options']).toBe('nosniff');
+    expect(res.headers['content-security-policy']).toBe("default-src 'none'; sandbox");
+  };
+  const expectNotFound = (res: Raw) => {
+    expect(res.status).toBe(404);
+    expect(res.body).toMatchObject({ code: 'NOT_FOUND' });
+    expect(String(res.headers['content-type'])).not.toContain('image/jpeg');
+  };
+
+  it('видимый и скрытый райд — байты текущего фото, private no-store; публичный GET скрытого — 404', async () => {
+    const ride = await createRide(h, organizer);
+    const id = photoIdOf(await upload(organizer, ride.id, await photo()));
+    const visible = await adminPhoto(urlOf(ride.id, id));
+    expectJpeg(visible);
+    const pub = await fetchPhoto(id);
+    expect(pub.status).toBe(200);
+    expect(visible.raw.equals(pub.raw)).toBe(true);
+
+    await hideInDb(h, ride.id);
+    expect((await fetchPhoto(id)).status).toBe(404);
+    const hidden = await adminPhoto(urlOf(ride.id, id));
+    expectJpeg(hidden);
+    expect(hidden.raw.equals(pub.raw)).toBe(true);
+  });
+
+  it('photoId не текущий / фото нет / райда нет / фото другого райда — 404 JSON', async () => {
+    const ride = await createRide(h, organizer);
+    const other = await createRide(h, organizer);
+    const first = photoIdOf(await upload(organizer, ride.id, await photo()));
+    const second = photoIdOf(await upload(organizer, ride.id, await photo()));
+    const foreign = photoIdOf(await upload(organizer, other.id, await photo()));
+    expectNotFound(await adminPhoto(urlOf(ride.id, first)));
+    expectNotFound(await adminPhoto(urlOf(ride.id, foreign)));
+    expectNotFound(await adminPhoto(urlOf('01890a5d-ac96-774b-bcce-b302099a8057', second)));
+    expectJpeg(await adminPhoto(urlOf(ride.id, second)));
+    await removePhoto(organizer, ride.id);
+    expectNotFound(await adminPhoto(urlOf(ride.id, second)));
+  });
+
+  it('кривой или лишний query, кривой id — 400; без rides.moderate — 403; без сессии — 401', async () => {
+    const ride = await createRide(h, organizer);
+    const id = photoIdOf(await upload(organizer, ride.id, await photo()));
+    expect((await adminPhoto(`${MODERATION}/${ride.id}/photo`)).status).toBe(400);
+    expect((await adminPhoto(urlOf(ride.id, 'x'))).status).toBe(400);
+    expect((await adminPhoto(`${urlOf(ride.id, id)}&extra=1`)).status).toBe(400);
+    expect((await adminPhoto(urlOf('not-a-uuid', id))).status).toBe(400);
+    const staffOrganizer = await staff(h, 'staff-org@example.by', 'organizer');
+    expect((await adminPhoto(urlOf(ride.id, id), staffOrganizer.token)).status).toBe(403);
+    expect((await adminPhoto(urlOf(ride.id, id), null)).status).toBe(401);
   });
 });
 
