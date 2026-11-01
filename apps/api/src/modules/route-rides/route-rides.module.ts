@@ -14,6 +14,10 @@ import { RiderRouteRidesService } from './rider-route-rides';
 import { RIDER_ROUTE_RIDES } from './rider-route-rides.port';
 import { RouteRideErasure } from './route-ride-erasure';
 import { RouteRidesIntakeProcessor } from './route-rides-intake.processor';
+import {
+  RouteRidesMaintenanceProcessor,
+  RouteRidesSchedules,
+} from './route-rides-maintenance.processor';
 import { RouteRidesController } from './route-rides.controller';
 import { RouteRidesReadService } from './route-rides-read.service';
 import { RouteRidesRepository } from './route-rides.repository';
@@ -57,7 +61,8 @@ export class RouteRidesModule {}
 /**
  * Задачи `route-rides` в worker: сверка заезда с маршрутом (поток разбора) — ручная (`route-ride-check`) и автопроверка
  * новой активности (`route-ride-auto`, route-rides-03; сверка — общий `RouteRideEvaluator`), приём
- * `tracks.activity-removed` (`route-rides-intake`, удаление заездов активности).
+ * `tracks.activity-removed` (`route-rides-intake`, удаление заездов активности), уборщик сирот
+ * (`route-rides-maintenance`, route-rides-08).
  */
 @Module({
   imports: [
@@ -66,6 +71,7 @@ export class RouteRidesModule {}
       { name: QUEUE.routeRideCheck },
       { name: QUEUE.routeRidesIntake },
       { name: QUEUE.routeRideAuto },
+      { name: QUEUE.routeRidesMaintenance },
     ),
   ],
   providers: [
@@ -73,6 +79,8 @@ export class RouteRidesModule {}
     RouteRideCheckProcessor,
     RouteRidesIntakeProcessor,
     RouteRideAutoProcessor,
+    RouteRidesMaintenanceProcessor,
+    RouteRidesSchedules,
   ],
 })
 export class RouteRidesWorkerModule {}

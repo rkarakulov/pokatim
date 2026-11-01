@@ -677,6 +677,9 @@ RC-A1, ADR-0019).
   заезд группы или квота 100 → транзакция { сироты → `insert` → outbox `route-rides.check-requested` }; гонка двух POST
   — `isDuplicateKey` уникального индекса) и `RouteRidesReadService` (фильтр по живым активностям, сравнение —
   `route-rides.policy.ts`).
+- Регламент `route-rides-maintenance` (route-rides-08): `RouteRidesMaintenanceProcessor` (задача `orphans`, расписание
+  `route-rides.orphans.daily` 04:23 Минск + разовый прогон при старте) — уборщик сирот, итог задачи — счётчики
+  `{ scanned, deletedActivity, deletedRoute, batches, more }`, лог — только они.
 - Сверка — `RouteRideCheckProcessor` (параллелизм 1): `runParseThread('analyzeAttempt')`, коридор
   `ROUTE_RIDE_POLICY.corridorWidthM` (пишется в документ), окно — время заезда ± 1 мин; итог — одна запись своей
   ревизией без транзакции и событий. Финальная попытка — `failed: error`; dead-letter в панель неприменим (личные

@@ -69,6 +69,15 @@ export const ROUTE_RIDE_DELETE_POLICY = {
   userLimit: { limit: 60, windowSec: 3600 },
 } as const;
 
+/**
+ * Уборщик сирот (route-rides-08): скан `route_rides` по `_id` пачками по 500 (предел портов живости ≤ 1000 id), не
+ * больше 200 пачек (100 000 заездов) за прогон — остаток следующим прогоном с курсора.
+ */
+export const ROUTE_RIDE_ORPHANS_POLICY = {
+  batchSize: 500,
+  maxBatches: 200,
+} as const;
+
 const DAY_MS = 86_400_000;
 
 /** Активность годится для автопроверки (V1, 8.1 AC-3): спорт и старт `≥ uploadCreatedAt − 7 сут`. */
