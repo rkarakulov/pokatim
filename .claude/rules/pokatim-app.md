@@ -669,7 +669,10 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   `ride.photo`); скрытый — `photo: null`, из приложения не удаляется; загрузка — `api.uploadRidePhoto` (Blob, как аватар), удаление — `api.deleteRidePhoto`, хуки
   `useUploadRidePhoto`/`useDeleteRidePhoto` (ответ → `applyRideView`: кеш `me` + инвалидация `['rides']`, в т. ч. статус
   карточек `['rides','invite',…]`); тексты — `ride-photo-errors.ts`. Герой — `SectionHero photo` (`RideHero`:
-  `api.ridePhotoUrl`): `expo-image` `cover` декоративно (`accessible={false}`, пустой alt) под `components/photo-scrim.tsx`
+  `api.ridePhotoUrl`): картинка — `components/hero-photo(.web).tsx` (native — `expo-image` `cover`, `accessible={false}`;
+  web — обычный `<img alt="">` `object-fit: cover`: `expo-image` на web вставляет картинку только в эффекте, в SSR её
+  нет; сломанная до гидрации — `complete && naturalWidth === 0` после монтирования; сторож SSR —
+  `section-hero.web.test.tsx` `renderToString`) декоративно под `components/photo-scrim.tsx`
   (полосы `View` по профилю `photoScrimHero` — без провала, порог контраста на всей высоте; у 4a — свой `photoScrim`; цвет
   `overlay.scrim`, `aria-hidden`), текст и линия — `text.onPhoto`; ошибка картинки — типографский герой. Тот же герой —
   шапка карточки `rides/[id]` (ride-photo-followups, `ride-detail.tsx`: `photo` по `api.ridePhotoUrl` — абсолютный
