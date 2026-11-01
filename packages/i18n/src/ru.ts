@@ -2371,6 +2371,11 @@ export const ru = {
     'Время участков не складывается во время маршрута: края у границ участков не входят ни в один из них.',
   'routes.rides.result.section': 'Участок {n} · {from}–{to} км',
   'routes.rides.result.sectionBest': 'Лучшее время: {time}',
+  'routes.rides.result.delete': 'Удалить заезд',
+  'routes.rides.result.deleteConfirm':
+    'Удалить заезд? Он пропадёт из ваших заездов, сравнения, участков и таблицы «Другие». Активность останется.',
+  'routes.rides.result.deleteCancel': 'Отменить',
+  'routes.rides.result.deleteFailed': 'Не удалось удалить заезд',
   'routes.rides.track.unavailable': 'Разметка трека для этого заезда недоступна',
   'routes.rides.error.rateLimited':
     'Слишком много проверок за час. Попробуйте через {minutes} мин.',

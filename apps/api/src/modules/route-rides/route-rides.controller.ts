@@ -1,4 +1,15 @@
-import { Body, Controller, Get, Header, Param, Post, Query, Res, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Header,
+  HttpCode,
+  Param,
+  Post,
+  Query,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
 import {
   FieldErrorCode,
   type RouteRideCandidates,
@@ -90,6 +101,18 @@ export class RouteRidesController {
     @Param('rideId', idPipe) rideId: string,
   ): Promise<RouteRideDetail> {
     return this.read.detail(user.userId, routeId, rideId);
+  }
+
+  /** Удаление своего заезда (route-rides-07): `204`; чужой, неизвестный, невидимый маршрут — `404`. */
+  @Post(':rideId/delete')
+  @HttpCode(204)
+  @Header('Cache-Control', 'no-store')
+  async delete(
+    @CurrentUser() user: AuthUser,
+    @Param('routeId', idPipe) routeId: string,
+    @Param('rideId', idPipe) rideId: string,
+  ): Promise<void> {
+    await this.rides.delete(user.userId, routeId, rideId);
   }
 
   @Get(':rideId/track')
