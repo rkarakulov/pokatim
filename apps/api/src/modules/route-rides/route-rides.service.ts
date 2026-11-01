@@ -12,6 +12,7 @@ import {
   findExisting,
   newRideDoc,
   primaryOfGroup,
+  ROUTE_RIDE_DELETE_POLICY,
   ROUTE_RIDE_POLICY,
   stuckBounds,
 } from './route-rides.policy';
@@ -48,7 +49,7 @@ export class RouteRidesService {
     input: RouteRideRequest,
   ): Promise<{ ride: RouteRideDetail; created: boolean }> {
     // до всего: считает повторы и 404 (анти-перебор)
-    await this.limit(userId);
+    await this.limit(`route-rides-user:${userId}`, ROUTE_RIDE_POLICY.userLimit);
     await this.read.route(routeId, userId);
     const primary = await this.primaryOf(userId, input);
 
@@ -83,6 +84,20 @@ export class RouteRidesService {
       ride: await this.read.detail(userId, routeId, rideId),
       created: outcome === 'created',
     };
+  }
+
+  /**
+   * Удаление своего заезда (route-rides-07): лимит до чтений → видимость маршрута → заезд свой и этого маршрута, любой
+   * статус (итог идущей проверки промахнётся по `_id`); иначе `404`. Лучшие, «Другие» и участки считаются на чтении.
+   */
+  async delete(userId: string, routeId: string, rideId: string): Promise<void> {
+    await this.limit(`route-rides-delete:${userId}`, ROUTE_RIDE_DELETE_POLICY.userLimit);
+    await this.read.route(routeId, userId);
+    const deleted = await this.transactions.run((tx) =>
+      this.repository.deleteOwn(tx, userId, routeId, rideId),
+    );
+    if (!deleted) throw notFound();
+    this.logger.log(`route-ride ${rideId} route ${routeId} user ${userId} deleted`);
   }
 
   /** Своя основная активность группы: по `activityId` (дубль — к основной) или по готовой загрузке. */
@@ -145,12 +160,8 @@ export class RouteRidesService {
     await this.outbox.append(tx, { type: ROUTE_RIDES_CHECK_REQUESTED, payload });
   }
 
-  private async limit(userId: string): Promise<void> {
-    const result = await this.rateLimiter.consume(
-      `route-rides-user:${userId}`,
-      ROUTE_RIDE_POLICY.userLimit,
-      this.clock.now(),
-    );
+  private async limit(key: string, rule: { limit: number; windowSec: number }): Promise<void> {
+    const result = await this.rateLimiter.consume(key, rule, this.clock.now());
     if (!result.allowed) {
       const details: RateLimitedDetails = { retryAfterSec: result.retryAfterSec };
       throw domainError('RATE_LIMITED', 429, details);

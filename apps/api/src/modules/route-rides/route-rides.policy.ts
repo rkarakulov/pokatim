@@ -64,6 +64,11 @@ export const ROUTE_RIDE_LEADERBOARD_POLICY = {
   userLimit: { limit: 300, windowSec: 3600 },
 } as const;
 
+/** Удаление своего заезда (route-rides-07, `[ASSUMPTION]`): лимит — 60/ч на пользователя, до любых чтений. */
+export const ROUTE_RIDE_DELETE_POLICY = {
+  userLimit: { limit: 60, windowSec: 3600 },
+} as const;
+
 const DAY_MS = 86_400_000;
 
 /** Активность годится для автопроверки (V1, 8.1 AC-3): спорт и старт `≥ uploadCreatedAt − 7 сут`. */

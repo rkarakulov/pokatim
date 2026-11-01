@@ -235,3 +235,34 @@ export function useCheckRouteRide(routeId: string) {
     },
   });
 }
+
+/**
+ * «Удалить заезд» (route-rides-07): `404` (уже удалён) — тоже успех. Список, кандидаты и «Другие» маршрута устаревают
+ * (лучшие и участки сервер считает на чтении); деталь и трек не перезапрашиваются (заезда нет) — экран после ухода
+ * убирает их `forgetRouteRide` (раньше — открытый экран перезапросил бы деталь и мигнул «Заезд не найден»).
+ */
+export function useDeleteRouteRide(routeId: string, rideId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    ...AUTH_MUTATION,
+    mutationFn: async () => {
+      try {
+        await withAccessToken((token) => api.deleteRouteRide(token, routeId, rideId));
+      } catch (error) {
+        if (!isNotFound(error)) throw error;
+      }
+    },
+    onSuccess: () =>
+      void queryClient.invalidateQueries({
+        queryKey: routeRidesKeys.all(routeId),
+        predicate: ({ queryKey }) =>
+          !(queryKey[3] === rideId && ['ride', 'track'].includes(String(queryKey[2]))),
+      }),
+  });
+}
+
+/** Деталь и трек удалённого заезда — из кеша (после ухода с экрана заезда). */
+export function forgetRouteRide(queryClient: QueryClient, routeId: string, rideId: string) {
+  queryClient.removeQueries({ queryKey: routeRidesKeys.detail(routeId, rideId) });
+  queryClient.removeQueries({ queryKey: [...routeRidesKeys.all(routeId), 'track', rideId] });
+}

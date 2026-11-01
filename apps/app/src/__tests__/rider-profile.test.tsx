@@ -364,7 +364,7 @@ describe('«Свои» на чужом профиле (P3, K6)', () => {
   it('N = 0 — строки «Вместе ехали» нет, есть «В свои»', async () => {
     signIn();
     await openSocial();
-    expect(await screen.findByRole('button', { name: 'В свои' })).toBeOnTheScreen();
+    expect(await screen.findByRole('button', { name: 'В свои: Анна К.' })).toBeOnTheScreen();
     expect(screen.queryByText(/Вместе ехали/)).toBeNull();
   });
 
@@ -403,7 +403,7 @@ describe('«Свои» на чужом профиле (P3, K6)', () => {
     signIn();
     setConnection.mockResolvedValueOnce({ ...noSocial, connected: true });
     await openSocial();
-    const connect = await screen.findByRole('button', { name: 'В свои' });
+    const connect = await screen.findByRole('button', { name: 'В свои: Анна К.' });
     // ширина кнопки — по длинной подписи: вторая подпись скрыто держит место, строка не прыгает
     expect(
       within(connect).getByText('Убрать из своих', { includeHiddenElements: true }),
@@ -412,14 +412,16 @@ describe('«Свои» на чужом профиле (P3, K6)', () => {
     expect(setConnection).toHaveBeenCalledWith(liveSession.accessToken, PUBLIC_ID, {
       connected: true,
     });
-    expect(await screen.findByRole('button', { name: 'Убрать из своих' })).toBeOnTheScreen();
+    const remove = await screen.findByRole('button', { name: 'Убрать из своих: Анна К.' });
+    // кнопка называет действие: видимая подпись — «Убрать из своих», не статус «В своих»
+    expect(within(remove).getByText('Убрать из своих')).toBeOnTheScreen();
 
     setConnection.mockResolvedValueOnce(noSocial);
-    await fireEvent.press(screen.getByRole('button', { name: 'Убрать из своих' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Убрать из своих: Анна К.' }));
     expect(setConnection).toHaveBeenLastCalledWith(liveSession.accessToken, PUBLIC_ID, {
       connected: false,
     });
-    expect(await screen.findByRole('button', { name: 'В свои' })).toBeOnTheScreen();
+    expect(await screen.findByRole('button', { name: 'В свои: Анна К.' })).toBeOnTheScreen();
   });
 
   it('429 — текст у кнопки, состояние не меняется', async () => {
@@ -428,9 +430,9 @@ describe('«Свои» на чужом профиле (P3, K6)', () => {
       new ApiHttpError(429, { code: 'RATE_LIMITED', message: 'x', details: { retryAfterSec: 60 } }),
     );
     await openSocial();
-    await fireEvent.press(await screen.findByRole('button', { name: 'В свои' }));
+    await fireEvent.press(await screen.findByRole('button', { name: 'В свои: Анна К.' }));
     expect(await screen.findByText('Слишком много действий, попробуйте позже')).toBeOnTheScreen();
-    expect(screen.getByRole('button', { name: 'В свои' })).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: 'В свои: Анна К.' })).toBeOnTheScreen();
   });
 
   it('свой профиль (self) — блока нет', async () => {
@@ -439,13 +441,13 @@ describe('«Свои» на чужом профиле (P3, K6)', () => {
     await openSocial();
     expect(await screen.findByRole('header', { name: 'Анна К.' })).toBeOnTheScreen();
     await waitFor(() => expect(getSocial).toHaveBeenCalled());
-    expect(screen.queryByRole('button', { name: 'В свои' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'В свои: Анна К.' })).toBeNull();
     expect(screen.queryByTestId('rider-social')).toBeNull();
   });
 
   it('гость — только «В свои» → «Вход» с возвратом на профиль; запроса social нет', async () => {
     const router = await openSocial();
-    await fireEvent.press(await screen.findByRole('button', { name: 'В свои' }));
+    await fireEvent.press(await screen.findByRole('button', { name: 'В свои: Анна К.' }));
     await waitFor(() => expect(router.getPathname()).toBe('/sign-in'));
     expect(takeReturnPath()).toBe(`/riders/${PUBLIC_ID}`);
     expect(getSocial).not.toHaveBeenCalled();
@@ -469,6 +471,6 @@ describe('«Свои» на чужом профиле (P3, K6)', () => {
     expect(await screen.findByText('Не удалось загрузить')).toBeOnTheScreen();
     expect(screen.getByRole('header', { name: 'Анна К.' })).toBeOnTheScreen();
     await fireEvent.press(screen.getByText('Повторить'));
-    expect(await screen.findByRole('button', { name: 'В свои' })).toBeOnTheScreen();
+    expect(await screen.findByRole('button', { name: 'В свои: Анна К.' })).toBeOnTheScreen();
   });
 });
