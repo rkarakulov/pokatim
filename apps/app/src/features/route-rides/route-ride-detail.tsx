@@ -11,11 +11,12 @@ import {
   Pill,
   SkeletonHeroCard,
   SkeletonText,
+  TextAction,
   textStyle,
   useTheme,
 } from '@rkarakulov/ui';
 import { useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'expo-router';
+import { type Href, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -23,6 +24,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { DetailHeader } from '@/components/detail-header';
 import { DocumentTitle } from '@/components/document-title';
 import { OfflineBanner } from '@/components/offline-banner';
+import { actionErrorMessage } from '@/features/auth/error-messages';
 import { formatKm, formatMinskDateTime } from '@/features/devices/format';
 import { DetailRow } from '@/features/routes/detail-row';
 import { RouteAuthorRespect } from '@/features/social/respect-block';
@@ -31,7 +33,13 @@ import { useMinskClock } from '@/lib/use-minsk-clock';
 import { usePullToRefresh } from '@/lib/use-pull-to-refresh';
 
 import { routeRideErrorMessage } from './error-messages';
-import { routeRidesKeys, useCheckRouteRide, useRouteRide } from './queries';
+import {
+  forgetRouteRide,
+  routeRidesKeys,
+  useCheckRouteRide,
+  useDeleteRouteRide,
+  useRouteRide,
+} from './queries';
 import { RouteRideMap } from './route-ride-map';
 import {
   isPendingCheck,
@@ -73,6 +81,76 @@ function RecheckAction({ activityId, routeId }: { activityId: string; routeId: s
       />
       {missing ? <Banner tone="warning" message={t('routes.rides.result.recheckMissing')} /> : null}
       {error && !missing ? <Banner tone="error" message={routeRideErrorMessage(error)} /> : null}
+    </View>
+  );
+}
+
+/**
+ * «Удалить заезд» с подтверждением (route-rides-07, `[ASSUMPTION]` тексты и место — внизу экрана, как «Удалить» у
+ * «Моего маршрута»). Успех — к карточке маршрута (`dismissTo`: карточка в стеке — снять экраны над ней, в том числе
+ * «Другие»; нет — заменить), она уже обновлена инвалидацией.
+ */
+function DeleteRideAction({
+  routeId,
+  rideId,
+  card,
+}: {
+  routeId: string;
+  rideId: string;
+  card: Href;
+}) {
+  const theme = useTheme();
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const remove = useDeleteRouteRide(routeId, rideId);
+  const [confirming, setConfirming] = useState(false);
+  if (!confirming) {
+    return (
+      <View style={styles.action}>
+        <TextAction
+          label={t('routes.rides.result.delete')}
+          destructive
+          onPress={() => setConfirming(true)}
+        />
+      </View>
+    );
+  }
+  const confirm = async () => {
+    try {
+      await remove.mutateAsync();
+    } catch {
+      return; // текст отказа — из `remove.error`
+    }
+    router.dismissTo(card);
+    forgetRouteRide(queryClient, routeId, rideId);
+  };
+  return (
+    <View style={styles.stack}>
+      <Text style={[textStyle('body'), { color: theme.text.primary }]}>
+        {t('routes.rides.result.deleteConfirm')}
+      </Text>
+      {remove.isError ? (
+        <Banner
+          tone="error"
+          title={t('routes.rides.result.deleteFailed')}
+          message={actionErrorMessage(remove.error)}
+        />
+      ) : null}
+      <Button
+        label={t('routes.rides.result.delete')}
+        onPress={() => void confirm()}
+        loading={remove.isPending}
+      />
+      <View style={styles.action}>
+        <TextAction
+          label={t('routes.rides.result.deleteCancel')}
+          onPress={() => {
+            setConfirming(false);
+            remove.reset();
+          }}
+          disabled={remove.isPending}
+        />
+      </View>
     </View>
   );
 }
@@ -181,6 +259,7 @@ function RideView({
         {formatElapsed(ride.activity.elapsedSec)}
       </DetailRow>
       <RouteRideMap routeId={routeId} ride={ride} mine={mine} />
+      <DeleteRideAction routeId={routeId} rideId={ride.id} card={routeCardPath(routeId, mine)} />
     </View>
   );
 }
@@ -276,5 +355,6 @@ const styles = StyleSheet.create({
   detail: { gap: space.s4 },
   stack: { gap: space.s3 },
   pills: { flexDirection: 'row', flexWrap: 'wrap', gap: space.s2 },
+  action: { alignItems: 'flex-start' },
   offline: { paddingBottom: space.s3 },
 });

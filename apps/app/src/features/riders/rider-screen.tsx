@@ -118,7 +118,7 @@ function RiderBody({
       <ProfileHead name={rider.name} club={rider.club} avatarId={rider.avatar?.id ?? null} />
       <View style={[styles.padded, styles.sections]}>
         {/* «Свои» (P3, K6): «Вместе ехали», «Идёт», «В свои» — под шапкой, над статистикой */}
-        <RiderSocialBlock id={rider.publicId} session={session} query={social} />
+        <RiderSocialBlock id={rider.publicId} name={rider.name} session={session} query={social} />
         <StatBlock items={publicStatItems(rider.stats)} />
         {/* гоночные достижения (achievements, A7): без перехода и без «Поделиться»; пусто — блока нет */}
         <AchievementsBlock testID="rider-achievements" query={achievements} publicOnly />

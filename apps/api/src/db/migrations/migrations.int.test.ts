@@ -66,6 +66,7 @@ import {
   routeRidesLeaderboardIdx,
 } from './0049_route_rides_leaderboard_idx';
 import { RACES_PROTOCOL_PUBLISHED_INDEX, socialHome } from './0050_social_home';
+import { SITEMAP_INDEXES, sitemapIndexes } from './0051_sitemap_indexes';
 import { SOCIAL_COLLECTIONS } from '../../modules/social/social.collection';
 import { PRODUCT_EVENTS_COLLECTIONS } from '../../modules/product-events/product-events.collection';
 import { TICKETS_COLLECTIONS } from '../../modules/tickets/tickets.collection';
@@ -190,6 +191,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       '0048_race_entry_numbers',
       '0049_route_rides_leaderboard_idx',
       '0050_social_home',
+      '0051_sitemap_indexes',
     ]);
   });
 
@@ -261,6 +263,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
         ...plain({ protocolPublishedAt: -1, _id: -1 }),
         partialFilterExpression: { protocolPublishedAt: { $type: 'date' } },
       },
+      // 0051_sitemap_indexes (sitemap-index): keyset карты сайта по `_id`
+      races_sitemap_idx: plain({ status: 1, _id: 1, updatedAt: 1 }),
     });
     const meta = h.db.collection<{ _id: string; version: number }>(RACES_COLLECTIONS.meta);
     await meta.deleteMany({});
@@ -318,6 +322,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
       calendar_starts_panel_idx: plain({ startsOn: -1, _id: -1 }),
       // 0037_og_sync_indexes (og-images): пререндер OG-картинок
       calendar_starts_og_sync_idx: plain({ status: 1, updatedAt: 1, _id: 1 }),
+      // 0051_sitemap_indexes (sitemap-index): keyset карты сайта по `_id`
+      calendar_starts_sitemap_idx: plain({ status: 1, _id: 1, updatedAt: 1 }),
     };
     expect(await indexesOf(CALENDAR_COLLECTIONS.starts)).toEqual(expected);
     await calendar.up(h.db);
@@ -481,6 +487,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
         routes_start_2dsphere: index({ start: '2dsphere' }),
         // 0037_og_sync_indexes (og-images): пререндер OG-картинок
         routes_og_sync_idx: index({ status: 1, updatedAt: 1, _id: 1 }),
+        // 0051_sitemap_indexes (sitemap-index): keyset карты сайта по `_id`
+        routes_sitemap_idx: index({ status: 1, _id: 1, updatedAt: 1 }),
       },
       // 0022_routes_derived (routes-03): выборка бэкфилла производных
       [ROUTES_COLLECTIONS.geometries]: {
@@ -2107,7 +2115,7 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     }
   });
 
-  it('0049_route_rides_leaderboard_idx: частичный (routeId, время, дата, _id) по passed; последняя; повторный up — без изменений', async () => {
+  it('0049_route_rides_leaderboard_idx: частичный (routeId, время, дата, _id) по passed; повторный up — без изменений', async () => {
     const ids = migrations.map((migration) => migration.id);
     expect(ids.indexOf('0049_route_rides_leaderboard_idx')).toBe(
       ids.indexOf('0048_race_entry_numbers') + 1,
@@ -2136,9 +2144,8 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     expect(await indexesOf(ROUTE_RIDES_COLLECTIONS.rides)).toEqual(before);
   });
 
-  it('0050_social_home: частичный (protocolPublishedAt ↓, _id ↓) по дате протокола; последняя; повторный up — без изменений', async () => {
+  it('0050_social_home: частичный (protocolPublishedAt ↓, _id ↓) по дате протокола; повторный up — без изменений', async () => {
     const ids = migrations.map((migration) => migration.id);
-    expect(ids.at(-1)).toBe('0050_social_home');
     expect(ids.indexOf('0050_social_home')).toBe(
       ids.indexOf('0049_route_rides_leaderboard_idx') + 1,
     );
@@ -2153,5 +2160,35 @@ describe('миграции MongoDB на чистой *_test (AC5)', () => {
     await socialHome.up(h.db);
     await socialHome.up(h.db);
     expect(await indexesOf(RACES_COLLECTIONS.races)).toEqual(before);
+  });
+
+  it('0051_sitemap_indexes: (status, _id, updatedAt) на гонках, маршрутах, стартах; последняя; повторный up — без изменений', async () => {
+    const ids = migrations.map((migration) => migration.id);
+    expect(ids.at(-1)).toBe('0051_sitemap_indexes');
+    expect(ids.indexOf('0051_sitemap_indexes')).toBe(ids.indexOf('0050_social_home') + 1);
+    const sitemap = {
+      key: { status: 1, _id: 1, updatedAt: 1 },
+      unique: false,
+      partialFilterExpression: undefined,
+      expireAfterSeconds: undefined,
+    };
+    const target = {
+      [RACES_COLLECTIONS.races]: SITEMAP_INDEXES.races.options.name,
+      [ROUTES_COLLECTIONS.routes]: SITEMAP_INDEXES.routes.options.name,
+      [CALENDAR_COLLECTIONS.starts]: SITEMAP_INDEXES.calendar.options.name,
+    };
+    const before: Record<string, unknown> = {};
+    for (const [collection, name] of Object.entries(target)) {
+      const indexes = await indexesOf(collection);
+      expect(indexes).toMatchObject({ [name]: sitemap });
+      // порядок полей ключа: равенство статуса, диапазон и сортировка по `_id`, покрытие `updatedAt`
+      expect(Object.keys(indexes[name]?.key ?? {})).toEqual(['status', '_id', 'updatedAt']);
+      before[collection] = indexes;
+    }
+    await sitemapIndexes.up(h.db);
+    await sitemapIndexes.up(h.db);
+    for (const collection of Object.keys(target)) {
+      expect(await indexesOf(collection)).toEqual(before[collection]);
+    }
   });
 });

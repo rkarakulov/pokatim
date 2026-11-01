@@ -31,6 +31,7 @@ const getRide = jest.mocked(api.getRouteRide);
 const checkRide = jest.mocked(api.checkRouteRide);
 const listCandidates = jest.mocked(api.listRouteRideCandidates);
 const getRouteRespect = jest.mocked(api.getRouteRespect);
+const deleteRide = jest.mocked(api.deleteRouteRide);
 const setRouteRespect = jest.mocked(api.setRouteRespect);
 const NEUTRAL_RESPECT = { available: false, respected: false, count: 0, own: false, from: null };
 
@@ -501,5 +502,58 @@ describe('«Респект автору» (P4, K8)', () => {
     expect(await screen.findByText('Не пройден')).toBeOnTheScreen();
     expect(getRouteRespect).not.toHaveBeenCalled();
     expect(screen.queryByRole('button', { name: 'Респект автору' })).toBeNull();
+  });
+});
+
+describe('«Удалить заезд» (route-rides-07)', () => {
+  // карточка маршрута в роутере: `dismissTo` заменяет экран на неё (её нет в стеке прямой ссылки)
+  const openWithCard = (client = createTestQueryClient()) =>
+    renderRouter(
+      { ...routes, 'routes/[id]': () => null },
+      { initialUrl: `/routes/rides/${ROUTE_ID}/${RIDE_ID}`, wrapper: createQueryWrapper(client) },
+    );
+  const confirmText =
+    'Удалить заезд? Он пропадёт из ваших заездов, сравнения, участков и таблицы «Другие». Активность останется.';
+
+  it('подтверждение → POST, деталь убрана из кеша, список и «Другие» устарели; без истории — к карточке', async () => {
+    signedIn();
+    const client = createTestQueryClient();
+    client.setQueryData(routeRidesKeys.list(ROUTE_ID), null);
+    client.setQueryData(routeRidesKeys.leaderboard(ROUTE_ID, 5), null);
+    deleteRide.mockResolvedValue(undefined);
+    const router = await openWithCard(client);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Удалить заезд' }));
+    expect(screen.getByText(confirmText)).toBeOnTheScreen();
+    expect(deleteRide).not.toHaveBeenCalled();
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Удалить заезд' }));
+    await waitFor(() => expect(router.getPathname()).toBe(`/routes/${ROUTE_ID}`));
+    expect(deleteRide).toHaveBeenCalledWith(TOKEN, ROUTE_ID, RIDE_ID);
+    expect(client.getQueryState(routeRidesKeys.detail(ROUTE_ID, RIDE_ID))).toBeUndefined();
+    expect(client.getQueryState(routeRidesKeys.list(ROUTE_ID))?.isInvalidated).toBe(true);
+    expect(client.getQueryState(routeRidesKeys.leaderboard(ROUTE_ID, 5))?.isInvalidated).toBe(true);
+  });
+
+  it('404 (уже удалён) — тоже успех', async () => {
+    signedIn();
+    deleteRide.mockRejectedValue(notFound());
+    const router = await openWithCard();
+    await fireEvent.press(await screen.findByRole('button', { name: 'Удалить заезд' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Удалить заезд' }));
+    await waitFor(() => expect(router.getPathname()).toBe(`/routes/${ROUTE_ID}`));
+  });
+
+  it('ошибка — баннер, экран остаётся; «Отменить» — без запроса, подтверждение скрыто', async () => {
+    signedIn();
+    deleteRide.mockRejectedValue(new ApiHttpError(500, { code: 'INTERNAL', message: 'x' }));
+    const router = await openWithCard();
+    await fireEvent.press(await screen.findByRole('button', { name: 'Удалить заезд' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Удалить заезд' }));
+    expect(await screen.findByText('Не удалось удалить заезд')).toBeOnTheScreen();
+    expect(router.getPathname()).toBe(`/routes/rides/${ROUTE_ID}/${RIDE_ID}`);
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Отменить' }));
+    expect(screen.queryByText(confirmText)).toBeNull();
+    expect(deleteRide).toHaveBeenCalledTimes(1);
   });
 });

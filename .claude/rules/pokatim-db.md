@@ -457,16 +457,20 @@ paths:
   (условие в фильтре) + outbox в транзакции. `trackMap` — позиции на линии `activity_tracks`, без координат;
   датчиков, флагов и диагностики нет.
 - route-rides-03: `origin?: 'manual' | 'auto'` — необязательное поле (нет поля — `manual` на чтении, бэкфилла и
-  миграции нет); ручной POST пишет `manual`. Автопроверка вставляет готовый `passed` одной записью (`insertChecked`,
-  `checkRevision 1`, `checkAttempts 1`, `updatedAt` = момент вставки — его читает `passedWithin`), без транзакции и
-  outbox; дубль уникального индекса — пропуск. Агрегат «маршруты со своими заездами» (`ridesByRoute`) — `$match
+  миграции нет); ручной POST пишет `manual`. Автопроверка вставляет готовый `passed` (`checkRevision 1`,
+  `checkAttempts 1`, `updatedAt` = момент вставки — его читает `passedWithin`) без outbox: по плану события — в
+  транзакции с `markPlannedInsert` (route-rides-07, см. `route_ride_auto_plans`), без события (прямой вызов `run`) —
+  одной записью `insertChecked`; дубль уникального индекса — пропуск. Агрегат «маршруты со своими заездами» (`ridesByRoute`) — `$match
   { userId, activityId: { $nin: группа события } }` по префиксу уникального индекса (автозаезды не сдвигают окно скана);
   заезды группы — `groupRides` (`{ userId, activityId: { $in } }`); нового индекса нет.
 - `route_ride_auto_plans` (route-rides-03, миграция `0046_route_ride_auto_plans`, expand-only): план автопроверки
   события — `{ _id: id события outbox, userId, routeIds ≤ 20, createdAt, expiresAt }`; писатель —
-  `RouteRidesRepository` (`saveAutoPlan`: `insertOne`, дубль `_id_` — план победителя; документ не меняется). Индексы —
+  `RouteRidesRepository` (`saveAutoPlan`: `insertOne`, дубль `_id_` — план победителя; дальше меняют только `$pull` удаления заезда и `$inc insertedRides` вставки автозаезда, route-rides-07). Индексы —
   TTL `route_ride_auto_plans_expires_ttl` (`expiresAt`, 30 сут — только уборка) и `route_ride_auto_plans_user_idx`
-  (стирание: `RouteRideErasure` удаляет планы и заезды по `userId`).
+  (стирание: `RouteRideErasure` удаляет планы и заезды по `userId`). Удаление своего заезда (route-rides-07,
+  `deleteOwn`) в той же транзакции снимает маршрут из планов райдера (`$pull routeIds` по индексу `userId`) — повтор
+  события не воскрешает автозаезд; автозаезд по плану вставляется транзакцией с `markPlannedInsert` (условная запись в
+  тот же документ плана — конфликт записи сериализует вставку с удалением).
 - Сироты (RC-1, RC-8): удалённая активность и недоступный маршрут — заезды не видны (фильтр на чтении по
   `ActivitySource.liveActivities` и `RouteRideRoutes`). Заезды удалённой активности удаляет `RouteRidesIntakeProcessor`
   по `tracks.activity-removed` (fan-out, очередь `route-rides-intake`, `deleteOfActivity`); фильтр и удаление сирот в

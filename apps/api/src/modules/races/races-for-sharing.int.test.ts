@@ -67,11 +67,42 @@ describe('ogChanged', () => {
   });
 });
 
-describe('sitemapSeasons (landing-seo)', () => {
-  it('все сезоны: id и дата изменения; нет сезонов — пусто', async () => {
-    expect(await port().sitemapSeasons()).toEqual([]);
-    const id = await seedSeason(h);
-    expect(await port().sitemapSeasons()).toEqual([{ id, updatedAt: h.clock.now() }]);
+describe('sitemapRange, sitemapSeasonsRange (sitemap-index)', () => {
+  const all = { after: null, until: null };
+  const ids = (rows: { id: string }[]) => rows.map((row) => row.id);
+
+  it('опубликованные гонки по _id ↑ в диапазоне (after, until], не больше limit; черновик и отменённая — нет', async () => {
+    const races = [await seedRace(h), await seedRace(h), await seedRace(h)].sort();
+    await seedRace(h, { status: 'draft' });
+    await seedRace(h, { status: 'cancelled' });
+    const now = h.clock.now();
+    expect(await port().sitemapRange(all, 10)).toEqual(races.map((id) => ({ id, updatedAt: now })));
+    expect(ids(await port().sitemapRange(all, 2))).toEqual(races.slice(0, 2));
+    expect(ids(await port().sitemapRange({ after: races[0]!, until: null }, 10))).toEqual(
+      races.slice(1),
+    );
+    expect(ids(await port().sitemapRange({ after: null, until: races[1]! }, 10))).toEqual(
+      races.slice(0, 2),
+    );
+    expect(ids(await port().sitemapRange({ after: races[0]!, until: races[1]! }, 10))).toEqual([
+      races[1],
+    ]);
+    expect(await port().sitemapRange({ after: races[2]!, until: null }, 10)).toEqual([]);
+  });
+
+  it('все сезоны по _id ↑ в диапазоне: id и дата изменения; нет сезонов — пусто', async () => {
+    expect(await port().sitemapSeasonsRange(all, 10)).toEqual([]);
+    const seasons = [await seedSeason(h), await seedSeason(h, 'Сезон 2027', { year: 2027 })].sort();
+    const now = h.clock.now();
+    expect(await port().sitemapSeasonsRange(all, 10)).toEqual(
+      seasons.map((id) => ({ id, updatedAt: now })),
+    );
+    expect(ids(await port().sitemapSeasonsRange({ after: seasons[0]!, until: null }, 1))).toEqual([
+      seasons[1],
+    ]);
+    expect(ids(await port().sitemapSeasonsRange({ after: null, until: seasons[0]! }, 10))).toEqual([
+      seasons[0],
+    ]);
   });
 });
 
