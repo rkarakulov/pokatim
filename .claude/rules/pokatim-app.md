@@ -540,7 +540,11 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   `display: none`). Шапка шторки — `StatBlock variant="compact"`, тело — `ScrollView` с `RefreshControl`, скраббинг
   выключает прокрутку тела (`useScrubScrollEnabled`): чипы, `ElevationProfile` без заголовка, `RouteActions` в строку,
   «Гонки на маршруте». 404 и ошибка без данных — без карты и шторки. Web: в `fill` колесо масштабирует без Ctrl/⌘.
-  «Мой маршрут» — пока прежняя раскладка (follow-up).
+  «Мой маршрут» (routes-07, `my-route-detail.tsx`) — та же раскладка у готового: `RouteLineMap fill bottomInset`, шапка
+  шторки — `StatBlock` по `ROUTE_STATS_VARIANT` из `routeDistanceGainItems` (`format.ts`, общие с каталогом), тело —
+  `ScrollView` с `keyboardShouldPersistTaps="handled"`; переименование подменяет тело формой; область — в
+  `components/keyboard-avoiding-area(.ios).tsx` (iOS — `behavior="padding"`, Android и web — без поведения). Остальные
+  статусы — прокрутка без карты и шторки.
 - Главная — раздел `routes` (герой `RouteHero` по теме: у «Классики» текстовый, RC-8; у тем с `contour`/`numeral` —
   контур из `catalogRouteMapOptions`, запрос — только в компоненте варианта; пустой каталог — `EmptyState`).
 - Мои маршруты (routes-02): переключатель «Каталог / Мои» — `SegmentedControl` в шапке обеих лент, состояние —

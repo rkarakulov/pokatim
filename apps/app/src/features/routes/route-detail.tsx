@@ -1,6 +1,6 @@
 import { apiErrorOf } from '@pokatim/api-client';
 import { Uuid, type CatalogRouteDetail, type RouteExportFormat } from '@pokatim/contracts';
-import { size, space, type AppTheme, type AppThemeLayout } from '@pokatim/design-tokens';
+import { size, space, type AppTheme } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
 import { createScrubStore, PROFILE_ASPECT_RATIO, type ScrubStore } from '@pokatim/route-view';
 import {
@@ -34,7 +34,7 @@ import { DetailHeader } from '@/components/detail-header';
 import { DocumentTitle } from '@/components/document-title';
 import { OfflineBanner } from '@/components/offline-banner';
 import { RaceListCard, RaceListCardSkeleton } from '@/components/race-list-card';
-import { StatBlock, StatBlockSkeleton, type StatVariant } from '@/components/stat-block';
+import { StatBlock, StatBlockSkeleton } from '@/components/stat-block';
 import { isSignedIn, useSessionStore } from '@/features/auth/session-store';
 import {
   routeRidesKeys,
@@ -57,6 +57,7 @@ import { CatalogRouteMap } from './catalog-route-map';
 import { ElevationProfile } from './elevation-profile';
 import {
   availableExportFormats,
+  ROUTE_STATS_VARIANT,
   routeAuthorLabel,
   routeChips,
   routeShareDescription,
@@ -287,19 +288,12 @@ function RouteReportAction({
   );
 }
 
-/** Вариант цифр шапки шторки по раскладке темы (`layout.routeStats`, app-themes C2). */
-const STATS_VARIANT: Record<AppThemeLayout['routeStats'], Exclude<StatVariant, 'default'>> = {
-  classic: 'compact',
-  tiles: 'tiles',
-  numeral: 'numeral',
-};
-
 /**
  * Шапка шторки (routes-04d, L3): строка цифр — видна и в свёрнутой шторке; у тем — плитки или крупная дистанция
  * (высоту шапки шторка измеряет сама, отступ камеры следует).
  */
 function RouteSheetHeader({ route }: { route: CatalogRouteDetail }) {
-  const variant = STATS_VARIANT[useAppTheme().layout.routeStats];
+  const variant = ROUTE_STATS_VARIANT[useAppTheme().layout.routeStats];
   return (
     <View style={styles.sheetHeader}>
       <StatBlock variant={variant} items={routeStatItems(route)} />
@@ -407,7 +401,7 @@ function StateScroll({
  */
 function RouteDetailSkeleton() {
   const theme = useTheme<AppTheme>();
-  const variant = STATS_VARIANT[useAppTheme().layout.routeStats];
+  const variant = ROUTE_STATS_VARIANT[useAppTheme().layout.routeStats];
   const block = { backgroundColor: theme.surface.skeleton };
   return (
     <View testID="route-detail-skeleton" style={styles.area}>

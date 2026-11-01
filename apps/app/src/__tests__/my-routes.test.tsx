@@ -2,10 +2,10 @@
 import { ApiHttpError, ApiNetworkError } from '@pokatim/api-client';
 import type { MyRoute, MyRoutePage, RouteMapGeometry } from '@pokatim/contracts';
 import { onlineManager } from '@tanstack/react-query';
-import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
+import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
 import { getDocumentAsync } from 'expo-document-picker';
 import type { ReactElement } from 'react';
-import type { RefreshControlProps } from 'react-native';
+import { StyleSheet, type RefreshControlProps } from 'react-native';
 
 import { useSessionStore } from '@/features/auth/session-store';
 import { useOnboardingStore } from '@/features/onboarding/onboarding-store';
@@ -113,6 +113,15 @@ const picked = (name: string, size: number) =>
     assets: [{ name, size, uri: `file:///cache/${name}`, lastModified: 0 }],
   });
 const feed = () => screen.getByTestId('my-routes-feed');
+const layoutOf = (height: number) => ({
+  nativeEvent: { layout: { x: 0, y: 0, width: 375, height } },
+});
+/** routes-07 (как routes-04d RC-5): карта монтируется после измерения шторки и области карты. */
+const showMap = async () => {
+  await fireEvent(await screen.findByTestId('bottom-sheet'), 'layout', layoutOf(420));
+  await fireEvent(await screen.findByTestId('map-area'), 'layout', layoutOf(700));
+  return screen.findByTestId('maplibre-Map');
+};
 
 describe('переключатель «Каталог / Мои» (routes-02, M1)', () => {
   it('по умолчанию — «Каталог» с фильтрами; «Мои» — ?view=mine без фильтров; «Каталог» — обратно', async () => {
@@ -305,29 +314,64 @@ describe('карточка своего маршрута (AC3, M3)', () => {
     expect(router.getSearchParams()).toMatchObject({ view: 'mine' });
   });
 
-  it('готовый — карта без коридора, длина, набор, петля, «Загружен»; «Поделиться» нет', async () => {
+  it('готовый (routes-07) — карта на всю область без коридора, шторка: цифры в шапке, «Загружен» и действия в теле; «Поделиться» нет', async () => {
     await openDetail(ring.id);
+    await showMap();
     expect(
-      await screen.findByLabelText('Карта моего маршрута: 42 км, старт и финиш отмечены'),
+      screen.getByLabelText('Карта моего маршрута: 42 км, старт и финиш отмечены'),
     ).toBeOnTheScreen();
-    await screen.findByTestId('maplibre-Map');
     expect(screen.getAllByTestId('maplibre-Layer').map((layer) => layer.props.id)).toEqual([
       'route',
       'start',
       'finish',
     ]);
     expect(getMineMap).toHaveBeenCalledWith(TOKEN, ring.id);
-    expect(screen.getByText('Длина')).toBeOnTheScreen();
-    expect(screen.getByText('Набор высоты')).toBeOnTheScreen();
-    expect(screen.getByText('Да — старт и финиш в одном месте')).toBeOnTheScreen();
-    expect(screen.getByText('Загружен')).toBeOnTheScreen();
-    expect(screen.getByText('27 октября 2026')).toBeOnTheScreen();
+    // название — только в шапке экрана, не в шторке (L3)
+    expect(within(screen.getByTestId('bottom-sheet')).queryByText('Вечерний круг')).toBeNull();
+    const header = within(screen.getByTestId('bottom-sheet-header'));
+    expect(header.getByLabelText('Дистанция 42 км круговой')).toBeOnTheScreen();
+    expect(header.getByLabelText('Набор 310 м')).toBeOnTheScreen();
+    expect(header.queryByText('В пути')).toBeNull();
+    const body = within(screen.getByTestId('my-route-detail'));
+    expect(body.getByText('Загружен')).toBeOnTheScreen();
+    expect(body.getByText('27 октября 2026')).toBeOnTheScreen();
+    expect(body.getByRole('button', { name: 'Переименовать' })).toBeOnTheScreen();
+    expect(body.getByRole('button', { name: 'Удалить' })).toBeOnTheScreen();
     expect(screen.queryByText('Поделиться')).toBeNull();
+  });
+
+  it('routes-07: без набора — колонки «Набор» нет; маршрут в одну сторону', async () => {
+    getMine.mockResolvedValue({ ...ring, elevationGainM: null, isLoop: false });
+    await openDetail(ring.id);
+    const header = within(await screen.findByTestId('bottom-sheet-header'));
+    expect(header.getByLabelText('Дистанция 42 км в одну сторону')).toBeOnTheScreen();
+    expect(header.queryByText('Набор')).toBeNull();
+  });
+
+  it('routes-07: «чёрточка» сворачивает шторку — видна строка цифр, тела нет; разворачивает обратно', async () => {
+    await openDetail(ring.id);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Свернуть панель' }));
+    expect(screen.getByLabelText('Дистанция 42 км круговой')).toBeOnTheScreen();
+    expect(screen.queryByRole('button', { name: 'Переименовать' })).toBeNull();
+    await fireEvent.press(screen.getByRole('button', { name: 'Развернуть панель' }));
+    expect(screen.getByRole('button', { name: 'Переименовать' })).toBeOnTheScreen();
+  });
+
+  it('routes-07: область карты и шторки поднимается над клавиатурой (iOS — padding); касания при клавиатуре доходят', async () => {
+    await openDetail(ring.id);
+    await screen.findByTestId('bottom-sheet');
+    // KeyboardAvoidingView с behavior="padding" добавляет отступ снизу (без клавиатуры — 0)
+    const area = screen.getByTestId('my-route-keyboard-area');
+    expect(StyleSheet.flatten(area.props.style)).toMatchObject({ paddingBottom: 0, flex: 1 });
+    expect(screen.getByTestId('my-route-detail')).toHaveProp(
+      'keyboardShouldPersistTaps',
+      'handled',
+    );
   });
 
   it('routes-04c: карту двигает один палец нативно — прокрутка карточки не выключается (вне карты — страница)', async () => {
     await openDetail(ring.id);
-    const map = await screen.findByTestId('maplibre-Map');
+    const map = await showMap();
     const scroll = () => screen.getByTestId('my-route-detail');
     expect(map).toHaveProp('dragPan', true);
     expect(scroll().props.scrollEnabled).not.toBe(false);
@@ -337,16 +381,46 @@ describe('карточка своего маршрута (AC3, M3)', () => {
     expect(scroll().props.scrollEnabled).not.toBe(false);
   });
 
-  it('обрабатывается — статус без карты; опрос до готовности', async () => {
+  it('обрабатывается — статус без карты и шторки; опрос до готовности — карта и шторка', async () => {
     const pending = { ...ring, status: 'processing' as const, distanceM: null, isLoop: null };
     getMine.mockResolvedValue(pending);
     await openDetail(ring.id);
     expect(await screen.findByText('Обрабатывается')).toBeOnTheScreen();
-    expect(screen.queryByText('Длина')).toBeNull();
+    expect(screen.getByText('Мой маршрут')).toBeOnTheScreen();
+    expect(screen.queryByTestId('bottom-sheet')).toBeNull();
+    expect(screen.getByText('Загружен')).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: 'Удалить' })).toBeOnTheScreen();
     expect(getMineMap).not.toHaveBeenCalled();
     getMine.mockResolvedValue(ring);
     await act(() => jest.advanceTimersByTimeAsync(3000));
-    expect(await screen.findByText('Длина')).toBeOnTheScreen();
+    expect(await screen.findByTestId('bottom-sheet')).toBeOnTheScreen();
+    expect(screen.queryByText('Обрабатывается')).toBeNull();
+  });
+
+  it('отказ разбора — причина без карты и шторки', async () => {
+    getMine.mockResolvedValue({
+      ...ring,
+      status: 'failed',
+      failure: 'unreadable',
+      distanceM: null,
+      isLoop: null,
+    });
+    await openDetail(ring.id);
+    await screen.findByRole('button', { name: 'Удалить' });
+    expect(screen.queryByTestId('bottom-sheet')).toBeNull();
+    expect(getMineMap).not.toHaveBeenCalled();
+  });
+
+  it('«Переименовать» (routes-07) — форма вместо тела шторки; «Отменить» — тело обратно', async () => {
+    await openDetail(ring.id);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Переименовать' }));
+    const body = within(screen.getByTestId('my-route-detail'));
+    expect(body.getByDisplayValue('Вечерний круг')).toBeOnTheScreen();
+    expect(body.queryByText('Загружен')).toBeNull();
+    expect(body.queryByRole('button', { name: 'Удалить' })).toBeNull();
+    await fireEvent.press(body.getByRole('button', { name: 'Отменить' }));
+    expect(body.getByText('Загружен')).toBeOnTheScreen();
+    expect(body.queryByDisplayValue('Вечерний круг')).toBeNull();
   });
 
   it('«Переименовать» — POST rename, новое название; 2 символа — ошибка под полем без запроса', async () => {
@@ -398,9 +472,10 @@ describe('фиксы ревью pass 1', () => {
     getMineMap.mockRejectedValueOnce(http(500, 'INTERNAL'));
     await openDetail(ring.id);
     expect(await screen.findByText('Не удалось загрузить')).toBeOnTheScreen();
-    expect(screen.getByText('Длина')).toBeOnTheScreen();
+    expect(screen.getByLabelText('Дистанция 42 км круговой')).toBeOnTheScreen();
     await fireEvent.press(screen.getByText('Повторить'));
-    expect(await screen.findByLabelText(mapLabel)).toBeOnTheScreen();
+    await showMap();
+    expect(screen.getByLabelText(mapLabel)).toBeOnTheScreen();
   });
 
   it('ошибка геометрии (нет сети) — pull-to-refresh карточки перезапрашивает и карту', async () => {
@@ -408,18 +483,20 @@ describe('фиксы ревью pass 1', () => {
     await openDetail(ring.id);
     expect(await screen.findByText('Нет соединения')).toBeOnTheScreen();
     await pullDetail();
-    expect(await screen.findByLabelText(mapLabel)).toBeOnTheScreen();
+    await showMap();
+    expect(screen.getByLabelText(mapLabel)).toBeOnTheScreen();
     expect(getMineMap).toHaveBeenCalledTimes(2);
   });
 
   it('удалён на другом устройстве: обновление с 404 при показанных данных — «Маршрут недоступен», карты нет', async () => {
     await openDetail(ring.id);
-    expect(await screen.findByLabelText(mapLabel)).toBeOnTheScreen();
+    await showMap();
+    expect(screen.getByLabelText(mapLabel)).toBeOnTheScreen();
     getMine.mockRejectedValue(http(404, 'NOT_FOUND'));
     await pullDetail();
     expect(await screen.findByText('Маршрут недоступен')).toBeOnTheScreen();
     expect(screen.queryByLabelText(mapLabel)).toBeNull();
-    expect(screen.queryByText('Длина')).toBeNull();
+    expect(screen.queryByTestId('bottom-sheet')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Удалить' })).toBeNull();
   });
 
@@ -437,7 +514,7 @@ describe('фиксы ревью pass 1', () => {
   it('открытие готовой карточки не перезапрашивает ленту', async () => {
     await openTab();
     await fireEvent.press(await screen.findByRole('link', { name: ringLabel }));
-    expect(await screen.findByText('Длина')).toBeOnTheScreen();
+    expect(await screen.findByLabelText('Дистанция 42 км круговой')).toBeOnTheScreen();
     expect(listMine).toHaveBeenCalledTimes(1);
   });
 

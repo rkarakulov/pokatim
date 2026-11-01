@@ -88,7 +88,7 @@ describe('карточка своего маршрута: публикация �
   it('canPublish false (старый API, обработка) — ни «Опубликовать», ни блока', async () => {
     getMine.mockResolvedValue(mine());
     await openDetail();
-    expect(await screen.findByText('Длина')).toBeOnTheScreen();
+    expect(await screen.findByText('Загружен')).toBeOnTheScreen();
     expect(screen.queryByText('Публикация в каталоге')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Опубликовать' })).toBeNull();
   });
