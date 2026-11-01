@@ -1,4 +1,5 @@
 import {
+  PanelProtocolRecalculations,
   PanelRaceAttempt,
   PanelRaceAttemptPage,
   PanelRaceStandings,
@@ -272,6 +273,34 @@ describe('имя в панели «Протокол» (profile-02, AC4)', () => 
       id: namedAttempt,
       riderName: 'Анна К.',
     });
+  });
+
+  it('история пересчётов: riderName заявки только при имени и согласии; публикация — null; ключи записи', async () => {
+    const { raceId, riders, token } = await namedRace();
+    expect((await protocolAction(h, token, raceId, '/protocol')).status).toBe(200);
+    h.clock.advance(1000);
+    for (const r of [riders[0]!, riders[1]!, riders[3]!]) {
+      const body = { entryId: r.entryId, reason: 'Срезка' };
+      expect((await protocolAction(h, token, raceId, '/protocol/disqualify', body)).status).toBe(
+        200,
+      );
+      h.clock.advance(1000);
+    }
+    const res = await panelCall(h, token, 'GET', raceAdminUrl(raceId, '/protocol/recalculations'));
+    expect(res.status).toBe(200);
+    const history = PanelProtocolRecalculations.parse(res.body);
+    expect(history.items.map((item) => [item.kind, item.entryId, item.riderName])).toEqual([
+      ['disqualified', riders[3]!.entryId, null],
+      ['disqualified', riders[1]!.entryId, null],
+      ['disqualified', riders[0]!.entryId, 'Анна К.'],
+      ['published', null, null],
+    ]);
+    expect(Object.keys((res.body as { items: object[] }).items[0]!).sort()).toEqual(
+      ['actor', 'at', 'entryId', 'id', 'kind', 'reason', 'revision', 'riderName'].sort(),
+    );
+    // имя не пишется в журнал пересчётов
+    const docs = await resultsDb(h).recalculations.find({ raceId }).toArray();
+    expect(docs.every((doc) => !('riderName' in doc))).toBe(true);
   });
 });
 

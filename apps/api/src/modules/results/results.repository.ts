@@ -1143,6 +1143,15 @@ export class ResultsRepository {
       .toArray();
   }
 
+  /** Владельцы заявок (`_id` → `userId`) — имена райдеров в истории пересчётов панели; пустой вход — без запроса. */
+  async entryUsers(ids: readonly string[]): Promise<Map<string, string>> {
+    if (ids.length === 0) return new Map();
+    const rows = await this.c.entries
+      .find({ _id: { $in: [...ids] } }, { projection: { _id: 1, userId: 1 } })
+      .toArray();
+    return new Map(rows.map((row) => [row._id, row.userId]));
+  }
+
   /**
    * Заявки гонки для «Участников» панели — по времени заявки, не больше `limit`. Фильтры (race-results-07) — до
    * предела: `group` — группа заявки, `attention` — финишёры с флагами лучшей попытки (строки без места с флагами).

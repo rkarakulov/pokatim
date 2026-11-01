@@ -15,8 +15,12 @@ import {
 
 /*
  * Споры в панели «Протокол» (race-results-06, права `disputes.read` / `disputes.decide`). Панель деплоится вместе с
- * API — строгие `z.enum`. Заявитель и участник — по `userId`/`entryId` (A12).
+ * API — строгие `z.enum`. Заявитель и участник — по `userId`/`entryId` (A12); публичное имя (Q2 profile.md) — только
+ * при имени и согласии райдера, как видит публика, иначе `null` («Участник ·id»).
  */
+
+/** Публичное имя райдера (порт `RIDER_NAMES`): обязательное `nullable` — панель деплоится с API. */
+const RiderName = z.string().nullable();
 
 /** Почему решение недоступно (`PanelDispute.decideBlockedBy`). */
 export const DISPUTE_DECIDE_BLOCKS = [
@@ -60,6 +64,7 @@ export const PanelDisputeListItem = z.object({
   status: z.enum(DISPUTE_STATUSES),
   category: z.enum(DISPUTE_CATEGORIES),
   targetEntryId: Uuid,
+  targetRiderName: RiderName,
   complainantEntryId: Uuid,
   filedAt: z.iso.datetime(),
   decidableAt: z.iso.datetime(),
@@ -74,12 +79,13 @@ export const PanelDisputePage = z.object({
 export type PanelDisputePage = z.infer<typeof PanelDisputePage>;
 
 /** Разбор спора: заявление, ответ участника, оспоренный результат, история и решение. */
-export const PanelDispute = PanelDisputeListItem.extend({
+export const PanelDispute = PanelDisputeListItem.omit({ targetRiderName: true }).extend({
   description: z.string().nullable(),
   response: z.object({ text: z.string(), at: z.iso.datetime() }).nullable(),
   target: z.object({
     entryId: Uuid,
     userId: Uuid,
+    riderName: RiderName,
     resultStatus: z.enum(RACE_RESULT_STATUSES),
     place: z.number().int().nullable(),
     tied: z.boolean(),
@@ -89,7 +95,7 @@ export const PanelDispute = PanelDisputeListItem.extend({
     groupKey: z.enum(RESULT_GROUP_KEYS),
     flags: z.array(PanelAttemptFlag),
   }),
-  complainant: z.object({ entryId: Uuid, userId: Uuid }),
+  complainant: z.object({ entryId: Uuid, userId: Uuid, riderName: RiderName }),
   decision: z
     .object({
       outcome: z.enum(DISPUTE_OUTCOMES),

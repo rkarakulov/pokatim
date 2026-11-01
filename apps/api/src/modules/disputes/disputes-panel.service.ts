@@ -14,6 +14,7 @@ import { z } from 'zod';
 import { domainError } from '../../error-messages';
 import { decodeCursor, encodeCursor } from '../../page-cursor';
 import { PanelAudit, PanelDirectory, type PanelPrincipal } from '../panel';
+import { RIDER_NAMES, type RiderNameDirectory } from '../profile';
 import { RACE_REGISTRY, type RaceForResults, type RaceRegistry } from '../races';
 import { RESULTS_FOR_DISPUTES, type ResultsForDisputes } from '../results';
 import type { DisputeDoc } from './disputes.collection';
@@ -27,7 +28,11 @@ const CursorKey = z.literal('d');
 const invalidCursor = () =>
   domainError('VALIDATION_FAILED', 400, { fields: [{ path: 'cursor', code: 'INVALID' }] });
 
-const listItem = (doc: DisputeDoc, title: string): PanelDisputeListItem => ({
+/** Общие поля строки списка и разбора (без имён). */
+const listBase = (
+  doc: DisputeDoc,
+  title: string,
+): Omit<PanelDisputeListItem, 'targetRiderName'> => ({
   id: doc._id,
   race: { id: doc.raceId, title },
   status: doc.status,
@@ -40,11 +45,24 @@ const listItem = (doc: DisputeDoc, title: string): PanelDisputeListItem => ({
 });
 
 /**
+ * Строка списка: имя цели (Q2 profile.md) — только при имени и согласии; заявителя в списке нет. Имена в спор, журнал и
+ * лог не пишутся.
+ */
+const listItem = (
+  doc: DisputeDoc,
+  title: string,
+  names: ReadonlyMap<string, string>,
+): PanelDisputeListItem => ({
+  ...listBase(doc, title),
+  targetRiderName: names.get(doc.targetUserId) ?? null,
+});
+
+/**
  * Споры в панели (race-results-06, `disputes.read` / `disputes.decide` — admin и moderator, все гонки: споры — работа
  * команды платформы, R1). Решение — транзакция: **первой** — `RaceRegistry.lockResults` (конфликт с подачей,
  * публикацией, отменой гонки и вторым решением), затем замок заявки-цели, переход спора из `open`, при «Удовлетворить» —
  * DQ (D-43) через порт `results`, история, outbox и журнал `disputes.decided` в той же транзакции. Лог — после коммита,
- * без заметки и `userId` райдеров.
+ * без заметки и `userId` райдеров. Имена сторон — порт `RIDER_NAMES` (один вызов на ответ), только в ответе.
  */
 @Injectable()
 export class DisputesPanelService {
@@ -59,6 +77,7 @@ export class DisputesPanelService {
     private readonly rateLimiter: RateLimiter,
     @Inject(RACE_REGISTRY) private readonly races: RaceRegistry,
     @Inject(RESULTS_FOR_DISPUTES) private readonly results: ResultsForDisputes,
+    @Inject(RIDER_NAMES) private readonly riderNames: RiderNameDirectory,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -79,11 +98,14 @@ export class DisputesPanelService {
     const page = docs.slice(0, query.limit);
     // названия гонок страницы (обычно 1–3 различных, ≤ 50) — порт `RaceRegistry` (RC-15)
     const raceIds = [...new Set(page.map((doc) => doc.raceId))];
-    const races = await Promise.all(raceIds.map((id) => this.races.get(id)));
+    const [races, names] = await Promise.all([
+      Promise.all(raceIds.map((id) => this.races.get(id))),
+      this.partyNames(page.map((doc) => doc.targetUserId)),
+    ]);
     const titles = new Map(races.flatMap((race) => (race ? [[race.id, race.title] as const] : [])));
     const last = page.at(-1);
     return {
-      items: page.map((doc) => listItem(doc, titles.get(doc.raceId) ?? '')),
+      items: page.map((doc) => listItem(doc, titles.get(doc.raceId) ?? '', names)),
       nextCursor: docs.length > query.limit && last ? encodeCursor('d', last._id) : null,
     };
   }
@@ -93,14 +115,15 @@ export class DisputesPanelService {
     const doc = await this.repository.findById(id);
     if (!doc) throw disputeNotFound();
     const race = await this.race(doc.raceId);
-    const [standing, events, names] = await Promise.all([
+    const [standing, events, names, riders] = await Promise.all([
       this.results.standing(race, doc.targetEntryId),
       this.repository.listEvents(doc._id),
       this.directory.displayNames(doc.decision ? [doc.decision.actorUserId] : []),
+      this.partyNames([doc.targetUserId, doc.complainantUserId]),
     ]);
     const blockedBy = decideBlock(doc, race, this.clock.now());
     return {
-      ...listItem(doc, race.title),
+      ...listBase(doc, race.title),
       description: doc.description,
       response: doc.response
         ? { text: doc.response.text, at: doc.response.at.toISOString() }
@@ -108,6 +131,7 @@ export class DisputesPanelService {
       target: {
         entryId: doc.targetEntryId,
         userId: doc.targetUserId,
+        riderName: riders.get(doc.targetUserId) ?? null,
         resultStatus: standing?.resultStatus ?? 'none',
         place: standing?.place ?? null,
         tied: standing?.tied ?? false,
@@ -116,7 +140,11 @@ export class DisputesPanelService {
         groupKey: standing?.groupKey ?? doc.groupKey,
         flags: standing?.flags ?? [],
       },
-      complainant: { entryId: doc.complainantEntryId, userId: doc.complainantUserId },
+      complainant: {
+        entryId: doc.complainantEntryId,
+        userId: doc.complainantUserId,
+        riderName: riders.get(doc.complainantUserId) ?? null,
+      },
       decision: doc.decision
         ? {
             outcome: doc.decision.outcome,
@@ -209,6 +237,11 @@ export class DisputesPanelService {
       `disputes.decided dispute=${id} race=${snapshot.raceId} outcome=${body.outcome}`,
     );
     return this.get(id);
+  }
+
+  /** Имена сторон одним вызовом порта: список — только цели, разбор — цель и заявитель (пустой вход — без запроса). */
+  private partyNames(userIds: readonly string[]): Promise<Map<string, string>> {
+    return this.riderNames.publicNames([...new Set(userIds)]);
   }
 
   private async race(raceId: string): Promise<RaceForResults> {

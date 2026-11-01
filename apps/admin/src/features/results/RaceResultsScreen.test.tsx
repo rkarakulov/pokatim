@@ -534,6 +534,7 @@ describe('«Результаты» гонки — после публикаци�
           id: '01890a5d-ac96-774b-bcce-b302099a0f06',
           kind: 'disqualified',
           entryId: ENTRY_B,
+          riderName: 'Анна К.',
           revision: 2,
           reason: 'Чужой трек',
           actor: { userId: USER_ID, displayName: 'Ольга' },
@@ -552,6 +553,8 @@ describe('«Результаты» гонки — после публикаци�
     const history = section('История пересчётов');
     expect(await within(history).findByText('Дисквалификация, ревизия 2')).toBeTruthy();
     expect(within(history).getByText('Чужой трек')).toBeTruthy();
+    // имя райдера заявки при согласии (Q2 profile.md)
+    expect(within(history).getByText('Анна К. ·9a0b02')).toBeTruthy();
     await within(section('Попытки')).findByText('Проверка не уложилась во время');
     expect(screen.queryByRole('button', { name: 'Исключить трек' })).toBeNull();
   });
@@ -564,6 +567,7 @@ describe('«Результаты» гонки — после публикаци�
           id: '01890a5d-ac96-774b-bcce-b302099a0f07',
           kind: 'disqualified',
           entryId: ENTRY_B,
+          riderName: null,
           revision: null,
           reason: `dispute:${DISPUTE_ID}`,
           actor: { userId: USER_ID, displayName: 'Марк' },
@@ -574,6 +578,8 @@ describe('«Результаты» гонки — после публикаци�
     await renderApp(PATH);
     const history = await screen.findByRole('region', { name: 'История пересчётов' });
     const link = await within(history).findByRole('link', { name: 'Решение по спору ·9a9001' });
+    // без имени — «Участник ·id»
+    expect(within(history).getByText('Участник ·9a0b02')).toBeTruthy();
     expect(link.getAttribute('href')).toBe(`/admin/disputes/${DISPUTE_ID}`);
 
     // без `disputes.read` (организатор) — текст без ссылки

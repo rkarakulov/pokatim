@@ -23,7 +23,9 @@ paths:
   коллекции identity не читает; `results` берёт имена только через порт после snapshot-сессии, в снимок протокола
   их не пишет; profile-02: журнал согласий в транзакции `PATCH`, панельный контроллер `admin/profiles` (сброс
   имени, `ProfileModerationService`) — `ProfileModule` импортирует `PanelModule`; `ResultsPanelReadService` получает
-  имена через `RIDER_NAMES` — `ResultsModule` импортирует `ProfileCoreModule`), `panel` (доступ к панели «Протокол»:
+  имена через `RIDER_NAMES` — `ResultsModule` импортирует `ProfileCoreModule`; история пересчётов — имя по `userId`
+  заявки, один вызов на ответ; `DisputesPanelService` — так же, `DisputesModule` импортирует `ProfileCoreModule`),
+  `panel` (доступ к панели «Протокол»:
   члены команды и роли, сессии панели, журнал; identity — только порт `PanelCredentials`/`IdentityAccounts`),
   `races` (сезоны и гонки по коридору — одна граница, ADR-0010: определение сезона живёт здесь, отдельного модуля
   `seasons` нет), `calendar` (календарь стартов, с гонками не связан), `tracks` (загрузки, разбор, активности —
@@ -608,7 +610,10 @@ RC-A1, ADR-0019).
 - Модуль `disputes`: `DisputesService` (приложение — подача, отзыв, ответ, «мои споры в гонке»), `DisputesPanelService`
   (список, разбор, решение), политика — чистые функции `disputes.policy.ts`. Другие модули — только через
   `index.ts`: `ResultsForDisputes` (`results`: заявки гонки, `lockEntry` цели, `disqualify`, `standing` — место через
-  `ResultsReadService.entryResult`, без второго расчёта мест), `RaceRegistry` (`races`: гонка, фаза, `lockResults`).
+  `ResultsReadService.entryResult`, без второго расчёта мест), `RaceRegistry` (`races`: гонка, фаза, `lockResults`),
+  `RIDER_NAMES` (`profile`, `ProfileCoreModule` в `DisputesModule`: публичные имена цели и заявителя в панели, Q2
+  profile.md — один `publicNames` на ответ; в спор, историю, журнал и лог имя не пишется). Ребро `disputes → profile`
+  одностороннее: `profile` о `disputes` не знает.
 - Гейты: `results` объявляет `ResultDisputeGate` (D-39, чек-лист `open_disputes`), `races` — `RaceCancelGate`
   (D-19); реализация `DisputeGates` — в `@Global DisputesCoreModule`, его импортируют `AppModule` и `WorkerModule`.
   Инъекция обязательная, без `@Optional`: забытая регистрация роняет старт, а не выключает D-39 молча.

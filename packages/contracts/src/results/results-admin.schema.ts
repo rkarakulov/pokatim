@@ -264,6 +264,8 @@ export const PanelProtocolRecalculation = z.object({
   id: Uuid,
   kind: z.enum(RECALCULATION_KINDS),
   entryId: Uuid.nullable(),
+  /** имя райдера заявки (Q2 profile.md: имя и согласие); нет заявки — `null` */
+  riderName: z.string().nullable(),
   revision: z.number().int().nullable(),
   reason: z.string(),
   actor: z.object({ userId: Uuid, displayName: z.string() }),

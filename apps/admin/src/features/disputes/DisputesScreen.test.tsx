@@ -28,6 +28,7 @@ const item = (overrides: Partial<PanelDisputeListItem> = {}): PanelDisputeListIt
   status: 'open',
   category: 'vehicle_assistance',
   targetEntryId: TARGET,
+  targetRiderName: null,
   complainantEntryId: COMPLAINANT,
   filedAt: '2026-10-26T07:00:00.000Z',
   decidableAt: '2026-10-26T19:00:00.000Z',
@@ -68,6 +69,16 @@ describe('«Споры» — список (06, AC13)', () => {
     mocked.getDispute.mockReturnValue(new Promise(() => undefined));
     fireEvent.click(link);
     await waitFor(() => expect(currentHref(router)).toBe(`/admin/disputes/${ID}`));
+  });
+
+  it('цель с именем и согласием — «Анна К. ·xxxxxx» (Q2 profile.md)', async () => {
+    mocked.listDisputes.mockResolvedValue({
+      items: [item({ targetRiderName: 'Анна К.' })],
+      nextCursor: null,
+    });
+    await renderApp('/disputes');
+    expect(await screen.findByRole('link', { name: 'Анна К. ·9a0a01' })).toBeTruthy();
+    expect(screen.queryByText('Участник ·9a0a01')).toBeNull();
   });
 
   it('фильтр статуса — в URL и в запросе; «Все» — без статуса', async () => {

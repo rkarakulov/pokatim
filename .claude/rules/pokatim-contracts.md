@@ -79,7 +79,9 @@ paths:
   .nullable().default(null)`, не `null` только без имени.
   `ProfileView.publicName` / `showNameInResults` — новые поля ответа с `.default` (`null` / `false`): новая сборка со
   старым API разбирает ответ. `src/results/results-admin.schema.ts` — панель, строгие `z.enum`;
-  `PanelStandingRow.riderName` / `PanelRaceAttempt.riderName` — обязательные `nullable` (панель деплоится с API).
+  `PanelStandingRow.riderName` / `PanelRaceAttempt.riderName` — обязательные `nullable` (панель деплоится с API); так же
+  `PanelProtocolRecalculation.riderName`, `PanelDisputeListItem.targetRiderName` (только список; заявителя в списке
+  нет) и `PanelDispute.target.riderName` / `complainant.riderName` (только разбор, плоское поле списка — `.omit`).
 - Уровни и группы (race-results-07): `ENTRY_TIERS`, `GROUP_SCHEMES`, `RIDER_GENDERS`, `RESULT_GROUP_KEYS` (пол ×
   возраст), `ATTEMPT_FLAG_CODES`, `RESULT_UNRANKED_REASONS`, `RACE_RESULT_STATUSES` + `finisher`,
   `DISPUTE_FILE_BLOCKS` + `not_ranked` — только в конец. Запрос заявки `RaceEntryRequest` (`strictObject` `{ tier?,

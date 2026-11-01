@@ -483,10 +483,16 @@ describe('участие и результаты: панель', () => {
       entryId: ID,
       revision: 2,
       reason: 'Срезка',
+      riderName: null,
       actor: { userId: ID, displayName: 'Ольга' },
       at: AT,
     };
     expect(PanelProtocolRecalculations.parse({ items: [recalculation] }).items).toHaveLength(1);
+    // имя — обязательное nullable (панель деплоится с API)
+    expect(
+      PanelProtocolRecalculations.safeParse({ items: [{ ...recalculation, riderName: undefined }] })
+        .success,
+    ).toBe(false);
     expect(
       PanelProtocolRecalculations.safeParse({ items: [{ ...recalculation, kind: 'rolled_back' }] })
         .success,

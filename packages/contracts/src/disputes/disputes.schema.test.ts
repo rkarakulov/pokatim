@@ -295,6 +295,7 @@ describe('панель — строгие enum', () => {
       category: 'other',
       targetEntryId: ID,
       complainantEntryId: ID2,
+      targetRiderName: 'Анна К.',
       filedAt: AT,
       decidableAt: AT,
       responded: false,
@@ -302,6 +303,12 @@ describe('панель — строгие enum', () => {
     expect(PanelDisputePage.parse({ items: [item], nextCursor: null }).items).toHaveLength(1);
     expect(
       PanelDisputePage.safeParse({ items: [{ ...item, status: 'new' }], nextCursor: null }).success,
+    ).toBe(false);
+    expect(
+      PanelDisputePage.safeParse({
+        items: [{ ...item, targetRiderName: undefined }],
+        nextCursor: null,
+      }).success,
     ).toBe(false);
     const dispute = {
       ...item,
@@ -317,8 +324,9 @@ describe('панель — строгие enum', () => {
         tier: 'verified',
         groupKey: 'm_u40',
         flags: [{ code: 'SPEED_CLUSTER_HIGH', metric: 0.75 }],
+        riderName: null,
       },
-      complainant: { entryId: ID2, userId: ID },
+      complainant: { entryId: ID2, userId: ID, riderName: 'Борис' },
       decision: null,
       events: [{ kind: 'filed', actorKind: 'rider', at: AT }],
       filingClosesAt: AT,
@@ -327,6 +335,8 @@ describe('панель — строгие enum', () => {
       decideBlockedBy: 'too_early',
     };
     expect(PanelDispute.parse(dispute).decideBlockedBy).toBe('too_early');
+    // в разборе имена — только у сторон, плоского поля строки списка нет
+    expect(PanelDispute.parse(dispute)).not.toHaveProperty('targetRiderName');
     expect(PanelDispute.safeParse({ ...dispute, decideBlockedBy: 'later' }).success).toBe(false);
   });
 });

@@ -458,19 +458,32 @@ export class ResultsPanelReadService {
     };
   }
 
-  /** История пересчётов (новые сверху, ≤ 100): имя сотрудника — порт `PanelDirectory`. */
+  /**
+   * История пересчётов (новые сверху, ≤ 100): имя сотрудника — порт `PanelDirectory`; имя райдера заявки — порт
+   * `RIDER_NAMES` (Q2 profile.md, один вызов на ответ), в журнал не пишется.
+   */
   async recalculations(
     principal: PanelPrincipal,
     raceId: string,
   ): Promise<PanelProtocolRecalculations> {
     await this.race(principal, raceId);
     const docs = await this.repository.listRecalculations(raceId, RESULTS_POLICY.recalculationsMax);
-    const names = await this.directory.displayNames(docs.map((doc) => doc.actorUserId));
+    const entryIds = [...new Set(docs.flatMap((doc) => (doc.entryId ? [doc.entryId] : [])))];
+    const [names, users] = await Promise.all([
+      this.directory.displayNames(docs.map((doc) => doc.actorUserId)),
+      this.repository.entryUsers(entryIds),
+    ]);
+    const riders = await this.names.publicNames([...new Set(users.values())]);
+    const riderName = (entryId: string | null) => {
+      const userId = entryId ? users.get(entryId) : undefined;
+      return userId ? (riders.get(userId) ?? null) : null;
+    };
     return {
       items: docs.map((doc) => ({
         id: doc._id,
         kind: doc.kind,
         entryId: doc.entryId,
+        riderName: riderName(doc.entryId),
         revision: doc.revision,
         reason: doc.reason,
         actor: { userId: doc.actorUserId, displayName: names.get(doc.actorUserId) ?? '' },

@@ -37,6 +37,7 @@ const DISPUTE: PanelDispute = {
   target: {
     entryId: TARGET,
     userId: RIDER,
+    riderName: null,
     resultStatus: 'provisional',
     place: 1,
     tied: false,
@@ -45,7 +46,7 @@ const DISPUTE: PanelDispute = {
     groupKey: 'overall',
     flags: [],
   },
-  complainant: { entryId: '01890a5d-ac96-774b-bcce-b302099a0b02', userId: RIDER },
+  complainant: { entryId: '01890a5d-ac96-774b-bcce-b302099a0b02', userId: RIDER, riderName: null },
   decision: null,
   events: [{ kind: 'filed', actorKind: 'rider', at: '2026-10-26T07:00:00.000Z' }],
   filingClosesAt: '2026-10-26T20:59:00.000Z',
