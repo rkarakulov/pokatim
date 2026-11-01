@@ -28,21 +28,33 @@ const CursorKey = z.literal('d');
 const invalidCursor = () =>
   domainError('VALIDATION_FAILED', 400, { fields: [{ path: 'cursor', code: 'INVALID' }] });
 
-/** Публичные имена сторон (Q2 profile.md) — только при имени и согласии; в спор, журнал и лог не пишутся. */
-type RiderNames = ReadonlyMap<string, string>;
-
-const listItem = (doc: DisputeDoc, title: string, names: RiderNames): PanelDisputeListItem => ({
+/** Общие поля строки списка и разбора (без имён). */
+const listBase = (
+  doc: DisputeDoc,
+  title: string,
+): Omit<PanelDisputeListItem, 'targetRiderName'> => ({
   id: doc._id,
   race: { id: doc.raceId, title },
   status: doc.status,
   category: doc.category,
   targetEntryId: doc.targetEntryId,
-  targetRiderName: names.get(doc.targetUserId) ?? null,
   complainantEntryId: doc.complainantEntryId,
-  complainantRiderName: names.get(doc.complainantUserId) ?? null,
   filedAt: doc.filedAt.toISOString(),
   decidableAt: decidableAt(doc.filedAt).toISOString(),
   responded: doc.response !== null,
+});
+
+/**
+ * Строка списка: имя цели (Q2 profile.md) — только при имени и согласии; заявителя в списке нет. Имена в спор, журнал и
+ * лог не пишутся.
+ */
+const listItem = (
+  doc: DisputeDoc,
+  title: string,
+  names: ReadonlyMap<string, string>,
+): PanelDisputeListItem => ({
+  ...listBase(doc, title),
+  targetRiderName: names.get(doc.targetUserId) ?? null,
 });
 
 /**
@@ -88,7 +100,7 @@ export class DisputesPanelService {
     const raceIds = [...new Set(page.map((doc) => doc.raceId))];
     const [races, names] = await Promise.all([
       Promise.all(raceIds.map((id) => this.races.get(id))),
-      this.partyNames(page),
+      this.partyNames(page.map((doc) => doc.targetUserId)),
     ]);
     const titles = new Map(races.flatMap((race) => (race ? [[race.id, race.title] as const] : [])));
     const last = page.at(-1);
@@ -107,11 +119,11 @@ export class DisputesPanelService {
       this.results.standing(race, doc.targetEntryId),
       this.repository.listEvents(doc._id),
       this.directory.displayNames(doc.decision ? [doc.decision.actorUserId] : []),
-      this.partyNames([doc]),
+      this.partyNames([doc.targetUserId, doc.complainantUserId]),
     ]);
     const blockedBy = decideBlock(doc, race, this.clock.now());
     return {
-      ...listItem(doc, race.title, riders),
+      ...listBase(doc, race.title),
       description: doc.description,
       response: doc.response
         ? { text: doc.response.text, at: doc.response.at.toISOString() }
@@ -227,10 +239,9 @@ export class DisputesPanelService {
     return this.get(id);
   }
 
-  /** Имена целей и заявителей одним вызовом порта (пустой вход — без запроса). */
-  private partyNames(docs: readonly DisputeDoc[]): Promise<Map<string, string>> {
-    const userIds = new Set(docs.flatMap((doc) => [doc.targetUserId, doc.complainantUserId]));
-    return this.riderNames.publicNames([...userIds]);
+  /** Имена сторон одним вызовом порта: список — только цели, разбор — цель и заявитель (пустой вход — без запроса). */
+  private partyNames(userIds: readonly string[]): Promise<Map<string, string>> {
+    return this.riderNames.publicNames([...new Set(userIds)]);
   }
 
   private async race(raceId: string): Promise<RaceForResults> {

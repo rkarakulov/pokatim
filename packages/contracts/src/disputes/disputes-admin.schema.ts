@@ -19,8 +19,8 @@ import {
  * при имени и согласии райдера, как видит публика, иначе `null` («Участник ·id»).
  */
 
-/** Публичное имя райдера (порт `RIDER_NAMES`); старый сервер без поля — `null`. */
-const RiderName = z.string().nullable().default(null);
+/** Публичное имя райдера (порт `RIDER_NAMES`): обязательное `nullable` — панель деплоится с API. */
+const RiderName = z.string().nullable();
 
 /** Почему решение недоступно (`PanelDispute.decideBlockedBy`). */
 export const DISPUTE_DECIDE_BLOCKS = [
@@ -66,7 +66,6 @@ export const PanelDisputeListItem = z.object({
   targetEntryId: Uuid,
   targetRiderName: RiderName,
   complainantEntryId: Uuid,
-  complainantRiderName: RiderName,
   filedAt: z.iso.datetime(),
   decidableAt: z.iso.datetime(),
   responded: z.boolean(),
@@ -80,7 +79,7 @@ export const PanelDisputePage = z.object({
 export type PanelDisputePage = z.infer<typeof PanelDisputePage>;
 
 /** Разбор спора: заявление, ответ участника, оспоренный результат, история и решение. */
-export const PanelDispute = PanelDisputeListItem.extend({
+export const PanelDispute = PanelDisputeListItem.omit({ targetRiderName: true }).extend({
   description: z.string().nullable(),
   response: z.object({ text: z.string(), at: z.iso.datetime() }).nullable(),
   target: z.object({

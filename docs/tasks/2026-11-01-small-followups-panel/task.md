@@ -15,12 +15,12 @@
 
 ## 3. Scope
 
-1. **Контракты.** `PanelDisputeListItem.targetRiderName` / `complainantRiderName`, `PanelDispute.target.riderName`,
-   `PanelDispute.complainant.riderName`, `PanelProtocolRecalculation.riderName` —
-   `z.string().nullable().default(null)` (старый сервер без поля).
+1. **Контракты.** `PanelDisputeListItem.targetRiderName`, `PanelDispute.target.riderName`,
+   `PanelDispute.complainant.riderName`, `PanelProtocolRecalculation.riderName` — обязательные `z.string().nullable()`
+   (панель деплоится с API, `pokatim-contracts.md`).
 2. **API.** `DisputesPanelService.list/get` — имена сторон одним `RIDER_NAMES.publicNames` на ответ (новое ребро
    `disputes → profile`: `ProfileCoreModule` через `modules/profile/index.ts`). `ResultsPanelReadService.recalculations`
-   — `userId` заявок записей (`entriesByIds`, без сессии) → один `publicNames`. Имя — только в ответе.
+   — `userId` заявок записей (`entryUsers`, проекция `_id` → `userId`) → один `publicNames`. Имя — только в ответе.
 3. **Админка.** Цель в списке споров, цель и заявитель в разборе, участник в `RecalculationsList` —
    `riderLabel(entryId, riderName)` (`results-format.ts`); `disputeRiderLabel` и ключ `admin.disputes.rider` удалены.
 4. **e2e 2FA.** `apps/admin/e2e/project.ts` — фиктивный `PANEL_TOTP_KEY` (hex 64) в окружении API смоука, без
@@ -43,8 +43,11 @@
 
 ### 8.2 Решения
 
-1. Отдельные поля имени у списка (`targetRiderName`, `complainantRiderName`) и вложенные `riderName` у
-   `target`/`complainant` разбора (разбор расширяет строку списка — оба есть в ответе разбора).
+1. Ревью pass 1: в списке — только `targetRiderName` (UI показывает только цель; имя заявителя в списке — лишние ПДн),
+   в разборе — только вложенные `target.riderName` / `complainant.riderName` (`PanelDispute` — строка списка
+   `.omit({ targetRiderName })`). Поля — обязательные `nullable`, без `.default(null)`.
+3. Ревью pass 1: `entriesByIds` — прежняя обязательная `session`; для пересчётов — `entryUsers` (`_id` → `userId`,
+   проекция). Код входа в e2e — `max(текущий шаг, шаг подключения + 1)` прямо перед вводом.
 2. Подпись — общий `riderLabel` (`admin.results.rider` / `riderNamed`) вместо своего `disputeRiderLabel`.
 
 ### 8.3 Security checklist

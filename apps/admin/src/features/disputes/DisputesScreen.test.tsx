@@ -30,7 +30,6 @@ const item = (overrides: Partial<PanelDisputeListItem> = {}): PanelDisputeListIt
   targetEntryId: TARGET,
   targetRiderName: null,
   complainantEntryId: COMPLAINANT,
-  complainantRiderName: null,
   filedAt: '2026-10-26T07:00:00.000Z',
   decidableAt: '2026-10-26T19:00:00.000Z',
   responded: false,
@@ -74,7 +73,7 @@ describe('«Споры» — список (06, AC13)', () => {
 
   it('цель с именем и согласием — «Анна К. ·xxxxxx» (Q2 profile.md)', async () => {
     mocked.listDisputes.mockResolvedValue({
-      items: [item({ targetRiderName: 'Анна К.', complainantRiderName: 'Борис' })],
+      items: [item({ targetRiderName: 'Анна К.' })],
       nextCursor: null,
     });
     await renderApp('/disputes');

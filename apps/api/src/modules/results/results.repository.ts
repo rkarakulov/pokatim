@@ -1135,12 +1135,21 @@ export class ResultsRepository {
     return updated.modifiedCount === 1;
   }
 
-  /** Заявки по id (строки с местами в «Участниках» панели, имена в истории пересчётов — без сессии). */
-  entriesByIds(ids: readonly string[], session?: DbSession): Promise<RaceEntryDoc[]> {
+  /** Заявки по id (строки с местами в «Участниках» панели). */
+  entriesByIds(ids: readonly string[], session: DbSession): Promise<RaceEntryDoc[]> {
     if (ids.length === 0) return Promise.resolve([]);
     return this.c.entries
       .find({ _id: { $in: [...ids] } }, { session, projection: { requests: 0 } })
       .toArray();
+  }
+
+  /** Владельцы заявок (`_id` → `userId`) — имена райдеров в истории пересчётов панели; пустой вход — без запроса. */
+  async entryUsers(ids: readonly string[]): Promise<Map<string, string>> {
+    if (ids.length === 0) return new Map();
+    const rows = await this.c.entries
+      .find({ _id: { $in: [...ids] } }, { projection: { _id: 1, userId: 1 } })
+      .toArray();
+    return new Map(rows.map((row) => [row._id, row.userId]));
   }
 
   /**

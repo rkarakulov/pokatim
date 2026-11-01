@@ -124,8 +124,10 @@ test('2FA: подключение в «Безопасности» → выход
   await expect(page.getByLabel('Пароль')).toBeVisible();
   await signInWithPassword(page, email);
   await expect(page.getByRole('heading', { name: 'Подтверждение входа' })).toBeVisible();
-  // повтор принятого шага закрыт (`lastUsedStep`): код следующего шага — в окне ±1 шаг сервера
-  await page.getByLabel('Код из приложения').fill(totpCode(secret, enrolledStep + 1));
+  // повтор принятого шага закрыт (`lastUsedStep`): шаг — не раньше следующего за подключением и не старше текущего
+  // (окно сервера ±1 шаг); считается прямо перед вводом — долгий сценарий не устаревает код
+  const signInStep = Math.max(totpStep(), enrolledStep + 1);
+  await page.getByLabel('Код из приложения').fill(totpCode(secret, signInStep));
   await page.getByRole('button', { name: 'Подтвердить' }).click();
   await expect(page.getByRole('heading', { name: 'Обзор' })).toBeVisible();
 

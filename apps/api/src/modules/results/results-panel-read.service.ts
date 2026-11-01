@@ -469,11 +469,10 @@ export class ResultsPanelReadService {
     await this.race(principal, raceId);
     const docs = await this.repository.listRecalculations(raceId, RESULTS_POLICY.recalculationsMax);
     const entryIds = [...new Set(docs.flatMap((doc) => (doc.entryId ? [doc.entryId] : [])))];
-    const [names, entries] = await Promise.all([
+    const [names, users] = await Promise.all([
       this.directory.displayNames(docs.map((doc) => doc.actorUserId)),
-      this.repository.entriesByIds(entryIds),
+      this.repository.entryUsers(entryIds),
     ]);
-    const users = new Map(entries.map((entry) => [entry._id, entry.userId]));
     const riders = await this.names.publicNames([...new Set(users.values())]);
     const riderName = (entryId: string | null) => {
       const userId = entryId ? users.get(entryId) : undefined;

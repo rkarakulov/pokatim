@@ -339,17 +339,14 @@ describe('имя райдера в панели (Q2 profile.md)', () => {
     const res = await panelCall(h, race.token, 'GET', ADMIN_DISPUTES);
     expect(res.status).toBe(200);
     const page = PanelDisputePage.parse(res.body);
-    expect(
-      page.items.map((item) => [item.id, item.targetRiderName, item.complainantRiderName]),
-    ).toEqual([
-      [toNamed, 'Анна К.', null],
-      [toHidden, null, 'Анна К.'],
+    expect(page.items.map((item) => [item.id, item.targetRiderName])).toEqual([
+      [toNamed, 'Анна К.'],
+      [toHidden, null],
     ]);
     expect(Object.keys((res.body as { items: object[] }).items[0]!).sort()).toEqual(
       [
         'category',
         'complainantEntryId',
-        'complainantRiderName',
         'decidableAt',
         'filedAt',
         'id',
@@ -361,9 +358,10 @@ describe('имя райдера в панели (Q2 profile.md)', () => {
       ].sort(),
     );
 
+    const detail = await panelCall(h, race.token, 'GET', `${ADMIN_DISPUTES}/${toHidden}`);
+    // имя — только во вложенных target/complainant, плоского поля списка в разборе нет
+    expect(Object.keys(detail.body as object)).not.toContain('targetRiderName');
     expect(await panelDispute(h, race.token, toHidden)).toMatchObject({
-      targetRiderName: null,
-      complainantRiderName: 'Анна К.',
       target: { entryId: hidden!.entryId, userId: hidden!.userId, riderName: null },
       complainant: { entryId: named!.entryId, userId: named!.userId, riderName: 'Анна К.' },
     });
