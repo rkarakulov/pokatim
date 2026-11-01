@@ -400,17 +400,18 @@ export class RoutesRepository {
 
   /**
    * Публикация или правка каталожных полей готового маршрута платформы — в транзакции действия панели (чтение →
-   * запись → журнал). `false` — маршрут не готов (условие в фильтре).
+   * запись → журнал); `title` — новое название (routes-08). `false` — маршрут не готов (условие в фильтре).
    */
   async setCatalog(
     session: DbSession,
     id: string,
     catalog: RouteCatalogDoc,
     now: Date,
+    title?: string,
   ): Promise<boolean> {
     const result = await this.c.routes.updateOne(
       { _id: id, status: 'ready', origin: 'platform' },
-      { $set: { catalog, updatedAt: now } },
+      { $set: { catalog, updatedAt: now, ...(title === undefined ? {} : { title }) } },
       { session },
     );
     return result.matchedCount === 1;

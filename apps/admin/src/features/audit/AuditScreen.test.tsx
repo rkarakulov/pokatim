@@ -259,6 +259,13 @@ describe('«Журнал действий» (AC12)', () => {
           subject: { kind: 'route', id: signedIn.id, label: 'Вокруг моря' },
           details: { changedFields: ['city', 'surfaces'] },
         },
+        {
+          ...signedIn,
+          id: '01890a5d-ac96-774b-bcce-b302099a8067',
+          action: 'route.catalog_updated',
+          subject: { kind: 'route', id: signedIn.id, label: 'Кольцо' },
+          details: { changedFields: ['title', 'city'] },
+        },
       ],
       nextCursor: null,
     });
@@ -268,6 +275,8 @@ describe('«Журнал действий» (AC12)', () => {
     ).toBeTruthy();
     expect(screen.getByText('Уберите адрес из названия')).toBeTruthy();
     expect(screen.getByText('Маршрут райдера одобрен: Город старта, Покрытие')).toBeTruthy();
+    // routes-08: название в правке каталога маршрута команды
+    expect(screen.getByText('Изменён маршрут в каталоге: Название, Город старта')).toBeTruthy();
   });
 
   it('app-themes: смена темы приложения — «Классика → Атлас», объект «Оформление приложения»', async () => {

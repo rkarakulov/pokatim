@@ -26,7 +26,7 @@ const FIELD_LABEL_PREFIX: Record<string, string> = {
   race: 'admin.races.field.',
   season: 'admin.seasons.',
   calendar_start: 'admin.calendar.field.',
-  // routes-06: поправленные модератором город и покрытие (и правка каталога routes-01)
+  // routes-06: поправленные модератором город и покрытие (и правка каталога routes-01, название — routes-08)
   route: 'admin.riderRoutes.field.',
 };
 

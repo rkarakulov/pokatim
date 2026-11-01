@@ -53,9 +53,14 @@ export type UploadRouteQuery = z.infer<typeof UploadRouteQuery>;
 
 /**
  * `POST /v1/admin/routes/:id/publish` (`races.manage`, routes-01) → `PanelRoute`: публикация готового маршрута в
- * каталог или правка города и покрытия опубликованного (момент публикации прежний). Название не меняется (RC-14).
+ * каталог или правка города и покрытия опубликованного (момент публикации прежний). `title` — название маршрута
+ * (routes-08, RC-14); нет поля — название прежнее.
  */
-export const PublishRouteInput = z.strictObject({ city: CityCode, surfaces: SurfaceList });
+export const PublishRouteInput = z.strictObject({
+  title: RouteTitle.optional(),
+  city: CityCode,
+  surfaces: SurfaceList,
+});
 export type PublishRouteInput = z.infer<typeof PublishRouteInput>;
 
 /** Каталожные поля маршрута в панели; `null` — не опубликован (снят или не публиковался). */

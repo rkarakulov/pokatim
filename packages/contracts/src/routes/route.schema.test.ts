@@ -132,9 +132,21 @@ describe('маршрут', () => {
       { city: 'minsk', surfaces: ['asphalt', 'asphalt'] },
       { city: 'minsk', surfaces: ['cobbles'] },
       { city: 'Минск', surfaces: ['asphalt'] },
-      { city: 'minsk', surfaces: ['asphalt'], title: 'Новое' },
+      { city: 'minsk', surfaces: ['asphalt'], extra: 1 },
     ]) {
       expect(PublishRouteInput.safeParse(broken).success, JSON.stringify(broken)).toBe(false);
+    }
+  });
+
+  it('PublishRouteInput.title (routes-08, RC-14): необязательно, trim, 3–120 символов, одна строка', () => {
+    expect(
+      PublishRouteInput.parse({ title: '  Новое кольцо ', city: 'minsk', surfaces: ['gravel'] }),
+    ).toEqual({ title: 'Новое кольцо', city: 'minsk', surfaces: ['gravel'] });
+    for (const title of ['ab', '   ', 'Две\nстроки', 'я'.repeat(121), 7]) {
+      expect(
+        PublishRouteInput.safeParse({ title, city: 'minsk', surfaces: ['gravel'] }).success,
+        JSON.stringify(title),
+      ).toBe(false);
     }
   });
 });
