@@ -96,7 +96,7 @@ export class RouteRideAutoProcessor extends WorkerHost {
     }
     let passed = 0;
     for (const routeId of planned) {
-      if (await this.checkRoute(userId, routeId, primary, finalAttempt)) passed += 1;
+      if (await this.checkRoute(userId, routeId, primary, finalAttempt, eventId)) passed += 1;
     }
     this.logger.log(
       `route-ride-auto activity ${primary.id} user ${userId}: planned ${planned.length}, passed ${passed},` +
@@ -174,12 +174,16 @@ export class RouteRideAutoProcessor extends WorkerHost {
     );
   }
 
-  /** Сверка по маршруту; `true` — создан заезд `passed`. */
+  /**
+   * Сверка по маршруту; `true` — создан заезд `passed`. Перед вставкой план события перечитывается: райдер удалил
+   * автозаезд этого маршрута во время прогона (route-rides-07, `deleteOwn` снимает маршрут из плана) — не создавать.
+   */
   private async checkRoute(
     userId: string,
     routeId: string,
     primary: ActivityRef,
     finalAttempt: boolean,
+    eventId: string | undefined,
   ): Promise<boolean> {
     // заезд группы уже есть (автозаезд прошлой попытки, ручной POST) — слот занят, прогона нет
     if (await this.groupRideExists(userId, routeId, primary.id)) return false;
@@ -213,6 +217,7 @@ export class RouteRideAutoProcessor extends WorkerHost {
     if (rides.filter((ride) => live.has(ride.activityId)).length >= ROUTE_RIDE_POLICY.maxPerRoute) {
       return false;
     }
+    if (eventId && !(await this.repository.autoPlanOf(eventId))?.includes(routeId)) return false;
     const now = this.clock.now();
     const doc = {
       ...newRideDoc({ userId, routeId, activity: primary, origin: 'auto', now, result }),

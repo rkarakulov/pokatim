@@ -11,8 +11,8 @@ import {
   ownCorridorRoute,
   ridesUrl,
   routeRidesDb,
-  seedRouteRide,
 } from '../../../test/route-rides';
+import { seedRouteRide } from '../../../test/route-ride-seed';
 import { rider } from '../../../test/results';
 import { publicationDoc, routesDb, seedApprovedRiderRoute } from '../../../test/routes';
 import { tracks } from '../../../test/tracks';

@@ -1,6 +1,6 @@
 import { RouteRideLeaderboard, RouteRidePage } from '@pokatim/contracts';
 import { RateLimiter } from '@rkarakulov/api-kit/core';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { daysAgo } from '../../../test/achievements';
 import { createHarness, type Harness } from '../../../test/harness';
@@ -12,8 +12,9 @@ import {
   ownCorridorRoute,
   ridesUrl,
   routeRidesDb,
-  seedRouteRide,
+  routeRidesRepository,
 } from '../../../test/route-rides';
+import { seedRouteRide } from '../../../test/route-ride-seed';
 import { rideGpx, rider, uploadRide } from '../../../test/results';
 import { routesDb } from '../../../test/routes';
 import { RouteRideAutoProcessor } from './route-ride-auto.processor';
@@ -29,6 +30,9 @@ beforeAll(async () => {
 });
 beforeEach(async () => {
   await h.reset();
+});
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 afterAll(async () => {
   await h.close();
@@ -146,6 +150,32 @@ describe('POST /v1/routes/:routeId/rides/:rideId/delete', () => {
     });
     expect(await auto.process(outboxJob(event!.type, event!._id, 1))).toEqual({
       planned: 0,
+      passed: 0,
+    });
+    expect(await routeRidesDb(h).rides.countDocuments({ routeId: own })).toBe(0);
+  });
+
+  it('AC5: удаление во время повторного прогона (план уже прочитан) — заезд не создан снова', async () => {
+    const me = await rider(h);
+    const own = await ownCorridorRoute(h, me.userId);
+    const upload = await uploadRide(h, me.auth, rideGpx('clean.gpx', daysAgo(h, 1)));
+    const [event] = (await autoEvents(h)).filter(
+      (item) => (item.payload as { activityId: string }).activityId === upload.activityId,
+    );
+    const auto = h.worker.get(RouteRideAutoProcessor);
+    await auto.process(outboxJob(event!.type, event!._id));
+    const created = await routeRidesDb(h).rides.findOne({ routeId: own });
+
+    // повтор: план прочитан, затем райдер удаляет заезд — процессор доходит до маршрута, заезда нет
+    const repository = routeRidesRepository(h);
+    const planOf = repository.autoPlanOf.bind(repository);
+    vi.spyOn(repository, 'autoPlanOf').mockImplementationOnce(async (id) => {
+      const plan = await planOf(id);
+      expect((await remove(me.auth, own, created!._id)).status).toBe(204);
+      return plan;
+    });
+    expect(await auto.process(outboxJob(event!.type, event!._id, 1))).toEqual({
+      planned: 1,
       passed: 0,
     });
     expect(await routeRidesDb(h).rides.countDocuments({ routeId: own })).toBe(0);
