@@ -15,7 +15,7 @@ import {
   UtcMinute,
 } from '@pokatim/contracts';
 import { CLOCK, type Clock } from '@rkarakulov/api-kit/core';
-import { uuidv7 } from '@rkarakulov/api-kit/mongo';
+import { MongoOutboxWriter, uuidv7 } from '@rkarakulov/api-kit/mongo';
 
 import { type DbSession, MongoTransactions } from '../../db';
 import { domainError } from '../../error-messages';
@@ -40,6 +40,7 @@ import {
   validateRaceRules,
   windowPassed,
 } from './races.policy';
+import { RACES_RACE_CANCELLED, type RacesRaceCancelled } from './races.events';
 import { RacesRepository } from './races.repository';
 import { fieldError, fieldsError, staleVersion } from './schedule-errors';
 
@@ -123,6 +124,7 @@ export class RacesService {
     private readonly audit: PanelAudit,
     private readonly directory: PanelDirectory,
     private readonly transactions: MongoTransactions,
+    private readonly outbox: MongoOutboxWriter,
     @Inject(ROUTE_CATALOG) private readonly routes: RouteCatalog,
     @Inject(RACE_CANCEL_GATE) private readonly disputes: RaceCancelGate,
     @Inject(CLOCK) private readonly clock: Clock,
@@ -334,7 +336,8 @@ export class RacesService {
   /**
    * Отмена опубликованной — только шаблонная причина (D-20), необратимо; после публикации протокола и при открытых
    * спорах — нет (D-19). Гейт споров — в транзакции после проверки версии; гонку «подача ↔ отмена» закрывает конфликт
-   * записи: подача пишет `resultsVersion` (`lockResults`), отмена — документ гонки (RC-9).
+   * записи: подача пишет `resultsVersion` (`lockResults`), отмена — документ гонки (RC-9). Событие
+   * `races.race-cancelled` — в той же транзакции после журнала (уведомление записавшимся, race-cancelled).
    */
   async cancel(
     principal: PanelPrincipal,
@@ -349,12 +352,15 @@ export class RacesService {
         throw invalidState({ reason: 'disputes_open' });
       }
       const now = this.clock.now();
-      return this.transition(tx, principal, current, input.version, 'published', {
+      const cancelled = await this.transition(tx, principal, current, input.version, 'published', {
         action: 'race.cancelled',
         set: { status: 'cancelled', cancelReason: input.reason, cancelledAt: now, updatedAt: now },
         details: { cancelReason: input.reason },
         guard: { protocolPublishedAt: null },
       });
+      const payload: RacesRaceCancelled = { raceId: id, reason: input.reason };
+      await this.outbox.append(tx, { type: RACES_RACE_CANCELLED, payload });
+      return cancelled;
     });
     return this.presentOne(principal, race);
   }

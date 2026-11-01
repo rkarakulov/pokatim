@@ -1,3 +1,4 @@
+import { RACE_CANCEL_REASONS } from '@pokatim/contracts';
 import { describe, expect, it } from 'vitest';
 
 import { type NoticeText, renderNotification, renderPushSummary } from './notification-texts';
@@ -77,6 +78,12 @@ const TABLE: [string, NoticeText, string, string][] = [
     `«${RACE}»: спор рассмотрен — отклонён.`,
   ],
   [
+    'Гонка отменена',
+    { kind: 'race_cancelled', race: RACE, reason: 'weather' },
+    'Гонка отменена',
+    `«${RACE}»: гонка отменена. Причина — неблагоприятная погода.`,
+  ],
+  [
     'Райд отменён',
     { kind: 'ride_cancelled', ride: RIDE, startsAt: AT },
     'Райд отменён',
@@ -144,8 +151,16 @@ describe('renderNotification: таблица «Тексты v1»', () => {
   });
 
   it('каждый kind контракта покрыт строкой таблицы', () => {
-    expect(new Set(TABLE.map(([, input]) => input.kind)).size).toBe(18);
+    expect(new Set(TABLE.map(([, input]) => input.kind)).size).toBe(19);
   });
+
+  it.each(RACE_CANCEL_REASONS)(
+    'отмена гонки, причина %s — своя подпись в конце фразы',
+    (reason) => {
+      const { body } = renderNotification({ kind: 'race_cancelled', race: 'Г', reason });
+      expect(body).toMatch(/^«Г»: гонка отменена\. Причина — [а-я][^.]+\.$/);
+    },
+  );
 
   it('даты — по Минску, не по поясу процесса: 23:30 UTC — уже следующий день', () => {
     const lateUtc = new Date('2026-10-22T23:30:00Z');

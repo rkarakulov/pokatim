@@ -96,6 +96,7 @@ describe('справочники уведомлений (только в кон�
       'social_respect',
       'social_invite_registered',
       'social_ride_ask',
+      'race_cancelled',
     ]);
     expect(PUSH_PLATFORMS).toEqual(['ios', 'android']);
   });

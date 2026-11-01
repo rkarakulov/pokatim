@@ -13,7 +13,7 @@ export interface AttemptNotice {
 
 export interface ResultsNotices {
   attempt(attemptId: string): Promise<AttemptNotice | null>;
-  /** `userId` активных заявок гонки, в том числе без результата («Протокол опубликован»). */
+  /** `userId` активных заявок гонки, в том числе без результата («Протокол опубликован», «Гонка отменена»). */
   protocolAudience(raceId: string): Promise<string[]>;
   /** `userId` строк ревизии протокола (перепроверка применена — участники с результатом). */
   revisionAudience(raceId: string, revision: number): Promise<string[]>;

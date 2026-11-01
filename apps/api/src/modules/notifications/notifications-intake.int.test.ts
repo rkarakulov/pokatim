@@ -625,6 +625,51 @@ describe('гонки и протокол', () => {
     expect(await notificationsOf(h, stranger.userId)).toEqual([]);
   });
 
+  it('гонка отменена панелью — активным заявкам с причиной, push группы «Гонки», без письма; снятым и посторонним — нет', async () => {
+    const admin = await staff(h, 'admin@example.by', 'admin');
+    await createSeason(h, admin.token);
+    const published = await publishedRace(h, admin.token, { title: RACE_TITLE });
+    await h.db.collection(resultsDb(h).entries.collectionName).insertMany([
+      { _id: uuidv7() as never, raceId: published.id, userId: a.userId, status: 'active' },
+      { _id: uuidv7() as never, raceId: published.id, userId: b.userId, status: 'withdrawn' },
+    ]);
+    const worker = notificationsIntake(h);
+    await worker.drain();
+    const res = await panelCall(h, admin.token, 'POST', `/v1/admin/races/${published.id}/cancel`, {
+      version: published.version,
+      reason: 'route_unavailable',
+    });
+    expect(res.status).toBe(200);
+    expect(await worker.drain()).toEqual(['written']);
+
+    const [cancelled] = await notificationsOf(h, a.userId);
+    expect(cancelled).toMatchObject({
+      kind: 'race_cancelled',
+      group: 'races',
+      title: 'Гонка отменена',
+      body: `«${RACE_TITLE}»: гонка отменена. Причина — маршрут недоступен (ремонт или перекрытие дороги).`,
+      target: { type: 'race', raceId: published.id },
+      push: { state: 'pending' },
+      email: null,
+    });
+    expect(await notificationsOf(h, b.userId)).toEqual([]);
+    expect(await notificationsOf(h, stranger.userId)).toEqual([]);
+    expect(await total()).toBe(1);
+  });
+
+  it('событие отмены, а гонка не отменена (битая запись) — skipped без уведомлений', async () => {
+    const raceId = await race();
+    await h.db.collection(resultsDb(h).entries.collectionName).insertOne({
+      _id: uuidv7() as never,
+      raceId,
+      userId: a.userId,
+      status: 'active',
+    });
+    const eventId = await appendEvent(h, 'races.race-cancelled', { raceId, reason: 'weather' });
+    expect(await runIntake(h, 'races.race-cancelled', eventId)).toBe('skipped');
+    expect(await total()).toBe(0);
+  });
+
   it('ревизия: дисквалификация и её отмена — владельцу заявки; перепроверка — строкам ревизии', async () => {
     const raceId = await race();
     const entryA = uuidv7();

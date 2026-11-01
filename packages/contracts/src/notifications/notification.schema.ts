@@ -56,6 +56,8 @@ export const NOTIFICATION_KINDS = [
   'social_respect',
   'social_invite_registered',
   'social_ride_ask',
+  // race-cancelled: гонка отменена панелью (группа `races`) — участникам с активной заявкой
+  'race_cancelled',
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 

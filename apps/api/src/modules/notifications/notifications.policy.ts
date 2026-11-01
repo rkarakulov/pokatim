@@ -76,6 +76,7 @@ const KIND_GROUPS: Record<NotificationKind, NotificationGroup> = {
   social_respect: SOCIAL,
   social_invite_registered: SOCIAL,
   social_ride_ask: SOCIAL,
+  race_cancelled: RACES,
 };
 
 /** Группа настроек события (N4). */

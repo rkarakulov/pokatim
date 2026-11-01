@@ -11,7 +11,12 @@ import {
   DISPUTES_DISPUTE_RESPONDED,
   DISPUTES_DISPUTE_WITHDRAWN,
 } from '../disputes';
-import { RACE_REGISTRY, type RaceRegistry } from '../races';
+import {
+  RACE_REGISTRY,
+  type RaceRegistry,
+  RACES_RACE_CANCELLED,
+  RacesRaceCancelled,
+} from '../races';
 import {
   RESULTS_ATTEMPT_VERDICT_CHANGED,
   RESULTS_NOTICES,
@@ -134,6 +139,8 @@ export class NotificationIntake {
         return this.profileFieldReset(payload);
       case ACHIEVEMENTS_GRANT_NOTICED:
         return this.achievementGranted(payload, now);
+      case RACES_RACE_CANCELLED:
+        return this.raceCancelled(payload);
     }
   }
 
@@ -232,6 +239,26 @@ export class NotificationIntake {
         text: { kind: 'protocol_published', race },
         target: { type: 'race', raceId: event.data.raceId },
         recipients: await this.results.protocolAudience(event.data.raceId),
+      },
+    ];
+  }
+
+  /**
+   * Гонка отменена (race-cancelled) — активным заявкам на момент приёма (как «Протокол опубликован»); гонки нет —
+   * `gone`, не в статусе `cancelled` — `state`. Цель — карточка гонки, письма нет (N2).
+   */
+  private async raceCancelled(payload: unknown): Promise<NoticeDraft[] | IntakeSkip> {
+    const event = RacesRaceCancelled.safeParse(payload);
+    if (!event.success) return 'invalid_payload';
+    const { raceId, reason } = event.data;
+    const race = await this.races.get(raceId);
+    if (!race) return 'gone';
+    if (race.status !== 'cancelled') return 'state';
+    return [
+      {
+        text: { kind: 'race_cancelled', race: race.title, reason },
+        target: { type: 'race', raceId },
+        recipients: await this.results.protocolAudience(raceId),
       },
     ];
   }

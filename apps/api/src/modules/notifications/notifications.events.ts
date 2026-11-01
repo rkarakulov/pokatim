@@ -23,6 +23,7 @@ import { ROUTE_PUBLICATION_DECIDED } from '../routes';
 import { TICKETS_REMINDER_DUE } from '../tickets';
 import { PROFILE_FIELD_RESET } from '../profile';
 import { ACHIEVEMENTS_GRANT_NOTICED } from '../achievements';
+import { RACES_RACE_CANCELLED } from '../races';
 import { SocialNoticeParams } from './social-notices';
 
 /**
@@ -48,6 +49,8 @@ export const notificationsOutboxRoutes = {
   [PROFILE_FIELD_RESET]: QUEUE.notificationsIntake,
   // achievements-push: новое достижение или уровень (порт `ACHIEVEMENT_NOTICES`)
   [ACHIEVEMENTS_GRANT_NOTICED]: QUEUE.notificationsIntake,
+  // race-cancelled: гонка отменена панелью (получатели — порт `RESULTS_NOTICES`)
+  [RACES_RACE_CANCELLED]: QUEUE.notificationsIntake,
 } as const;
 
 export type NotificationSourceEvent = keyof typeof notificationsOutboxRoutes;
