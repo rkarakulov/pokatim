@@ -2358,7 +2358,14 @@ export const ru = {
   'routes.rides.result.autoChecked': 'Проверен автоматически',
   'routes.rides.result.recheckMissing':
     'Заезда нет среди доступных — загрузите файл заезда ещё раз',
-  'routes.rides.track.unavailable': 'Разметка участков для этого заезда недоступна',
+  // route-rides-05: участки
+  'routes.rides.result.sections': 'Участки',
+  'routes.rides.result.sectionsPassed': 'Пройдено участков: {passed} из {count}',
+  'routes.rides.result.sectionsHint':
+    'Время участков не складывается во время маршрута: края у границ участков не входят ни в один из них.',
+  'routes.rides.result.section': 'Участок {n} · {from}–{to} км',
+  'routes.rides.result.sectionBest': 'Лучшее время: {time}',
+  'routes.rides.track.unavailable': 'Разметка трека для этого заезда недоступна',
   'routes.rides.error.rateLimited':
     'Слишком много проверок за час. Попробуйте через {minutes} мин.',
   'routes.rides.error.ROUTE_RIDE_NOT_READY': 'Файл ещё обрабатывается — откройте выбор позже',

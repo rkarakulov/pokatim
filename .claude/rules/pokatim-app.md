@@ -580,6 +580,11 @@ limit },'pages']` (`useInfiniteQuery`; фильтры отсортированы
   `leaderboardAll(routeId)` — после «Проверить заезд», финального статуса результата и смены лучшего заезда в
   «Моих заездах» карточки. Экран `routes/others/[routeId]` (`route-ride-others.tsx`) — в `Stack.Protected`,
   `useSettingsShell`, `SEO_DISALLOW`, строка сторожа манифеста SSR (чанк `[routeId]` — тот же, что у выбора).
+  route-rides-05 (PR B): блок «Участки» (`route-ride-sections.tsx`) в `RideView` после строк сравнения и до «Ваш
+  заезд» — только при `sections.length > 0` и не во время проверки (`routeRideSectionsShown`); пусто — блока нет, без
+  подписей. Представление — `routeRideSectionView`/`routeRideSectionsSummary` (`route-ride-format.ts`), км — `km`
+  из `routes/format.ts`; суммы, темпа и скорости участка нет нигде (и в a11y); «Лучший» и дельта — только сервер
+  (`isBest`, `deltaToBestSec`), клиент не сортирует и не сравнивает; данные — та же деталь, без нового запроса.
 
 ## Календарь стартов (блок 04, `docs/product/races-and-seasons.md`)
 

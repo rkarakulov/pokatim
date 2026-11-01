@@ -5,14 +5,16 @@ import type {
   RouteRideLeaderboardRow,
   RouteRidePage,
   RouteRideRow,
+  RouteRideSection,
   RouteRideTrack,
 } from '@pokatim/contracts';
-import { formatElapsed, minskDateTime, t } from '@pokatim/i18n';
+import { formatElapsed, formatKm, minskDateTime, t } from '@pokatim/i18n';
 import type { PillTone } from '@rkarakulov/ui';
 import type { Href } from 'expo-router';
 
 import { formatMinskDateTime } from '@/features/devices/format';
 import { profileWho } from '@/features/races/participation-format';
+import { km } from '@/features/routes/format';
 import { formatCountdown } from '@/lib/countdown';
 import { formatLocalRange, heroDateText, meta } from '@/lib/minsk-format';
 
@@ -143,6 +145,74 @@ export function routeRideComparisonLines(detail: RouteRideDetail, now: Date | nu
     );
   }
   return lines;
+}
+
+/** Блок «Участки» (route-rides-05): только с участками в ответе и не во время проверки; пусто — блока нет (RC-1). */
+export const routeRideSectionsShown = (detail: RouteRideDetail): boolean =>
+  detail.sections.length > 0 && !isPendingCheck(detail.status);
+
+/** «Пройдено участков: 2 из 3» — подсчёт статусов ответа (показ, не результат; RC-3). */
+export function routeRideSectionsSummary(sections: readonly RouteRideSection[]): string {
+  const passed = sections.filter((section) => section.status === 'passed').length;
+  return t('routes.rides.result.sectionsPassed', { passed, count: sections.length });
+}
+
+export interface RouteRideSectionView {
+  /** «Участок 2 · 10–20 км» */
+  title: string;
+  /** время — только у `passed` */
+  time: string | null;
+  /** «Не пройден» / «Статус неизвестен» — когда времени нет */
+  status: string | null;
+  /** «Лучший» — только по `isBest` сервера */
+  best: boolean;
+  /** «К лучшему: +0:12» (`passed`, не лучший) или «Лучшее время: 18:04» (`not_passed`) */
+  comparison: string | null;
+  /** склейка видимых частей — один элемент скринридера */
+  a11y: string;
+}
+
+const sectionComparison = (section: RouteRideSection, passed: boolean): string | null => {
+  if (passed) {
+    return section.isBest || section.deltaToBestSec === null
+      ? null
+      : t('routes.rides.result.toBest', { delta: formatDeltaSec(section.deltaToBestSec) });
+  }
+  return section.status === 'not_passed' && section.bestElapsedSec !== null
+    ? t('routes.rides.result.sectionBest', { time: formatElapsed(section.bestElapsedSec) })
+    : null;
+};
+
+/**
+ * Строка участка: номер — позиция в ответе (сервер отдаёт по `fromM`, клиент не сортирует; RC-8), км — округлением
+ * длины маршрута (RC-6). Время, «лучший» и дельта — только сервер (RC-9: «Лучший» — по `isBest`, не по дельте 0);
+ * сумма, темп и скорость участка не показываются (у границ края не входят в участки, RC-2).
+ */
+export function routeRideSectionView(
+  section: RouteRideSection,
+  index: number,
+): RouteRideSectionView {
+  const title = t('routes.rides.result.section', {
+    n: index + 1,
+    from: formatKm(km(section.fromM)),
+    to: formatKm(km(section.toM)),
+  });
+  const time =
+    section.status === 'passed' && section.elapsedSec !== null
+      ? formatElapsed(section.elapsedSec)
+      : null;
+  const passed = time !== null;
+  const status = time === null ? routeRideStatusPill(section.status).label : null;
+  const best = passed && section.isBest;
+  const comparison = sectionComparison(section, passed);
+  return {
+    title,
+    time,
+    status,
+    best,
+    comparison,
+    a11y: meta([title, time ?? status, best ? t('races.attempt.best') : null, comparison]),
+  };
 }
 
 /**

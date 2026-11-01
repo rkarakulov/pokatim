@@ -7,6 +7,7 @@ import type {
   RouteRideLeaderboardRow,
   RouteRidePage,
   RouteRideRow,
+  RouteRideSection,
   RouteRideTrack,
   TrackUpload,
 } from '@pokatim/contracts';
@@ -52,6 +53,18 @@ export const ridesPage = (
   route: routeRef,
   summary: { count: items.length, passedCount: 0, best: null, ...summary },
   items,
+});
+
+/** Участок заезда (route-rides-05): по умолчанию пройден лучшим, 0–10 км, 0:18:04. */
+export const rideSection = (overrides: Partial<RouteRideSection> = {}): RouteRideSection => ({
+  fromM: 0,
+  toM: 10_000,
+  status: 'passed',
+  elapsedSec: 1_084,
+  isBest: true,
+  bestElapsedSec: 1_084,
+  deltaToBestSec: 0,
+  ...overrides,
 });
 
 export const rideDetail = (overrides: Partial<RouteRideDetail> = {}): RouteRideDetail => ({
