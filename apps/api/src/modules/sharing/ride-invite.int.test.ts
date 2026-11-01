@@ -1,18 +1,23 @@
 import { getQueueToken } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { StoryCardStatus } from '@pokatim/contracts';
+import { REDIS } from '@rkarakulov/api-kit/core';
 import { uuidv7 } from '@rkarakulov/api-kit/mongo';
 import type { Job, Queue } from 'bullmq';
+import type { Command, Redis } from 'ioredis';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { twoToneImage } from '../../../test/avatars';
 import { createHarness, DAY, type Harness } from '../../../test/harness';
 import { bearer, call } from '../../../test/identity';
+import { panelCall } from '../../../test/panel';
+import { staff } from '../../../test/races';
 import { routesDb, seedRiderRoute } from '../../../test/routes';
 import {
   authed,
   createRide,
   hideInDb,
+  MODERATION,
   RIDES,
   rider,
   ridesDb,
@@ -22,7 +27,7 @@ import {
 } from '../../../test/rides';
 import { QUEUE } from '../../queues';
 import { RIDE_ROUTES, type RideRoutes } from '../routes';
-import { RIDES_FOR_SHARING, type RidesForSharing } from '../rides';
+import { RideErasure, RIDES_FOR_SHARING, type RidesForSharing } from '../rides';
 import { RIDE_INVITE_RENDER_JOB, type RideInviteJob } from './story-card.cache';
 import { StoryCardProcessor } from './story-card.processor';
 
@@ -340,5 +345,205 @@ describe('4a с фото организатора (ride-photo, AC5)', () => {
     expect(await port.invitePhoto(otherRide.id, id)).toBeNull();
     await hideInDb(h, ride.id);
     expect(await port.invitePhoto(ride.id, id)).toBeNull();
+  });
+});
+
+describe('отзыв выданной картинки приглашения (ride-photo-followups AC3)', () => {
+  const night = '?template=night';
+  const uploadPhoto = async (rideId: string): Promise<string> => {
+    const res = await h.app.inject({
+      method: 'PUT',
+      url: `${RIDES}/${rideId}/photo`,
+      headers: { 'content-type': 'application/octet-stream', ...bearer(organizer.token) },
+      payload: await twoToneImage('jpeg', { width: 1200, height: 900 }),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    return (JSON.parse(res.body) as { ride: { photo: { id: string } } }).ride.photo.id;
+  };
+  /** Готовая картинка шаблона: постановка → процессор → токен. */
+  async function cardToken(rideId: string, query = '?template=line'): Promise<string> {
+    expect(await status(other, rideId, query)).toEqual({ status: 'pending' });
+    expect(await runJob()).toBe('ready');
+    return readyToken(other, rideId, query);
+  }
+  const expectServed = async (token: string) => {
+    const res = await image(`${token}.png`);
+    expect(res.statusCode, res.body.slice(0, 200)).toBe(200);
+    expect(res.headers['content-type']).toBe('image/png');
+  };
+  const expectRevoked = async (token: string) => {
+    const res = await image(`${token}.png`);
+    expect(res.statusCode).toBe(404);
+    expect(res.headers['content-type']).toContain('application/json');
+    expect(JSON.parse(res.body)).toMatchObject({ code: 'NOT_FOUND' });
+    expect(await h.redis.exists(`story-card:png:${token}`, `story-card:ride:${token}`)).toBe(0);
+  };
+
+  it('привязка пишется только у приглашения: { rideId, photoId нарисованного }', async () => {
+    const ride = await createRide(h, organizer);
+    const line = await cardToken(ride.id);
+    expect(JSON.parse((await h.redis.get(`story-card:ride:${line}`))!)).toEqual({
+      rideId: ride.id,
+      photoId: null,
+    });
+    const photoId = await uploadPhoto(ride.id);
+    const withPhoto = await cardToken(ride.id, night);
+    expect(JSON.parse((await h.redis.get(`story-card:ride:${withPhoto}`))!)).toEqual({
+      rideId: ride.id,
+      photoId,
+    });
+    expect(await h.redis.ttl(`story-card:ride:${withPhoto}`)).toBeGreaterThan(0);
+  });
+
+  const triggers: [string, (rideId: string, photoId: string) => Promise<void>][] = [
+    [
+      'замена фото',
+      async (rideId) => {
+        await uploadPhoto(rideId);
+      },
+    ],
+    [
+      'удаление организатором',
+      async (rideId) => {
+        const res = await authed(h, organizer, 'POST', `${RIDES}/${rideId}/photo/delete`, {});
+        expect(res.status).toBe(200);
+      },
+    ],
+    [
+      'сброс модератором',
+      async (rideId, photoId) => {
+        const moderator = await staff(h, 'moderator@example.by', 'moderator');
+        const res = await panelCall(
+          h,
+          moderator.token,
+          'POST',
+          `${MODERATION}/${rideId}/photo-reset`,
+          {
+            photoId,
+            reason: 'Чужое фото',
+          },
+        );
+        expect(res.status).toBe(200);
+      },
+    ],
+    [
+      'стирание аккаунта организатора',
+      async () => {
+        await h.app.get(RideErasure, { strict: false }).erase(organizer.userId, h.clock.now());
+      },
+    ],
+  ];
+  it.each(triggers)(
+    'night с фото — после «%s» токен 404 JSON, ключи удалены',
+    async (_name, act) => {
+      const ride = await createRide(h, organizer);
+      const photoId = await uploadPhoto(ride.id);
+      const token = await cardToken(ride.id, night);
+      await expectServed(token);
+      await act(ride.id, photoId);
+      await expectRevoked(token);
+    },
+  );
+
+  it('не затронуты: line при смене фото; night без фото при добавлении фото', async () => {
+    const ride = await createRide(h, organizer);
+    const line = await cardToken(ride.id);
+    const plainNight = await cardToken(ride.id, night);
+    await uploadPhoto(ride.id);
+    await expectServed(line);
+    await expectServed(plainNight);
+    await uploadPhoto(ride.id);
+    await expectServed(line);
+  });
+
+  it('скрытие — 404 у обоих шаблонов; после «Вернуть» статус выдаёт новый рабочий токен', async () => {
+    const ride = await createRide(h, organizer);
+    await uploadPhoto(ride.id);
+    const line = await cardToken(ride.id);
+    const withPhoto = await cardToken(ride.id, night);
+    const restore = await hideInDb(h, ride.id);
+    await expectRevoked(line);
+    await expectRevoked(withPhoto);
+    await restore();
+    const fresh = await cardToken(ride.id);
+    expect(fresh).not.toBe(line);
+    await expectServed(fresh);
+  });
+
+  it('сторис гонки и другие карточки без привязки — отдаются как раньше', async () => {
+    const ride = await createRide(h, organizer);
+    const token = await cardToken(ride.id);
+    // переходное окно: PNG без ключа привязки (выдан до выката) — без проверки райда
+    await h.redis.del(`story-card:ride:${token}`);
+    await hideInDb(h, ride.id);
+    await expectServed(token);
+  });
+
+  it('гонка отдачи: revoke параллельного запроса между чтением PNG и привязки — 404 (ревью PR A, HIGH)', async () => {
+    const ride = await createRide(h, organizer);
+    const token = await cardToken(ride.id);
+    await hideInDb(h, ride.id);
+    const pngKey = `story-card:png:${token}`;
+    const bindingKey = `story-card:ride:${token}`;
+    // клиент Redis приложения; отзыв «другого запроса» — отдельным соединением
+    const redis = h.app.get<Redis>(REDIS, { strict: false });
+    const other = redis.duplicate();
+    const send = redis.sendCommand.bind(redis);
+    let revoked = false;
+    // ответ на чтение PNG доходит до сервиса только после того, как другой запрос удалил PNG и привязку
+    vi.spyOn(redis, 'sendCommand').mockImplementation(((command: Command, ...rest: unknown[]) => {
+      if (!revoked && command.name === 'get' && String(command.args[0]) === pngKey) {
+        revoked = true;
+        const resolve = command.resolve;
+        command.resolve = (value: unknown) => {
+          void other.del(pngKey, bindingKey).then(() => resolve(value));
+        };
+      }
+      return (send as (...args: unknown[]) => unknown)(command, ...rest);
+    }) as typeof redis.sendCommand);
+    try {
+      const res = await image(`${token}.png`);
+      expect(revoked).toBe(true);
+      expect(res.statusCode).toBe(404);
+      expect(res.headers['content-type']).toContain('application/json');
+    } finally {
+      vi.restoreAllMocks();
+      await other.quit();
+    }
+  });
+
+  it('гонка «рендер ↔ сброс»: фото снято после invitePhoto, до записи PNG — токен 404', async () => {
+    const ride = await createRide(h, organizer);
+    const photoId = await uploadPhoto(ride.id);
+    const moderator = await staff(h, 'moderator@example.by', 'moderator');
+    const port = h.worker.get<RidesForSharing>(RIDES_FOR_SHARING);
+    const original = port.invitePhoto.bind(port);
+    vi.spyOn(port, 'invitePhoto').mockImplementation(async (rideId, id) => {
+      const bytes = await original(rideId, id);
+      // сброс коммитится, пока рендер уже держит байты прежнего фото
+      const res = await panelCall(
+        h,
+        moderator.token,
+        'POST',
+        `${MODERATION}/${rideId}/photo-reset`,
+        {
+          photoId: id,
+          reason: 'Чужое фото',
+        },
+      );
+      expect(res.status).toBe(200);
+      return bytes;
+    });
+    expect(await status(other, ride.id, night)).toEqual({ status: 'pending' });
+    expect(await runJob()).toBe('ready');
+    expect((await ridesDb(h).findOne({ _id: ride.id }))?.photoId).toBeNull();
+    const ready = await status(other, ride.id, night);
+    // хэш с прежним фото устарел: статус ставит новый рендер, а PNG прежнего — по старому токену
+    expect(ready.status).toBe('pending');
+    const keys = await h.redis.keys('story-card:ride:*');
+    expect(keys).toHaveLength(1);
+    const stale = keys[0]!.slice('story-card:ride:'.length);
+    expect(JSON.parse((await h.redis.get(keys[0]!))!)).toEqual({ rideId: ride.id, photoId });
+    await expectRevoked(stale);
   });
 });

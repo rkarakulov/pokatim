@@ -15,6 +15,7 @@ import {
 } from '../results';
 import {
   RIDES_PARTICIPANT_JOINED,
+  RIDES_PHOTO_RESET,
   RIDES_REPORTS_RESOLVED,
   RIDES_RIDE_CANCELLED,
   RIDES_RIDE_RESCHEDULED,
@@ -48,6 +49,8 @@ export const notificationsOutboxRoutes = {
   [PROFILE_FIELD_RESET]: QUEUE.notificationsIntake,
   // achievements-push: новое достижение или уровень (порт `ACHIEVEMENT_NOTICES`)
   [ACHIEVEMENTS_GRANT_NOTICED]: QUEUE.notificationsIntake,
+  // ride-photo-followups: модератор удалил фото райда (организатору)
+  [RIDES_PHOTO_RESET]: QUEUE.notificationsIntake,
 } as const;
 
 export type NotificationSourceEvent = keyof typeof notificationsOutboxRoutes;

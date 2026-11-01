@@ -5,13 +5,22 @@ import { uuidv7 } from '@rkarakulov/api-kit/mongo';
 import type { Job, Queue } from 'bullmq';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import sharp from 'sharp';
+
+import { twoToneImage } from '../../../test/avatars';
 import { createHarness, type Harness } from '../../../test/harness';
+import { bearer } from '../../../test/identity';
+import { panelCall } from '../../../test/panel';
+import { staff } from '../../../test/races';
 import { seedOgSeason, seedRace, seedStart, startsDb } from '../../../test/og';
 import { patchProfile, publicRider } from '../../../test/profiles';
 import { routesDb, seedRiderRoute } from '../../../test/routes';
 import {
+  authed,
   createRide,
   hideInDb,
+  MODERATION,
+  RIDES,
   rider,
   seedApprovedRoute,
   seedTeamRoute,
@@ -470,5 +479,105 @@ describe('buildOgCard — процессор', () => {
     expect(await runJobs()).toEqual(['ready', 'ready', 'ready']);
     expect(display).toHaveBeenCalledWith(routeId);
     expect(inviteLine).not.toHaveBeenCalled();
+  });
+});
+
+describe('OG райда с фото организатора (ride-photo-followups AC2)', () => {
+  const uploadPhoto = async (rideId: string): Promise<string> => {
+    const res = await h.app.inject({
+      method: 'PUT',
+      url: `${RIDES}/${rideId}/photo`,
+      headers: { 'content-type': 'application/octet-stream', ...bearer(organizer.token) },
+      payload: await twoToneImage('jpeg', { width: 1600, height: 900 }),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    return (JSON.parse(res.body) as { ride: { photo: { id: string } } }).ride.photo.id;
+  };
+  /** Текущая версия → PNG отрендерен процессором → выдача 200. */
+  async function rendered(rideId: string): Promise<{ v: string; png: Buffer }> {
+    const v = await version('ride', rideId);
+    await image('ride', rideId, v);
+    expect(await runJobs()).toContain('ready');
+    const res = await image('ride', rideId, v);
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toBe('image/png');
+    return { v, png: res.rawPayload };
+  }
+  const expectMoved = async (rideId: string, old: string) => {
+    const current = await version('ride', rideId);
+    expect(current).not.toBe(old);
+    const moved = await image('ride', rideId, old);
+    expect(moved.statusCode).toBe(302);
+    expect(moved.headers.location).toBe(`/v1/og/images/ride/${rideId}/${current}.png`);
+  };
+
+  it('загрузка, замена, удаление и сброс фото — каждый раз новая версия, старая — 302; PNG с фото 1200×630', async () => {
+    const ride = await createRide(h, organizer);
+    const plain = await rendered(ride.id);
+
+    const photoA = await uploadPhoto(ride.id);
+    await expectMoved(ride.id, plain.v);
+    const withA = await rendered(ride.id);
+    expect(await sharp(withA.png).metadata()).toMatchObject({
+      format: 'png',
+      width: 1200,
+      height: 630,
+    });
+    expect(withA.png.byteLength).toBeLessThanOrEqual(OG_CARD_POLICY.maxPhotoPngBytes);
+    expect(withA.png.equals(plain.png)).toBe(false);
+    // PNG прежней версии вытеснен: со снятым фото по API больше не отдаётся
+    expect(await h.redis.keys(`og:png:${plain.v}*`)).toEqual([]);
+    expect(photoA).toBeTruthy();
+
+    await uploadPhoto(ride.id);
+    await expectMoved(ride.id, withA.v);
+    const withB = await rendered(ride.id);
+
+    const removed = await authed(h, organizer, 'POST', `${RIDES}/${ride.id}/photo/delete`, {});
+    expect(removed.status).toBe(200);
+    await expectMoved(ride.id, withB.v);
+    const afterRemove = await rendered(ride.id);
+    // без фото — та же картинка, что до загрузки (версия рендера та же, факты те же)
+    expect(afterRemove.v).toBe(plain.v);
+
+    const photoC = await uploadPhoto(ride.id);
+    const withC = await rendered(ride.id);
+    const moderator = await staff(h, 'moderator@example.by', 'moderator');
+    const reset = await panelCall(
+      h,
+      moderator.token,
+      'POST',
+      `${MODERATION}/${ride.id}/photo-reset`,
+      {
+        photoId: photoC,
+        reason: 'Чужое фото',
+      },
+    );
+    expect(reset.status).toBe(200);
+    await expectMoved(ride.id, withC.v);
+  });
+
+  it('скрытый с фото — 404 и версии, и картинки', async () => {
+    const ride = await createRide(h, organizer);
+    await uploadPhoto(ride.id);
+    const { v } = await rendered(ride.id);
+    await hideInDb(h, ride.id);
+    expect((await get(`/og/cards/ride/${ride.id}`)).statusCode).toBe(404);
+    const hidden = await image('ride', ride.id, v);
+    expect(hidden.statusCode).toBe(404);
+    expect(hidden.headers['content-type']).toContain('application/json');
+  });
+
+  it('фото снято между постановкой и рендером — skipped, PNG не записан', async () => {
+    const ride = await createRide(h, organizer);
+    await uploadPhoto(ride.id);
+    await image('ride', ride.id, await version('ride', ride.id));
+    const [job] = (await jobs()).filter((j) => j.data.kind === 'ride');
+    await job!.remove();
+    // фото снято прямой записью: хэш задачи ещё совпал бы, если бы факты не перечитывались — `invitePhoto` → null
+    const port = h.worker.get<RidesForSharing>(RIDES_FOR_SHARING);
+    vi.spyOn(port, 'invitePhoto').mockResolvedValue(null);
+    expect(await processor().buildOgCard(job!.data)).toBe('skipped');
+    expect(await h.redis.exists(`og:png:${job!.data.hash}`)).toBe(0);
   });
 });
