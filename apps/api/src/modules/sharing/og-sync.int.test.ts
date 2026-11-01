@@ -2,10 +2,12 @@ import { getQueueToken } from '@nestjs/bullmq';
 import type { Job, Queue } from 'bullmq';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { twoToneImage } from '../../../test/avatars';
 import { createHarness, DAY, type Harness } from '../../../test/harness';
+import { bearer } from '../../../test/identity';
 import { seedOgSeason, seedRace, seedStart, startsDb } from '../../../test/og';
 import { publicRider } from '../../../test/profiles';
-import { createRide, hideInDb, rider, type Rider } from '../../../test/rides';
+import { createRide, hideInDb, RIDES, rider, type Rider } from '../../../test/rides';
 import { QUEUE } from '../../queues';
 import { CALENDAR_FOR_SHARING, type CalendarForSharing } from '../calendar';
 import { RACES_FOR_SHARING, type RacesForSharing } from '../races';
@@ -83,6 +85,28 @@ describe('og.sync (AC3)', () => {
     // курсор сброшен вручную — объект снова в выборке, но PNG текущего хэша есть
     await cache().resetCursors();
     expect(await sync().run()).toMatchObject({ enqueued: 0, scanned: { calendar: 1 } });
+  });
+
+  it('загрузка фото райда (updatedAt) → задача рендера нового хэша (ride-photo-followups)', async () => {
+    const ride = await createRide(h, organizer);
+    await sync().run();
+    await renderAll();
+    const before = await h.redis.get(`og:obj:ride:${ride.id}`);
+    expect(before).toMatch(/^[0-9a-f]{64}$/);
+    h.clock.advance(60_000);
+    const res = await h.app.inject({
+      method: 'PUT',
+      url: `${RIDES}/${ride.id}/photo`,
+      headers: { 'content-type': 'application/octet-stream', ...bearer(organizer.token) },
+      payload: await twoToneImage('jpeg', { width: 1200, height: 900 }),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    expect(await sync().run()).toMatchObject({ enqueued: 1 });
+    const [job] = await jobs();
+    expect(`${job!.data.kind}:${job!.data.id}`).toBe(`ride:${ride.id}`);
+    expect(job!.data.hash).not.toBe(before);
+    await renderAll();
+    expect(await h.redis.get(`og:obj:ride:${ride.id}`)).toBe(job!.data.hash);
   });
 
   it('«неживые» объекты (вариант A) не пререндерятся', async () => {

@@ -257,7 +257,7 @@ export class StoryCardProcessor extends WorkerHost {
    * Рендер OG-картинки публичной страницы (og-images) — вызывается и тестами напрямую. Входы перечитываются (объект
    * больше не публичный или хэш устарел — `skipped`, PNG не пишется). Линия: гонка — линия показа маршрута коридора
    * (`ROUTE_GEOMETRY`, как на странице), райд — только маршрут каталога (`inviteLine`), маршрут — линия каталога.
-   * Сезон и райдер — без линии. Провал на последней попытке — ключ постановки удерживается `failedHoldSec`. В логе —
+   * Сезон и райдер — без линии. Райд с фото — байты `invitePhoto` (снято — `skipped`). Провал на последней попытке — ключ постановки удерживается `failedHoldSec`. В логе —
    * вид и id, без названия; райдер — префикс хэша вместо `publicId`.
    */
   buildOgCard(job: OgCardJob, options: BuildOptions = {}): Promise<StoryCardOutcome> {
@@ -279,8 +279,15 @@ export class StoryCardProcessor extends WorkerHost {
       ttlSec = ogPrerenderable(resolved.input, this.clock.now())
         ? OG_CARD_POLICY.pngTtlSec
         : OG_CARD_POLICY.pngShortTtlSec;
+      // фото райда (ride-photo-followups): снято или заменено между постановкой и рендером — вход устарел
+      const photoId = resolved.input.kind === 'ride' ? resolved.input.facts.photoId : null;
+      const photo = photoId ? await this.rides.invitePhoto(job.id, photoId) : null;
+      if (photoId && !photo) return null;
       const line = await this.ogLine(resolved.input);
-      return { png: await renderOgCard(resolved.input, line), note: line ? 'line' : 'no line' };
+      return {
+        png: await renderOgCard(resolved.input, line, photo),
+        note: `${line ? 'line' : 'no line'}${photo ? ' photo' : ''}`,
+      };
     });
   }
 

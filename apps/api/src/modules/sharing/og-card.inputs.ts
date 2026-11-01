@@ -78,6 +78,8 @@ function canonicalFacts(input: OgCardInput): unknown[] {
         f.paceMinKmh,
         f.paceMaxKmh,
         f.routeId,
+        // фото организатора на картинке (ride-photo-followups): загрузка, замена, снятие — новая версия
+        f.photoId,
       ];
     }
     case 'route': {
