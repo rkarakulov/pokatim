@@ -18,6 +18,11 @@ import {
   type ChangedCursor,
   changedAfter,
   type ChangedRow,
+  CHANGED_ROW_PROJECTION,
+  changedRows,
+  ID_SORT,
+  type IdRange,
+  idWithin,
 } from '../../changed-since';
 import type { DbSession } from '../../db';
 import { ROUTE_DISTANCE_RANGES_M } from './routes.policy';
@@ -341,6 +346,24 @@ export class RoutesRepository {
   }
 
   /**
+   * Маршруты каталога диапазона `_id` ↑ (карта сайта, sitemap-index) — индекс `routes_sitemap_idx` по `(status, _id)`,
+   * условия каталога — по документу. Курсор — для `sitemapRange` и проверки плана в тесте.
+   */
+  sitemapCursor(range: IdRange, limit: number) {
+    return this.c.routes
+      .find(
+        { $and: [{ status: 'ready', ...IN_CATALOG }, idWithin(range) as Filter<RouteDoc>] },
+        { projection: CHANGED_ROW_PROJECTION },
+      )
+      .sort(ID_SORT)
+      .limit(limit);
+  }
+
+  async sitemapRange(range: IdRange, limit: number): Promise<ChangedRow[]> {
+    return changedRows(await this.sitemapCursor(range, limit).toArray());
+  }
+
+  /**
    * Маршрут публичного каталога (routes-06) — карточка, карта, GPX: готовый и опубликованный маршрут команды или
    * одобренный маршрут райдера (`IN_CATALOG`). Иначе — `undefined` (один `404`). Без кэша.
    */
@@ -429,17 +452,18 @@ export class RoutesRepository {
 
   /**
    * Публикация или правка каталожных полей готового маршрута платформы — в транзакции действия панели (чтение →
-   * запись → журнал). `false` — маршрут не готов (условие в фильтре).
+   * запись → журнал); `title` — новое название (routes-08). `false` — маршрут не готов (условие в фильтре).
    */
   async setCatalog(
     session: DbSession,
     id: string,
     catalog: RouteCatalogDoc,
     now: Date,
+    title?: string,
   ): Promise<boolean> {
     const result = await this.c.routes.updateOne(
       { _id: id, status: 'ready', origin: 'platform' },
-      { $set: { catalog, updatedAt: now } },
+      { $set: { catalog, updatedAt: now, ...(title === undefined ? {} : { title }) } },
       { session },
     );
     return result.matchedCount === 1;

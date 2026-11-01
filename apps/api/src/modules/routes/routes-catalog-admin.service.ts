@@ -10,7 +10,7 @@ import type { RouteCatalogDoc, RouteDoc } from './routes.collection';
 import { RoutesRepository } from './routes.repository';
 import { RoutesService, visible } from './routes.service';
 
-type CatalogField = 'city' | 'surfaces';
+type CatalogField = 'title' | 'city' | 'surfaces';
 
 /** Итог действия в транзакции: документ после записи и запись журнала (`null` — ничего не изменилось). */
 interface Outcome {
@@ -23,9 +23,10 @@ const sameSet = (a: readonly string[], b: readonly string[]) =>
 
 /**
  * Каталог маршрутов в панели (routes-01, RC-2, RC-3, RC-10): публикация готового маршрута, правка города и покрытия
- * опубликованного, снятие. Транзакция «чтение маршрута → запись того же документа → журнал»: две транзакции одного
- * маршрута конфликтуют по документу и повторяются на свежем снимке. Повтор с теми же значениями и снятие
- * неопубликованного — без записи и журнала. Колбэк транзакции — без логов (повторяется).
+ * опубликованного, снятие; название — при публикации и правке (routes-08, RC-14). Транзакция «чтение маршрута →
+ * запись того же документа → журнал»: две транзакции одного маршрута конфликтуют по документу и повторяются на свежем
+ * снимке. Повтор с теми же значениями и снятие неопубликованного — без записи и журнала. Колбэк транзакции — без логов
+ * (повторяется).
  */
 @Injectable()
 export class RoutesCatalogAdminService {
@@ -42,27 +43,30 @@ export class RoutesCatalogAdminService {
   publish(principal: PanelPrincipal, id: string, input: PublishRouteInput): Promise<PanelRoute> {
     return this.act(principal, id, async (tx, route, now) => {
       const current = route.catalog ?? null;
-      const changedFields: CatalogField[] = current
-        ? [
-            ...(current.city === input.city ? [] : (['city'] as const)),
-            ...(sameSet(current.surfaces, input.surfaces) ? [] : (['surfaces'] as const)),
-          ]
-        : [];
+      const title = input.title ?? route.title;
+      const renamed = title !== route.title;
+      const changedFields: CatalogField[] = [
+        ...(renamed ? (['title'] as const) : []),
+        ...(current && current.city !== input.city ? (['city'] as const) : []),
+        ...(current && !sameSet(current.surfaces, input.surfaces) ? (['surfaces'] as const) : []),
+      ];
       if (current && changedFields.length === 0) return { route, action: null };
       const catalog: RouteCatalogDoc = {
         city: input.city,
         surfaces: [...input.surfaces],
         publishedAt: current?.publishedAt ?? now,
       };
-      await this.write(this.repository.setCatalog(tx, id, catalog, now));
+      await this.write(
+        this.repository.setCatalog(tx, id, catalog, now, renamed ? title : undefined),
+      );
       const action = current ? 'route.catalog_updated' : 'route.published';
       await this.audit.append(tx, {
         action,
         actor: { kind: 'user', userId: principal.userId },
-        subject: { kind: 'route', id, label: route.title },
-        details: current ? { changedFields } : null,
+        subject: { kind: 'route', id, label: title },
+        details: changedFields.length ? { changedFields } : null,
       });
-      return { route: { ...route, catalog, updatedAt: now }, action };
+      return { route: { ...route, title, catalog, updatedAt: now }, action };
     });
   }
 

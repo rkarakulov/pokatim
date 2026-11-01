@@ -44,7 +44,7 @@ import { StoryCardService } from './story-card.service';
 /**
  * Карточки (ADR-0018), HTTP: статус сторис своего результата, приглашения кофе-райда, своего достижения и маршрута
  * каталога (`AuthGuard`), PNG по капабилити-токену (IP-лимит), OG-картинки публичных страниц (og-images: версия и PNG без
- * входа) и карта сайта (landing-seo: `GET /v1/sitemap` без входа). Данные — порты
+ * входа) и карта сайта (landing-seo, sitemap-index: `GET /v1/sitemap` и `/v1/sitemap/:kind/:page` без входа). Данные — порты
  * `results` (`RESULTS_FOR_SHARING`), `rides` (`RIDES_FOR_SHARING`), `races` (`RACES_FOR_SHARING`), `routes`
  * (`ROUTES_FOR_SHARING`, `ROUTE_GEOMETRY`), `calendar` (`CALENDAR_FOR_SHARING`), `profile` (`RIDER_NAMES`,
  * `RIDER_THEMES`), `achievements` (`ACHIEVEMENTS_FOR_SHARING`), `riders` (`RIDERS_FOR_SHARING` — OG профиля) через их

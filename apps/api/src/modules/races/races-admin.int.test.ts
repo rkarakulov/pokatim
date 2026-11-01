@@ -4,6 +4,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 
 import { closeSeededDispute, seedDispute } from '../../../test/disputes';
 import { createHarness, DAY, HOUR, type Harness } from '../../../test/harness';
+import { eventsOfType } from '../../../test/notifications';
 import { panel, panelCall, panelSession } from '../../../test/panel';
 import {
   createRace,
@@ -359,6 +360,9 @@ describe('отмена (AC6)', () => {
     expect(audit.map((entry) => [entry.actor, entry.details])).toEqual([
       [{ kind: 'user', userId: admin.userId }, { cancelReason: 'weather' }],
     ]);
+    expect((await eventsOfType(h, 'races.race-cancelled')).map((event) => event.payload)).toEqual([
+      { raceId: race.id, reason: 'weather' },
+    ]);
 
     const version = parse(res.body).version;
     for (const [path, body] of [
@@ -370,6 +374,8 @@ describe('отмена (AC6)', () => {
       expect(again.status, path).toBe(409);
       expect(again.body).toMatchObject({ code: 'RACE_INVALID_STATE' });
     }
+    // повтор отмены — 409 без второго события
+    expect(await eventsOfType(h, 'races.race-cancelled')).toHaveLength(1);
   });
 
   it('свободный текст и неизвестная причина — 400; черновик — 409 RACE_INVALID_STATE', async () => {
@@ -428,6 +434,7 @@ describe('протокол опубликован — фаза final (race-resul
     expect(cancel.body).toMatchObject({ code: 'RACE_INVALID_STATE' });
     expect((await racesDb(h).races.findOne({ _id: race.id }))?.status).toBe('published');
     expect(await auditOf('race.cancelled')).toHaveLength(0);
+    expect(await eventsOfType(h, 'races.race-cancelled')).toHaveLength(0);
   });
 
   it('публикация между чтением гонки и записью отмены — повтор транзакции видит протокол, 409', async () => {

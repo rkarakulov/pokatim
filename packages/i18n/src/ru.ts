@@ -2462,6 +2462,7 @@ export const ru = {
   'admin.riderRoutes.notFound': 'Заявка не найдена',
   'admin.riderRoutes.field.status': 'Статус',
   'admin.riderRoutes.field.author': 'Автор',
+  'admin.riderRoutes.field.title': 'Название',
   'admin.riderRoutes.field.city': 'Город старта',
   'admin.riderRoutes.field.cityPlaceholder': 'Выберите город',
   'admin.riderRoutes.field.surfaces': 'Покрытие',

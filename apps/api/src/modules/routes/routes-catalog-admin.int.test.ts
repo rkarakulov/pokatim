@@ -121,6 +121,83 @@ describe('публикация в каталог (AC1)', () => {
     ]);
   });
 
+  it('название при публикации (routes-08, RC-14): route.published { changedFields: [title] }, подпись — новое название', async () => {
+    const org = await staff(h, 'org@example.by', 'organizer');
+    const id = await readyRoute(h, org.token);
+
+    const res = await publish(org.token, id, {
+      title: '  Кольцо вокруг Минска ',
+      city: 'minsk',
+      surfaces: ['asphalt'],
+    });
+    expect(res.status).toBe(200);
+    expect(PanelRoute.parse(res.body).title).toBe('Кольцо вокруг Минска');
+    expect((await routeDoc(id))?.title).toBe('Кольцо вокруг Минска');
+    const list = PanelRoutePage.parse(
+      (await panelCall(h, org.token, 'GET', `${ROUTES}?status=ready`)).body,
+    );
+    expect(list.items[0]?.title).toBe('Кольцо вокруг Минска');
+
+    const audit = await catalogAudit(id);
+    expect(audit).toHaveLength(1);
+    expect(audit[0]).toMatchObject({
+      action: 'route.published',
+      subject: { kind: 'route', id, label: 'Кольцо вокруг Минска' },
+      details: { changedFields: ['title'] },
+    });
+    expect(JSON.stringify(audit[0]?.details)).not.toContain('Кольцо');
+  });
+
+  it('правка названия опубликованного → route.catalog_updated { changedFields: [title] }; то же название и без title — без журнала', async () => {
+    const org = await staff(h, 'org@example.by', 'organizer');
+    const id = await readyRoute(h, org.token);
+    const publishedAt = h.clock.now();
+    expect(
+      (
+        await publish(org.token, id, {
+          title: 'Минское кольцо',
+          city: 'minsk',
+          surfaces: ['asphalt'],
+        })
+      ).status,
+    ).toBe(200);
+
+    h.clock.advance(MINUTE);
+    const renamed = await publish(org.token, id, {
+      title: 'Большое кольцо',
+      city: 'minsk',
+      surfaces: ['asphalt'],
+    });
+    expect(renamed.status).toBe(200);
+    expect(PanelRoute.parse(renamed.body)).toMatchObject({
+      title: 'Большое кольцо',
+      catalog: { publishedAt: publishedAt.toISOString() },
+    });
+
+    const before = await routeDoc(id);
+    h.clock.advance(MINUTE);
+    for (const body of [
+      { title: ' Большое кольцо  ', city: 'minsk', surfaces: ['asphalt'] },
+      { city: 'minsk', surfaces: ['asphalt'] },
+    ]) {
+      expect((await publish(org.token, id, body)).status).toBe(200);
+    }
+    expect(await routeDoc(id)).toEqual(before);
+
+    h.clock.advance(MINUTE);
+    expect(
+      (await publish(org.token, id, { title: 'Кольцо', city: 'brest', surfaces: ['asphalt'] }))
+        .status,
+    ).toBe(200);
+
+    const audit = await catalogAudit(id);
+    expect(audit.map((entry) => [entry.action, entry.subject?.label, entry.details])).toEqual([
+      ['route.published', 'Минское кольцо', null],
+      ['route.catalog_updated', 'Большое кольцо', { changedFields: ['title'] }],
+      ['route.catalog_updated', 'Кольцо', { changedFields: ['title', 'city'] }],
+    ]);
+  });
+
   it('снятие → route.unpublished, catalog: null; повтор снятия — 200 без журнала; повторная публикация — новый publishedAt', async () => {
     const org = await staff(h, 'org@example.by', 'organizer');
     const id = await readyRoute(h, org.token);
@@ -215,11 +292,19 @@ describe('отказы (AC1)', () => {
       { city: 'minsk', surfaces: [] },
       { city: 'minsk', surfaces: ['asphalt', 'asphalt'] },
       { city: 'minsk', surfaces: ['cobbles'] },
-      { city: 'minsk', surfaces: ['asphalt'], title: 'Другое' },
+      { city: 'minsk', surfaces: ['asphalt'], extra: 'Другое' },
+      { city: 'minsk', surfaces: ['asphalt'], title: 'ab' },
+      { city: 'minsk', surfaces: ['asphalt'], title: 'Две\nстроки' },
+      { city: 'minsk', surfaces: ['asphalt'], title: 'я'.repeat(121) },
     ]) {
       const res = await publish(org.token, id, body);
       expect(res.status, JSON.stringify(body)).toBe(400);
       expect(res.body).toMatchObject({ code: 'VALIDATION_FAILED' });
+      if ('title' in body) {
+        expect(res.body).toMatchObject({
+          details: { fields: [expect.objectContaining({ path: 'title' })] },
+        });
+      }
     }
 
     expect((await publish(mod.token, id, { city: 'minsk', surfaces: ['asphalt'] })).status).toBe(
@@ -233,19 +318,19 @@ describe('отказы (AC1)', () => {
     expect((await routeDoc(id))?.catalog).toBeNull();
   });
 
-  it('сбой журнала — откат: catalog не изменился, записи нет', async () => {
+  it('сбой журнала — откат: catalog и название не изменились, записи нет', async () => {
     const org = await staff(h, 'org@example.by', 'organizer');
     const id = await readyRoute(h, org.token);
     const audit = h.app.get(PanelAudit, { strict: false });
     const spy = vi.spyOn(audit, 'append').mockRejectedValue(new Error('журнал недоступен'));
     try {
-      expect((await publish(org.token, id, { city: 'minsk', surfaces: ['asphalt'] })).status).toBe(
-        500,
-      );
+      const body = { title: 'Другое кольцо', city: 'minsk', surfaces: ['asphalt'] };
+      expect((await publish(org.token, id, body)).status).toBe(500);
     } finally {
       spy.mockRestore();
     }
     expect((await routeDoc(id))?.catalog).toBeNull();
+    expect((await routeDoc(id))?.title).toBe('Минское кольцо');
     expect(await catalogAudit(id)).toEqual([]);
   });
 });

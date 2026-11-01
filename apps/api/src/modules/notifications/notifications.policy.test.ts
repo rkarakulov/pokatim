@@ -50,6 +50,7 @@ describe('groupOf: kind → группа настроек (N4)', () => {
       social_invite_registered: 'social',
       social_ride_ask: 'social',
       ride_photo_reset: 'rides',
+      race_cancelled: 'races',
     });
   });
 

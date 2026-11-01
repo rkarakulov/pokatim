@@ -47,6 +47,17 @@ export interface RacesForSharing {
    * каждый прогон, без курсора: число гонок сезона меняется без `updatedAt` сезона (RC-2a).
    */
   liveSeasonIds(sinceLocalDate: string): Promise<string[]>;
-  /** Все сезоны (публичны, их десятки) — карта сайта (landing-seo). */
-  sitemapSeasons(): Promise<{ id: string; updatedAt: Date }[]>;
+  /**
+   * Опубликованные гонки по `_id` ↑ строго после `after` до `until` включительно (`null` — без границы), не больше
+   * `limit` — карта сайта (sitemap-index).
+   */
+  sitemapRange(
+    range: { after: string | null; until: string | null },
+    limit: number,
+  ): Promise<{ id: string; updatedAt: Date }[]>;
+  /** Сезоны (все публичны) — то же, что `sitemapRange`. */
+  sitemapSeasonsRange(
+    range: { after: string | null; until: string | null },
+    limit: number,
+  ): Promise<{ id: string; updatedAt: Date }[]>;
 }
