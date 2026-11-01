@@ -180,7 +180,11 @@ describe('участники райда и явка (P2)', () => {
       ['POST', `https://api.test/v1/rides/${ID}/attendance/decline`, {}],
     ]);
     expect(new Set(calls.map((call) => call.authorization))).toEqual(new Set(['Bearer t']));
-    expect(viewed).toEqual(participants);
+    // ответ API до P4 без `allThanked` — поле по умолчанию `false`
+    expect(viewed).toEqual({
+      ...participants,
+      attendance: { ...participants.attendance, allThanked: false },
+    });
     expect(declined.attendance?.state).toBe('attended');
   });
 

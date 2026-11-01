@@ -3369,4 +3369,5 @@ export const ru = {
   },
   'social.respect.author': 'Респект автору',
   'social.respect.error.unknown': 'Не удалось сохранить респект',
+  'rides.thanks.error.not_found': 'Райдер больше недоступен — обновите список',
 } as const;

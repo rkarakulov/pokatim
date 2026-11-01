@@ -100,7 +100,8 @@ export function thanksErrorText(error: unknown): string {
   if (code === 'RATE_LIMITED') {
     return t('rides.error.rateLimited', { seconds: retryAfterSec(error) ?? 60 });
   }
-  if (code === 'NOT_FOUND') return t('rides.detail.notFound');
+  // 404 «спасибо» — райдер стал непубличным или райд скрыт; карточка ещё на экране, «Райд не найден» вводит в заблуждение
+  if (code === 'NOT_FOUND') return t('rides.thanks.error.not_found');
   if (code === 'SOCIAL_ACTION_BLOCKED') {
     const details = SocialActionBlockedDetails.safeParse(apiErrorOf(error)?.details);
     if (details.success && details.data.reason === 'not_attended') {

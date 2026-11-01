@@ -1266,4 +1266,16 @@ describe('«Спасибо за компанию» в «Ехали N» (P4, K5)'
     ).toBeOnTheScreen();
     await waitFor(() => expect(calls()).toBeGreaterThanOrEqual(before));
   });
+
+  it('отказ 404 (райдер стал непубличным) — «Райдер больше недоступен», не «Райд не найден»', async () => {
+    past();
+    rideParticipants.mockResolvedValue(rode([row(1, { self: true }), row(2)]));
+    thankRideRiders.mockRejectedValueOnce(
+      new ApiHttpError(404, { code: 'NOT_FOUND', message: 'x' }),
+    );
+    await openSignedIn();
+    await fireEvent.press(await screen.findByRole('button', { name: 'Спасибо за компанию' }));
+    expect(await screen.findByText('Райдер больше недоступен — обновите список')).toBeOnTheScreen();
+    expect(screen.queryByText('Райд не найден')).toBeNull();
+  });
 });

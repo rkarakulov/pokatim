@@ -563,3 +563,7 @@ P7 добавляет запись outbox `social.*` в эту же транза
 `notification-texts.ts`, `notifications.policy.ts` в P4 не тронуты. Порты `RESULTS_FOR_SOCIAL`/`ROUTES_FOR_SOCIAL`
 сейчас импортирует только HTTP `SocialModule`; если они нужны в worker — перенести импорт в ядро. Копия заметки —
 `side-session-notes/…/p4-reactions.md`.
+
+**Ревью (pass 1, independent-reviewer):** APPROVE, CRITICAL/HIGH — 0, LOW — 3 (`findings.md`). LOW-2 исправлен
+оркестратором; follow-ups: (1) свести `isPublicProtocolRow` и `isRankedRow` (`rider-results.port.ts`) в один предикат
+`results`; (2) карточка своей строки до загрузки участия — скелетон вместо раскладки соперника (§4.12).
