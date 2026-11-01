@@ -312,6 +312,35 @@ export class RouteRidesRepository {
     return result.matchedCount === 1;
   }
 
+  /** Пачка заездов после `afterId` по `_id` (уборщик сирот, route-rides-08): только ключи ссылок. */
+  scanRefs(
+    afterId: string | null,
+    limit: number,
+  ): Promise<Pick<RouteRideDoc, '_id' | 'routeId' | 'activityId'>[]> {
+    return this.c.rides
+      .find<Pick<RouteRideDoc, '_id' | 'routeId' | 'activityId'>>(
+        afterId === null ? {} : { _id: { $gt: afterId } },
+        { projection: { _id: 1, routeId: 1, activityId: 1 } },
+      )
+      .sort({ _id: 1 })
+      .limit(limit)
+      .toArray();
+  }
+
+  /**
+   * Удаление сирот по id (route-rides-08). Условие ссылки в фильтре повторяет проверенную: признак сироты необратим
+   * (активность и маршрут насовсем не возвращаются), повтор удаляет 0.
+   */
+  async deleteRefs(
+    refs: readonly Pick<RouteRideDoc, '_id' | 'routeId' | 'activityId'>[],
+  ): Promise<number> {
+    if (refs.length === 0) return 0;
+    const result = await this.c.rides.deleteMany({
+      $or: refs.map(({ _id, routeId, activityId }) => ({ _id, routeId, activityId })),
+    });
+    return result.deletedCount;
+  }
+
   /** План автопроверки события (route-rides-03); нет — `null`. */
   async autoPlanOf(eventId: string): Promise<string[] | null> {
     const doc = await this.c.autoPlans.findOne({ _id: eventId }, { projection: { routeIds: 1 } });

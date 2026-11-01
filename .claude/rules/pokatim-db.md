@@ -475,7 +475,11 @@ paths:
   `ActivitySource.liveActivities` и `RouteRideRoutes`). Заезды удалённой активности удаляет `RouteRidesIntakeProcessor`
   по `tracks.activity-removed` (fan-out, очередь `route-rides-intake`, `deleteOfActivity`); фильтр и удаление сирот в
   транзакции следующего нового заезда по маршруту — страховка (POST без замка активностей может вставить заезд после
-  обработки события). Не append-only.
+  обработки события). Остаток добирает уборщик сирот (route-rides-08, `RouteRidesMaintenanceProcessor`, очередь
+  `route-rides-maintenance`, раз в сутки и при старте worker): скан `_id` пачками по 500 (`scanRefs`, без индекса —
+  `_id_`), сирота — активности нет (`ActivitySource.liveActivityIds`) или маршрута нет в `routes` вовсе
+  (`RouteRideRoutes.existingIds`; снятый и скрытый — не сироты); удаление `deleteRefs` с условием ссылки, ≤ 200 пачек за
+  прогон, курсор хвоста — Redis `route-rides:orphans:cursor` (7 сут). Не append-only.
 - Таблица «Другие» (route-rides-04, миграция `0049_route_rides_leaderboard_idx` — номер после `0048_race_entry_numbers`, expand-only, без бэкфилла):
   частичный `route_rides_leaderboard_idx { routeId, 'segment.elapsedSec', 'activity.startedAt', _id }` по `status:
   'passed'` — агрегат `leaderboardTop` (`$match` → `$group` с `$topN` 3 → `$sort` по лучшему → `$limit` 5000, `hint`

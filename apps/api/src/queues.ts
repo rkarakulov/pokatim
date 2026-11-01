@@ -86,6 +86,11 @@ export const QUEUE = {
    */
   routeRidesIntake: 'route-rides-intake',
   /**
+   * Регламент `route-rides` (route-rides-08): уборщик сирот — заезды удалённой активности или удалённого насовсем
+   * маршрута, которых не убрали событие и транзакция нового заезда; раз в сутки и при старте worker, без outbox.
+   */
+  routeRidesMaintenance: 'route-rides-maintenance',
+  /**
    * Автопроверка новой активности по маршрутам (route-rides-03): событие outbox `tracks.activity-group-created`
    * (маршрут объявляет `route-rides`), jobId = id события; одна задача на активность — до 20 прогонов движка
    * последовательно, параллелизм 1, отдельно от `route-ride-check` (ручная проверка не ждёт за автопроверкой).

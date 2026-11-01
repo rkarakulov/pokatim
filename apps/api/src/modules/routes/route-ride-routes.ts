@@ -7,6 +7,8 @@ import { RoutesRepository } from './routes.repository';
 
 /** Предел `rideableBounds` за вызов (линии показа ≤ 1000 точек каждая). */
 const BOUNDS_BATCH_MAX = 25;
+/** Предел `existingIds` за вызов. */
+const EXISTING_BATCH_MAX = 1000;
 
 /**
  * Реализация порта `RouteRideRoutes` (route-rides-01): видимость — только запрос `RoutesRepository.findRideable`
@@ -55,6 +57,14 @@ export class RouteRideRoutesService implements RouteRideRoutes {
     const [route] = await this.repository.inCatalogByIds([routeId]);
     if (!route || route.distanceM === null) return null;
     return { id: route._id, title: route.title };
+  }
+
+  async existingIds(routeIds: readonly string[]): Promise<Set<string>> {
+    const ids = [...new Set(routeIds)];
+    if (ids.length > EXISTING_BATCH_MAX) {
+      throw new Error(`existingIds: ${ids.length} ids > ${EXISTING_BATCH_MAX}`);
+    }
+    return new Set(ids.length === 0 ? [] : await this.repository.existingIds(ids));
   }
 
   async rideableBounds(routeIds: readonly string[], userId: string): Promise<Map<string, Bounds>> {

@@ -47,4 +47,9 @@ export interface RouteRideRoutes {
    * доступу райдера (автор одобренного маршрута тоже получает таблицу); иначе — `null`.
    */
   catalogRoute(routeId: string): Promise<{ id: string; title: string } | null>;
+  /**
+   * Какие из маршрутов ещё существуют — в любом статусе, снятые и скрытые тоже (route-rides-08, уборщик сирот: заезды
+   * удаляются только с маршрутом, удалённым насовсем). ≤ 1000 id одним запросом; пустой вход — пустое множество.
+   */
+  existingIds(routeIds: readonly string[]): Promise<Set<string>>;
 }
