@@ -7,6 +7,9 @@ import {
   type AccountErasureQuery,
   RetryAccountErasureResult,
   type RetryAccountErasureRequest,
+  type FailedJobActionRequest,
+  FailedJobsView,
+  type FailedJobsQuery,
   ApiError,
   type CheckInRequest,
   CheckInView,
@@ -150,6 +153,8 @@ export type RiderRouteListParams = Partial<RiderRouteModerationQuery>;
 export type RiderProfileListParams = Partial<RiderProfileModerationQuery>;
 /** Параметры списка сбоев удаления аккаунтов до схемы (erasure-failures). */
 export type AccountErasureListParams = Partial<AccountErasureQuery>;
+/** Параметры «Упавших задач» панели до схемы. */
+export type FailedJobListParams = Partial<FailedJobsQuery>;
 /** Параметры списка споров панели до схемы. */
 export type PanelDisputeListParams = Partial<PanelDisputeQuery>;
 /** Таблица рейтинга сезона (race-results-08): класс и группа обязательны, `limit`/`cursor` — по желанию. */
@@ -449,6 +454,23 @@ export function createAdminApiClient({ baseUrl, fetchImpl }: AdminApiClientOptio
       post(
         `/v1/admin/account-erasures/${encodeURIComponent(userId)}/retry`,
         RetryAccountErasureResult,
+        body,
+      ),
+    // admin-failed-jobs: упавшие задачи BullMQ и застрявший outbox (platform.stats, только admin)
+    listFailedJobs: (params: FailedJobListParams = {}) =>
+      get(`/v1/admin/failed-jobs${queryString(params)}`, FailedJobsView),
+    /** Повтор с полными попытками: 204; нет задачи — 404; уже не в failed — 409 `CONFLICT`. */
+    retryFailedJob: (queue: string, jobId: string, body: FailedJobActionRequest) =>
+      post(
+        `/v1/admin/failed-jobs/${encodeURIComponent(queue)}/${encodeURIComponent(jobId)}/retry`,
+        z.undefined(),
+        body,
+      ),
+    /** Удаление: 204; нет задачи — 404; уже не в failed — 409 `CONFLICT`. */
+    deleteFailedJob: (queue: string, jobId: string, body: FailedJobActionRequest) =>
+      post(
+        `/v1/admin/failed-jobs/${encodeURIComponent(queue)}/${encodeURIComponent(jobId)}/delete`,
+        z.undefined(),
         body,
       ),
     // race-results-07: пол и год анкеты Verified (profiles.verified_edit, только admin)

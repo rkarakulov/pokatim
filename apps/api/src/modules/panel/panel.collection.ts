@@ -200,6 +200,9 @@ export interface AuditDetailsDoc {
   objectKind?: AchievementObjectKind;
   objectId?: string;
   achievementLevel?: AchievementLevel;
+  /** admin-failed-jobs: очередь и имя (тип) задачи BullMQ */
+  queue?: string;
+  jobName?: string;
 }
 
 /**
