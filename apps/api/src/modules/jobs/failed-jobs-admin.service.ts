@@ -131,6 +131,9 @@ export class FailedJobsAdminService {
         if (action === 'retry') {
           await job.retry('failed', { resetAttemptsMade: true, resetAttemptsStarted: true });
         } else {
+          // `remove` состояние не проверяет (удалит и повторённую из другой вкладки — waiting): перепроверка сразу
+          // перед ним сужает окно до одного обращения к Redis; `retry` проверяет состояние в своём скрипте
+          if (!(await job.isFailed())) throw domainError('CONFLICT', 409);
           await job.remove();
         }
       } catch (error) {

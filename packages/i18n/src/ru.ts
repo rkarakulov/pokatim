@@ -2071,6 +2071,7 @@ export const ru = {
   'admin.failedJobs.queue': 'Очередь',
   'admin.failedJobs.allQueues': 'Все очереди ({count})',
   'admin.failedJobs.queueOption': '{queue} ({count})',
+  'admin.failedJobs.shown': 'Показаны новые {shown} из {total}',
   'admin.failedJobs.empty': 'Упавших задач нет',
   'admin.failedJobs.emptyQueue': 'В этой очереди упавших задач нет',
   'admin.failedJobs.column.queue': 'Очередь',

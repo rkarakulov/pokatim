@@ -1,4 +1,4 @@
-import { Inject, Injectable, type OnModuleDestroy } from '@nestjs/common';
+import { Inject, Injectable, Logger, type OnModuleDestroy } from '@nestjs/common';
 import { REDIS } from '@rkarakulov/api-kit/core';
 import { Queue } from 'bullmq';
 import type { Redis } from 'ioredis';
@@ -15,7 +15,9 @@ export const QUEUE_NAMES: readonly string[] = Object.values(QUEUE);
  */
 @Injectable()
 export class FailedJobQueues implements OnModuleDestroy {
+  private readonly logger = new Logger(FailedJobQueues.name);
   private readonly queues = new Map<string, Queue>();
+  private errorLogged = false;
 
   constructor(@Inject(REDIS) private readonly redis: Redis) {}
 
@@ -25,6 +27,13 @@ export class FailedJobQueues implements OnModuleDestroy {
     let queue = this.queues.get(name);
     if (!queue) {
       queue = new Queue(name, { connection: this.redis });
+      // без слушателя BullMQ пишет каждую ошибку общего клиента в console.error по разу на очередь; об обрыве и так
+      // сообщает владелец `REDIS` — здесь одна строка на процесс
+      queue.on('error', (error) => {
+        if (this.errorLogged) return;
+        this.errorLogged = true;
+        this.logger.warn(`jobs.queue_error class=${error.constructor.name}`);
+      });
       this.queues.set(name, queue);
     }
     return queue;

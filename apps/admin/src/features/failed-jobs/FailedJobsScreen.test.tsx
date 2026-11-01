@@ -170,6 +170,20 @@ describe('«Упавшие задачи» (admin-failed-jobs)', () => {
     expect(screen.getByRole('dialog')).toBeTruthy();
   });
 
+  it('показано меньше, чем упало, — «Показаны новые N из M»; сервер ответил 403 — «Нет доступа к разделу»', async () => {
+    mocked.listFailedJobs.mockResolvedValueOnce({
+      ...viewOf([row()]),
+      queues: [{ queue: 'panel-email', failed: 70 }],
+    });
+    await renderApp('/failed-jobs');
+    expect(await screen.findByText('Показаны новые 1 из 70')).toBeTruthy();
+    cleanup();
+
+    mocked.listFailedJobs.mockRejectedValueOnce(httpError(403, 'FORBIDDEN'));
+    await renderApp('/failed-jobs');
+    expect(await screen.findByText('Нет доступа к разделу')).toBeTruthy();
+  });
+
   it('без platform.stats (модератор) — «Нет доступа к разделу», запроса нет', async () => {
     mocked.me.mockResolvedValue(ME.moderator);
     await renderApp('/failed-jobs');

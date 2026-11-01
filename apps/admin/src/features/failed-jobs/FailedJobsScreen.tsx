@@ -1,7 +1,7 @@
 import { apiErrorOf, isNetworkError } from '@pokatim/api-client';
 import { type FailedJobRow, OUTBOX_STUCK_MINUTES } from '@pokatim/contracts';
 import { t } from '@pokatim/i18n';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createColumnHelper } from '@tanstack/react-table';
 import { useState } from 'react';
 
@@ -48,6 +48,8 @@ export function FailedJobsScreen() {
   const view = useQuery({
     queryKey: [...FAILED_JOBS_QUERY_KEY, queue],
     queryFn: () => api.listFailedJobs({ limit: PAGE_SIZE, ...(queue ? { queue } : {}) }),
+    // при смене очереди фильтр и счётчики не пропадают до ответа
+    placeholderData: keepPreviousData,
   });
   const query = {
     data: view.data?.items,
@@ -59,6 +61,8 @@ export function FailedJobsScreen() {
   const counts = view.data?.queues ?? [];
   const total = counts.reduce((sum, row) => sum + row.failed, 0);
   const outbox = view.data?.outbox;
+  const shown = view.data?.items.length ?? 0;
+  const matching = queue ? (counts.find((row) => row.queue === queue)?.failed ?? 0) : total;
 
   const act = async (reason: string) => {
     if (!target) return;
@@ -191,6 +195,9 @@ export function FailedJobsScreen() {
             value={queue}
             onChange={(event) => setQueue(event.target.value)}
           />
+          {matching > shown && shown > 0 ? (
+            <p className="t-meta">{t('admin.failedJobs.shown', { shown, total: matching })}</p>
+          ) : null}
         </div>
         <DataTable
           caption={t('admin.failedJobs.title')}

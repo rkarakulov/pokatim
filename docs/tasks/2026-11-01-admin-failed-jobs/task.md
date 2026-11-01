@@ -67,6 +67,33 @@
 5. Блок outbox показывает число и самое давнее событие старше 10 мин.
 6. UI: загрузка, пусто, ошибка, 403, устаревшая строка.
 
+## 10. Documentation Sync
+
+`docs/product/admin-panel.md` (права, журнал, раздел «Упавшие задачи»), `.claude/rules/pokatim-backend.md` (модуль
+`jobs`), `.claude/rules/pokatim-security.md`, i18n `admin.failedJobs.*`, `admin.audit.action.jobs.*`.
+
 ## 12. Outcome
 
-(после реализации)
+### Changes
+
+- contracts: `admin/failed-jobs.schema.ts`; `AUDIT_ACTIONS` + `jobs.failed_retried`, `jobs.failed_removed`;
+  `AuditEntry.details.queue/jobName`. api-client: `listFailedJobs`, `retryFailedJob`, `deleteFailedJob`.
+- API: модуль `jobs` (`FailedJobQueues`, `FailedJobsAdminService`, `FailedJobsAdminController`, `jobs.policy.ts`).
+- admin: `features/failed-jobs/FailedJobsScreen.tsx`, маршрут `/failed-jobs`, пункт навигации (нижняя группа).
+
+### Tests
+
+- unit: `jobs.policy.test.ts` (маска e-mail, обрезка, `outboxEventIdOf`, состав очередей); контракты; api-client.
+- int: `failed-jobs-admin.int.test.ts` — права (403/401), строка без `data` и e-mail, фильтр (404/400), outbox, повтор
+  (полные попытки, журнал, второй — 409), удаление, 404/400 без журнала, откат журнала при сбое BullMQ, ворота
+  «повторили между проверкой и удалением» → 409. Отрицательное доказательство: без перепроверки `isFailed` перед
+  `remove` ворота дают 204 (тест красный).
+- admin: состояния (загрузка, пусто, нет сети, 403 сервера и без права), действия, 409, ошибка в окне, «показаны N из
+  M», навигация по ролям.
+
+### Review
+
+Codex — недоступен (лимит расходов workspace), фолбэк — Claude `independent-reviewer`: APPROVE, MEDIUM — неатомарное
+удаление (исправлено: перепроверка + ворота), LOW исправлены: 403 сервера, `keepPreviousData` фильтра, слушатель
+`error` очередей, «показаны N из M». Не сделано: чтение только нужных полей вместо `getFailed` (≤ 30×100 hash на GET —
+допустимо для админского экрана), «10 000+» у счётчика outbox.

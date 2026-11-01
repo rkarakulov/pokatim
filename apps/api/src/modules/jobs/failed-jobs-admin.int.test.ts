@@ -11,6 +11,7 @@ import { panel, panelCall } from '../../../test/panel';
 import { staff } from '../../../test/races';
 import { REDIS_URL_TEST } from '../../../test/test-urls';
 import { QUEUE } from '../../queues';
+import { PanelAudit } from '../panel';
 import { FailedJobQueues } from './failed-job-queues';
 
 /**
@@ -226,6 +227,21 @@ describe('повтор и удаление', () => {
     expect((await action('a b', 'retry')).status).toBe(400);
     expect((await action(jobId, 'retry', {})).status).toBe(400);
     expect(await panel(h).audit.countDocuments({ action: /^jobs\./ })).toBe(0);
+  });
+
+  it('ворота: задачу повторили между проверкой и удалением — 409, журнал откатился, задача жива', async () => {
+    const jobId = String((await failedJob('boom')).id);
+    const audit = h.app.get(PanelAudit);
+    const original = audit.append.bind(audit);
+    vi.spyOn(audit, 'append').mockImplementationOnce(async (...args) => {
+      // другая вкладка успела «Повторить»: задача ушла в waiting
+      await (await queue().getJob(jobId))?.retry('failed');
+      return original(...args);
+    });
+    const res = await action(jobId, 'delete');
+    expect(res.status).toBe(409);
+    expect(await auditOf('jobs.failed_removed')).toHaveLength(0);
+    expect(await (await queue().getJob(jobId))?.getState()).toBe('waiting');
   });
 
   it('операция BullMQ упала, задача всё ещё failed — ошибка, запись журнала откатилась', async () => {
