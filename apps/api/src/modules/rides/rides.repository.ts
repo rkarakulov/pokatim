@@ -238,6 +238,41 @@ export class RidesRepository {
     );
   }
 
+  /**
+   * Райды участника по окну старта для автоявки «Свои» (порт `RIDES_FOR_SOCIAL.ridesOfParticipant`, P5): участник
+   * «Иду» или организатор (первый участник), `startsAt ∈ [from, to]`, любой статус (фазу решает `social`); проекция —
+   * как у `findForSocial`; `startsAt ↑, _id ↑`, индекс `rides_participant_idx`.
+   */
+  participantRidesBetween(
+    userId: string,
+    from: Date,
+    to: Date,
+    limit: number,
+  ): Promise<
+    Pick<
+      RideDoc,
+      '_id' | 'status' | 'startsAt' | 'organizerUserId' | 'participants' | 'geo' | 'startPrecise'
+    >[]
+  > {
+    return this.rides
+      .find(
+        { 'participants.userId': userId, startsAt: { $gte: from, $lte: to } },
+        {
+          projection: {
+            status: 1,
+            startsAt: 1,
+            organizerUserId: 1,
+            'participants.userId': 1,
+            geo: 1,
+            startPrecise: 1,
+          },
+        },
+      )
+      .sort({ startsAt: 1, _id: 1 })
+      .limit(limit)
+      .toArray();
+  }
+
   /** Опубликованные райды, изменившиеся после курсора (`og.sync`), по `(updatedAt, _id)` — индекс `0037_og_sync_indexes`. */
   async changedForOg(after: ChangedCursor | null, limit: number): Promise<ChangedRow[]> {
     const docs = await this.rides

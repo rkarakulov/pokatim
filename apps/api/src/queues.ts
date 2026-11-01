@@ -116,10 +116,14 @@ export const QUEUE = {
    */
   achievementsSync: 'achievements-sync',
   /**
-   * Приём событий «Свои» (ADR-0027, P5–P7): `tracks.activity-recorded` → автоявка, `identity.account-confirmed` → связь
-   * `invite`; jobId = id события outbox, повтор идемпотентен (явка и связи — условные записи).
+   * Приём событий «Свои» (ADR-0027, P5–P7): `tracks.activity-ready` → автоявка (fan-out с `results-intake`),
+   * `identity.account-confirmed` → связь `invite`; jobId = id события outbox, повтор идемпотентен (явка и связи —
+   * условные записи).
    */
   socialIntake: 'social-intake',
-  /** Регламент «Свои» (P7): «Как прошёл райд?» через 4 ч после старта; без событий outbox. */
+  /**
+   * Регламент «Свои» (P5): `social.ride-ask` раз в 30 мин и при старте worker — «Как прошёл райд?» через 4 ч после
+   * старта (захват `askedAt`, отправка — P7); без событий outbox.
+   */
   socialMaintenance: 'social-maintenance',
 } as const;

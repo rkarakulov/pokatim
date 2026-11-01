@@ -83,10 +83,42 @@ export class AttendanceRepository {
 
   /** Явившиеся райда (`declinedAt: null`) в порядке записи. */
   async attendees(rideId: string, tx?: DbSession): Promise<string[]> {
-    const doc = await this.attendance.findOne({ _id: rideId }, { session: tx });
-    return (doc?.entries ?? [])
-      .filter((entry) => (entry.declinedAt ?? null) === null)
+    return (await this.entriesIn(rideId, tx))
+      .filter((entry) => entry.declinedAt === null)
       .map((entry) => entry.userId);
+  }
+
+  /** Записи явки райда в сессии вызывающего (P5: адресаты в транзакции захвата); документа нет — `[]`. */
+  async entriesIn(rideId: string, tx?: DbSession): Promise<AttendanceEntry[]> {
+    const doc = await this.attendance.findOne({ _id: rideId }, { session: tx });
+    return (doc?.entries ?? []).map((entry) => ({
+      ...entry,
+      declinedAt: entry.declinedAt ?? null,
+    }));
+  }
+
+  /**
+   * Захват «Как прошёл райд?» (P5, RC-P5-9) — запись в документ явки райда: параллельная отметка явки конфликтует с
+   * ним, и `MongoTransactions.run` повторяет проигравшую. `true` — захвачено сейчас; `false` — уже спрошен. Нет поля —
+   * как `null`; `updatedAt` не меняется.
+   */
+  async claimAsk(tx: DbSession, rideId: string, now: Date): Promise<boolean> {
+    await this.ensure(tx, rideId, now);
+    const claimed = await this.attendance.updateOne(
+      { _id: rideId, askedAt: null },
+      { $set: { askedAt: now } },
+      { session: tx },
+    );
+    return claimed.modifiedCount > 0;
+  }
+
+  /** Уже спрошенные райды из `rideIds` — предфильтр регламента без транзакции. */
+  async askedAmong(rideIds: readonly string[]): Promise<Set<string>> {
+    if (rideIds.length === 0) return new Set();
+    const docs = await this.attendance
+      .find({ _id: { $in: [...rideIds] }, askedAt: { $ne: null } }, { projection: { _id: 1 } })
+      .toArray();
+    return new Set(docs.map((doc) => doc._id));
   }
 
   /** Записи явки райда (P2, ответ участников): без сессии; документа нет — `[]`. */

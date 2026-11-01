@@ -54,6 +54,8 @@ export interface AttendanceDoc {
   _id: string;
   entries: AttendanceEntry[];
   updatedAt: Date;
+  /** захват «Как прошёл райд?» (P5, регламент `social-maintenance`), нет поля — `null`; `updatedAt` не трогает */
+  askedAt?: Date | null;
 }
 
 /**

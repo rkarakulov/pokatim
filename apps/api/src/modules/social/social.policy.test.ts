@@ -5,8 +5,10 @@ import type { SocialRideFacts } from '../rides';
 import type { ConnectionDoc } from './social.collection';
 import {
   attendanceCheck,
+  autoAttendanceCheck,
   connectionSources,
   generateInviteCode,
+  rideAskRecipients,
   rideConnectionDiff,
   SOCIAL_POLICY,
 } from './social.policy';
@@ -136,5 +138,108 @@ describe('generateInviteCode (K9, P6)', () => {
   it('символ — по индексу случайного числа в алфавите', () => {
     expect(generateInviteCode(() => 0)).toBe('2222222');
     expect(generateInviteCode((max) => max - 1)).toBe('ZZZZZZZ');
+  });
+});
+
+describe('autoAttendanceCheck — автоявка по заезду (K2, P5)', () => {
+  const MINUTE = 60_000;
+  const HOUR = 60 * MINUTE;
+  const POINT: [number, number] = [27.5576, 53.9006];
+  /** Точка на `meters` севернее `POINT` (метров в градусе широты сферы `haversineMeters` — 111 195). */
+  const north = (meters: number): [number, number] => [POINT[0], POINT[1] + meters / 111_195];
+  const precise = (overrides: Partial<SocialRideFacts> = {}) =>
+    facts({ preciseStart: POINT, ...overrides });
+  const start = (offsetMs = 0, point: [number, number] = POINT) => ({
+    startedAt: at(offsetMs),
+    startPoint: point,
+  });
+  const NOW = at(5 * HOUR);
+
+  it('заезд в окне и радиусе участника — null; организатор тоже', () => {
+    expect(autoAttendanceCheck(precise(), start(), 'p1', NOW)).toBeNull();
+    expect(autoAttendanceCheck(precise(), start(), 'org', NOW)).toBeNull();
+  });
+
+  it('окно по времени: −30 мин и +2 ч включительно; −30 мин −1 с и +2 ч +1 с — out_of_window', () => {
+    expect(autoAttendanceCheck(precise(), start(-30 * MINUTE), 'p1', NOW)).toBeNull();
+    expect(autoAttendanceCheck(precise(), start(2 * HOUR), 'p1', NOW)).toBeNull();
+    expect(autoAttendanceCheck(precise(), start(-30 * MINUTE - 1000), 'p1', NOW)).toBe(
+      'out_of_window',
+    );
+    expect(autoAttendanceCheck(precise(), start(2 * HOUR + 1000), 'p1', NOW)).toBe('out_of_window');
+  });
+
+  it('радиус 500 м: ~499 м — да; ~501 м — too_far', () => {
+    expect(autoAttendanceCheck(precise(), start(0, north(499)), 'p1', NOW)).toBeNull();
+    expect(autoAttendanceCheck(precise(), start(0, north(501)), 'p1', NOW)).toBe('too_far');
+  });
+
+  it('обработка: старт +7 дн — да; +7 дн +1 мс — too_late', () => {
+    expect(autoAttendanceCheck(precise(), start(), 'p1', at(7 * DAY))).toBeNull();
+    expect(autoAttendanceCheck(precise(), start(), 'p1', at(7 * DAY + 1))).toBe('too_late');
+  });
+
+  it('райд без точного старта — no_precise_start', () => {
+    expect(autoAttendanceCheck(facts(), start(), 'p1', NOW)).toBe('no_precise_start');
+  });
+
+  it('райд ещё не начался — attendance_window (RC-P5-4)', () => {
+    expect(autoAttendanceCheck(precise({ phase: 'upcoming' }), start(), 'p1', at(-1))).toBe(
+      'attendance_window',
+    );
+  });
+
+  it('отменённый и скрытый — ride_unavailable; не участник — not_participant', () => {
+    expect(autoAttendanceCheck(precise({ phase: 'cancelled' }), start(), 'p1', NOW)).toBe(
+      'ride_unavailable',
+    );
+    expect(autoAttendanceCheck(precise({ phase: 'hidden' }), start(), 'p1', NOW)).toBe(
+      'ride_unavailable',
+    );
+    expect(autoAttendanceCheck(precise(), start(), 'stranger', NOW)).toBe('not_participant');
+  });
+
+  it('порядок причин: участие раньше фазы, фаза раньше точки, срок раньше окна и радиуса', () => {
+    expect(autoAttendanceCheck(precise({ phase: 'upcoming' }), start(), 'stranger', at(-1))).toBe(
+      'not_participant',
+    );
+    expect(autoAttendanceCheck(facts({ phase: 'upcoming' }), start(), 'p1', at(-1))).toBe(
+      'attendance_window',
+    );
+    expect(autoAttendanceCheck(precise(), start(3 * HOUR, north(900)), 'p1', at(8 * DAY))).toBe(
+      'too_late',
+    );
+    expect(autoAttendanceCheck(precise(), start(3 * HOUR, north(900)), 'p1', NOW)).toBe(
+      'out_of_window',
+    );
+  });
+
+  it('политика: окно догона «Как прошёл райд?» — 24 ч, страница регламента — 500', () => {
+    expect(SOCIAL_POLICY.askAfterMs).toBe(4 * HOUR);
+    expect(SOCIAL_POLICY.askCatchUpMs).toBe(DAY);
+    expect(SOCIAL_POLICY.askPageRows).toBe(500);
+  });
+});
+
+describe('rideAskRecipients — адресаты «Как прошёл райд?» (K10, P5)', () => {
+  const entry = (userId: string, via: 'manual' | 'track', declined = false) => ({
+    userId,
+    via,
+    at: START,
+    declinedAt: declined ? START : null,
+  });
+
+  it('без записи явки — да; явка (ручная и по треку) и «Меня не было» — нет; порядок участников', () => {
+    expect(
+      rideAskRecipients(
+        ['org', 'p1', 'p2', 'p3', 'p4'],
+        [entry('p3', 'track'), entry('p1', 'manual', true), entry('org', 'manual')],
+      ),
+    ).toEqual(['p2', 'p4']);
+  });
+
+  it('записей нет — все участники; явились все — пусто', () => {
+    expect(rideAskRecipients(['org', 'p1'], [])).toEqual(['org', 'p1']);
+    expect(rideAskRecipients(['org'], [entry('org', 'track')])).toEqual([]);
   });
 });

@@ -204,7 +204,8 @@ paths:
   root `worker.module.ts` объединяет их **только** `mergeOutboxRoutes(...)` (`@rkarakulov/api-kit/core`, сборка —
   `src/outbox-routes.ts`): тип у нескольких подписчиков — задача в каждой очереди, jobId = id события в каждой. Spread
   `{ ...a, ...b }` молча оставил бы последнего подписчика (сторож — `outbox-routes.test.ts`). Обработчик идемпотентен:
-  повтор публикации после частичного сбоя ставит задачу в очереди, где её ещё нет.
+  повтор публикации после частичного сбоя ставит задачу в очереди, где её ещё нет. `tracks.activity-ready` — `results-intake` +
+  `social-intake` (автоявка, P5); `tracks.activity-removed` — `results-intake` + `route-rides-intake`.
 
 - Брокер — BullMQ на Redis; RabbitMQ не используем (переход — только через ADR; outbox оставляет к нему путь).
 - Регламенты «по курсору» без событий: `og-sync`, `tickets-maintenance`,
@@ -768,18 +769,22 @@ RC-A1, ADR-0019).
 
 ## «Свои» (`social`, `product-events`, ADR-0027 Proposed, `docs/product/social.md`)
 
-- Модуль `social` — потребитель: `social → rides, profile, product-events, identity` (P0; `identity` — `AuthGuard`
-  контроллеров с P2; `results`, `routes` — P4; `tracks` — P5) только через `index.ts` и порты: `RIDES_FOR_SOCIAL`
+- Модуль `social` — потребитель: `social → rides, profile, product-events, identity, results, routes, tracks` (P0;
+  `identity` — `AuthGuard` контроллеров с P2; `results`, `routes` — P4; `tracks` — порт `ACTIVITY_STARTS`, P5) только через
+  `index.ts` и порты: `RIDES_FOR_SOCIAL`
   (`rides-for-social.port.ts`, `rideFacts`: фаза — `ridePhase` внутри `rides`, участники «Иду» с организатором первым,
   точная точка старта при `startPrecise`; `nextRideCard` (P3, «Идёт») — ближайший опубликованный будущий райд райдера
-  (`RidesRepository.nextOfRider`, `rides_participant_idx`) карточкой ленты `rideCardOf` с этим зрителем),
+  (`RidesRepository.nextOfRider`, `rides_participant_idx`) карточкой ленты `rideCardOf` с этим зрителем;
+  P5: `ridesOfParticipant` — райды участника по окну старта, любой статус, ≤ 20 (`participantRidesBetween`,
+  `rides_participant_idx`), `startedRidesWithin` — опубликованные по окну старта поверх `startedWithin`),
   `RIDER_NAMES.publicRiders` (публичность — при чтении, K3; ручное добавление — только к публичному),
   `RESULTS_FOR_SOCIAL.respectTarget` и `ROUTES_FOR_SOCIAL.respectTarget` (P4, цели «Респекта»). Коллекции
   `rides`, `profiles`, `activities`, `race_entries`, `routes` `social` не читает. На `social` ссылаются только `notifications`, `account`,
   `sharing` (порт `InviteCodes`, P6), `AppModule`, `WorkerModule` (dependency-cruiser `social-consumers-only`).
 - Композиция (RC-13): `SocialCoreModule` (репозитории, `SocialConnectionsService`, `SocialAttendanceService`,
   `SocialReactionsService`, `SocialErasure`), `SocialModule` (`AppModule`, контроллеры: P2 — `RideParticipantsController`; P3 — `RiderSocialController`, `SocialConnectionsController`; P4 — `SocialRespectController`; далее P7; `ResultsCoreModule` и `RoutesCoreModule` — только здесь, RC-P4-12),
-  `SocialWorkerModule` (`WorkerModule`, процессоры `social-intake` / `social-maintenance` — P5, P7). Дальше правки —
+  `SocialWorkerModule` (`WorkerModule`, процессоры `social-intake` / `social-maintenance`; imports `TracksCoreModule`,
+  `RidesCoreModule`, одна `registerQueue` на обе очереди). Дальше правки —
   только в `social/*`.
 - Правила — `social.policy.ts` (`SOCIAL_POLICY`: лимит ручного «В свои» `social-manual:<uid>` 30/24 ч, окно ручной
   явки 7 дн, пороги автоявки, `bulkBatch`; `attendanceCheck`, `rideConnectionDiff`, `connectionSources`). Отказы —
@@ -833,6 +838,21 @@ RC-A1, ADR-0019).
   организатору — 404, RC-1) → `markManual`/`unmark` P0 → свежий `view`. Ответ — чистая `rideParticipantsView`
   (`ride-participants.view.ts`): строки из `RIDER_NAMES.publicRiders` явным списком полей, флаги — `attendanceCheck`.
   Порт `RIDES_FOR_SOCIAL` не расширялся.
+- Автоявка (P5, K2, ADR-0027 п. 4): `tracks.activity-ready` → `social-intake` (fan-out, строка в `socialOutboxRoutes`)
+  → строка таблицы `SocialIntakeProcessor` → `AutoAttendanceIntake.handle`: старт основной группы сейчас — порт
+  `tracks` `ACTIVITY_STARTS.primaryStart` (`duplicateOf ?? id`, два чтения; `userId` payload не используется) → только
+  `cycling` → `IdentityAccounts.liveUserIds` (`user_deleted`) → `ridesOfParticipant` по окну → чистая
+  `autoAttendanceCheck` (`attendanceCheck` по треку → фаза `past` → точный старт → обработан ≤ 7 дн по `CLOCK` → старт
+  заезда в `[−30 мин; +2 ч]` → `haversineMeters` ≤ 500 м) → `SocialAttendanceService.markByTrack` по каждому; `404`/`409`
+  (`isDomainError`) — пропуск райда, остальное — ретрай. Итог `marked | unchanged | no_activity | not_cycling |
+  user_deleted | no_rides`; лог отказа — `social.intake_failed type=… event=…`.
+- Регламент «Как прошёл райд?» (P5, K10): `social-maintenance`, `SocialSchedules` — `social.ride-ask` `*/30 * * * *`
+  Минск + `social.ride-ask.boot` → `SocialMaintenanceProcessor` → `RideAskSweep.run`: окно старта
+  `[now − askAfterMs − askCatchUpMs; now − askAfterMs]` (4 ч, догон 24 ч, `SOCIAL_POLICY`), полный проход окна за
+  прогон без курсора → `askedAmong` → на райд транзакция `claimAsk` (захват `askedAt`) → `entriesIn` → адресаты
+  `rideAskRecipients` (участники «Иду» без записи явки, только живые) → точка P7 `RIDE_ASK_DUE.due(tx, { rideId,
+  userIds })`; до P7 — заглушка `LoggingRideAskDue` (лог `social.ride_ask_due ride count`). Сбой райда — лог
+  `social.ride_ask_failed`, в конце — исключение.
 - Модуль `product-events` — листовой (dependency-cruiser `product-events-leaf`): порт `PRODUCT_EVENTS.record(event,
   session?)`, справочник и `props` — `product-events.types.ts` (zod, `strictObject`, без id пользователей, RC-11, RC-12).
   `social` пишет события в своей транзакции; вызывающий вне транзакции — после основной записи, сбой — лог

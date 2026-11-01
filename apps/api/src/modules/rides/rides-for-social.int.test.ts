@@ -147,3 +147,99 @@ describe('RidesForSocial.nextRideCard («Идёт», P3)', () => {
     expect(await port().nextRideCard(target.userId, organizer.userId, h.clock.now())).toBeNull();
   });
 });
+
+describe('RidesForSocial.ridesOfParticipant (автоявка, P5)', () => {
+  it('границы окна включительно; организатор и «Иду» — да, не участник — нет; startsAt ↑', async () => {
+    const b = await rider(h, 'b@example.by');
+    const stranger = await rider(h, 'stranger@example.by');
+    const early = await createRide(h, organizer, { startsAt: startsIn(h, DAY) });
+    const late = await createRide(h, organizer, { startsAt: startsIn(h, DAY + 2 * HOUR) });
+    expect((await join(h, b, early.id)).status).toBe(200);
+    expect((await join(h, b, late.id)).status).toBe(200);
+    const from = new Date(early.startsAt);
+    const to = new Date(late.startsAt);
+    const now = h.clock.now();
+
+    const ids = async (userId: string, a: Date, z: Date) =>
+      (await port().ridesOfParticipant(userId, a, z, now)).map((facts) => facts.rideId);
+    expect(await ids(b.userId, from, to)).toEqual([early.id, late.id]);
+    expect(await ids(organizer.userId, from, to)).toEqual([early.id, late.id]);
+    expect(await ids(stranger.userId, from, to)).toEqual([]);
+    // граница: на 1 мс внутрь — край выпадает
+    expect(await ids(b.userId, new Date(from.getTime() + 1), to)).toEqual([late.id]);
+    expect(await ids(b.userId, from, new Date(to.getTime() - 1))).toEqual([early.id]);
+  });
+
+  it('факты — как у rideFacts; отменённый и скрытый возвращаются с фазой', async () => {
+    const routeId = await seedTeamRoute(h, [27.61, 53.97]);
+    const ride = await createRide(h, organizer, { routeId });
+    const cancelled = await createRide(h, organizer, { startsAt: startsIn(h, DAY + HOUR) });
+    const hidden = await createRide(h, organizer, { startsAt: startsIn(h, DAY + 2 * HOUR) });
+    await ridesDb(h).updateOne({ _id: cancelled.id }, { $set: { status: 'cancelled' } });
+    await hideInDb(h, hidden.id);
+    const now = new Date(h.clock.now().getTime() + 3 * DAY);
+
+    const rides = await port().ridesOfParticipant(
+      organizer.userId,
+      new Date(ride.startsAt),
+      new Date(hidden.startsAt),
+      now,
+    );
+    expect(rides[0]).toEqual(await port().rideFacts(ride.id, now));
+    expect(rides.map((facts) => [facts.rideId, facts.phase])).toEqual([
+      [ride.id, 'past'],
+      [cancelled.id, 'cancelled'],
+      [hidden.id, 'hidden'],
+    ]);
+  });
+
+  it('фильтр участника и окна идёт по rides_participant_idx (IXSCAN, без COLLSCAN)', async () => {
+    await createRide(h, organizer);
+    const now = h.clock.now();
+    const explain = await ridesDb(h)
+      .find({
+        'participants.userId': organizer.userId,
+        startsAt: { $gte: now, $lte: new Date(now.getTime() + 2 * DAY) },
+      })
+      .sort({ startsAt: 1, _id: 1 })
+      .explain('queryPlanner');
+    const plan = JSON.stringify(explain);
+    expect(plan).toContain('"indexName":"rides_participant_idx"');
+    expect(plan).toContain('IXSCAN');
+    expect(plan).not.toContain('COLLSCAN');
+  });
+});
+
+describe('RidesForSocial.startedRidesWithin (регламент «Как прошёл райд?», P5)', () => {
+  it('только published; keyset по (startsAt, _id) — два райда одного старта на границе страницы', async () => {
+    const b = await rider(h, 'b@example.by');
+    const at = startsIn(h, DAY);
+    const first = await createRide(h, organizer, { startsAt: at });
+    const second = await createRide(h, organizer, { startsAt: at });
+    const third = await createRide(h, organizer, { startsAt: startsIn(h, DAY + HOUR) });
+    const cancelled = await createRide(h, organizer, { startsAt: startsIn(h, DAY + 2 * HOUR) });
+    const hidden = await createRide(h, organizer, { startsAt: startsIn(h, DAY + 2 * HOUR) });
+    expect((await join(h, b, first.id)).status).toBe(200);
+    await ridesDb(h).updateOne({ _id: cancelled.id }, { $set: { status: 'cancelled' } });
+    await hideInDb(h, hidden.id);
+    const [a1, a2] = [first.id, second.id].sort();
+    const until = new Date(h.clock.now().getTime() + 3 * DAY);
+
+    const page1 = await port().startedRidesWithin({ at: new Date(at), id: '' }, until, 1);
+    expect(page1.rides.map((ride) => ride.rideId)).toEqual([a1]);
+    expect(page1.next).toEqual({ at: new Date(at), id: a1 });
+    const page2 = await port().startedRidesWithin(page1.next!, until, 1);
+    expect(page2.rides.map((ride) => ride.rideId)).toEqual([a2]);
+    const page3 = await port().startedRidesWithin(page2.next!, until, 10);
+    expect(page3.rides.map((ride) => ride.rideId)).toEqual([third.id]);
+    const empty = await port().startedRidesWithin(page3.next!, until, 10);
+    expect(empty).toEqual({ rides: [], next: null });
+
+    const all = await port().startedRidesWithin({ at: new Date(at), id: '' }, until, 10);
+    expect(all.rides.find((ride) => ride.rideId === first.id)).toEqual({
+      rideId: first.id,
+      startsAt: new Date(at),
+      participantIds: [organizer.userId, b.userId],
+    });
+  });
+});
