@@ -288,6 +288,20 @@ P6 (#174), P4 (#183), P5 (#184). P7 закрывает этап 0.
 
 ## 8.2 Deviations from spec
 
+Coder (2026-11-01), всё — в рамках 8.1, без смены поведения:
+- RC-P7-1 — реализован вариант по умолчанию (a): райды (строка ride и push «Свои идут») — только при взаимной связи;
+  продуктовый ответ автора ещё нужен (правка K7/K10 в `social.md` помечена `[ASSUMPTION]`).
+- Индексы (RC-P7-16): запросы `upcomingWithParticipants` и `protocolsPublishedSince` — с `hint` своих индексов
+  (`rides_participant_idx`, `races_protocol_published_idx`), как `listCatalog`: без него планировщик на пустой и малой
+  коллекции выбирает `rides_feed_idx` (сортировка по `startsAt`) — скан всей недели ленты.
+- `ConnectionsRepository` экспортирован из `SocialCoreModule` для `SocialHomeService` (`SocialModule`; вне `social`
+  не уходит) — взаимность «своих» для Главной (`ownerIdsOf`).
+- `ResultsReadService.recentPublicRows` возвращает тип порта `SocialRaceResult` (без второго типа строки).
+- Строка маршрута — «Новый маршрут от {name}» с именем как есть (именительный падеж, K10 «имя без сокращений»);
+  склонения нет — вопрос автору на ревью (RC-P7-24).
+- Полный прогон API — на отдельной БД `pokatim_social_p7_full_test` и Redis db 11 (таргетные — `pokatim_social_p7_test`,
+  db 7): глобальный setup пересоздаёт БД, параллельные прогоны одной БД ломают друг друга.
+
 ## 8.3 Security checklist
 
 AuthZ `GET social/home` — только свои связи зрителя; в ответе нет `userId`; чужие имена — только публичные с согласием;
@@ -686,3 +700,34 @@ ride-going-action, going-stack, route-list-card}.tsx, features/notifications/not
 Главной на сервере; правка `ActivitySource`, `tracks`; новые очереди.
 
 ## 12. Outcome
+
+Coder, 2026-11-01. Этап 0 «Свои» по коду закрыт (P0–P7); RC-P7-1 реализован вариантом (a) — ждёт ответа автора.
+
+**Сделано (коммиты по §7):**
+1. События `social.*` (payload — id) в транзакциях `insert` реакций и `linkInvite`; порт `SOCIAL_NOTICES`;
+   `NotificationIntake.drafts(…, eventId)` — ветки шести видов K10 через `socialNoticeDraft`, «Свои идут» из
+   `rides.participant-joined` (участник по `seq`, только публичный, взаимные «свои» без идущих и организатора);
+   `RESULTS_NOTICES.entryRace`; `NotificationsWorkerModule → SocialCoreModule`.
+2. K11: `rider_connections.manualNoticeAt`, `upsertManual` → `{ created, connectedBefore }`, `claimManualNotice`;
+   `social.connection-added` — только для новой/возвращённой связи раз в 30 дн.
+3. `OutboxRideAskDue` вместо `LoggingRideAskDue`; тесты P5 — по outbox, сбой `append` откатывает `askedAt`.
+4. Активный день: `ActiveDay` в `AuthGuard` (`SET NX EX`, ≤ 200 мс, `DEL` при сбое), ребро `identity → product-events`.
+5. `GET /v1/social/home` + контракт `SocialHome` + `getSocialHome`; порты `upcomingWithRiders`, `recentResults`,
+   `recentByAuthors`, `protocolsPublishedSince`; миграция `0050_social_home`.
+6. Клиент: `SocialHomeSection` в слоте `socialSlotIndex` (секция + подсказка K3), `social_home` у «Я иду»,
+   `?from=notification` у цели `ride` (приложение и SW) → `source: 'notification'`.
+7. Документы: ADR-0027 (контекст, п. 3, 6, 7, «Последствия»), `social.md`, `home.md`, `.claude/rules/pokatim-{backend,
+   db,contracts,app,security}.md`.
+
+**Отрицательные доказательства:** без фильтра взаимности в `goingAudience` — красный AC5 (односторонний получил
+«Свои идут»); без фильтра взаимности в `SocialHomeService` — красный AC1 «нет строк» (райд одностороннего в секции).
+AC8: `rg "from '../social'"` в `rides|results|routes|races|tracks|profile|identity` — пусто; `product-events` импортирует
+только `src/db`; `registerQueue` в `social` — один; `git diff aaf9da74 -- worker.module/app.module/outbox-routes/
+notification-texts/notifications.policy` — пусто; `LoggingRideAskDue` — нет; `pnpm arch:check` — без нарушений.
+
+**RC-P7-20:** нефильтрованные подсчёты `product_events` в `social-*`/`account-erasure` идут через сервисы (без
+`AuthGuard`) и остались зелёными; правка понадобилась только `rides-join-source.int.test.ts` (отказ `record` — только
+`ride-joined`) и `push.test.ts` приложения (цель `?from=notification`).
+
+**Не проверено:** полный `pnpm check` (прогоняет оркестратор); `pnpm e2e:web`; ручная проверка на симуляторах и в
+браузере; склонение имени в «Новый маршрут от …» (RC-P7-24) — вопрос автору.
