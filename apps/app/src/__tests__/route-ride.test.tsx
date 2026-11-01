@@ -1,5 +1,7 @@
 /// <reference types="jest" />
 import { ApiHttpError } from '@pokatim/api-client';
+import { RouteRideDetail } from '@pokatim/contracts';
+import { formatElapsed } from '@pokatim/i18n';
 import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 import type { ReactElement } from 'react';
 import type { RefreshControlProps } from 'react-native';
@@ -19,6 +21,7 @@ import {
   PREVIOUS_ID,
   rideDetail,
   RIDE_ID,
+  rideSection,
   ROUTE_ID,
 } from './route-rides-fixtures';
 
@@ -293,5 +296,161 @@ describe('«Заезд по маршруту» (route-rides-02, A4)', () => {
     expect(getRide).not.toHaveBeenCalled();
     await fireEvent.press(screen.getByRole('button', { name: 'К маршруту' }));
     await waitFor(() => expect(router.getPathname()).toBe(`/routes/mine/${ROUTE_ID}`));
+  });
+});
+
+describe('участки заезда (route-rides-05 B)', () => {
+  const hint =
+    'Время участков не складывается во время маршрута: края у границ участков не входят ни в один из них.';
+  const missed = (fromM: number, toM: number, bestElapsedSec: number | null = null) =>
+    rideSection({
+      fromM,
+      toM,
+      status: 'not_passed',
+      elapsedSec: null,
+      isBest: false,
+      bestElapsedSec,
+      deltaToBestSec: null,
+    });
+  const threeSections = [
+    rideSection(),
+    rideSection({
+      fromM: 10_000,
+      toM: 24_999,
+      elapsedSec: 1_500,
+      isBest: false,
+      bestElapsedSec: 1_458,
+      deltaToBestSec: 42,
+    }),
+    missed(24_999, 36_000, 1_200),
+  ];
+  /** Позиции текстов в порядке дерева экрана. */
+  const order = (...texts: string[]) => {
+    const flat: string[] = [];
+    const walk = (node: ReturnType<typeof screen.getByTestId> | string) => {
+      if (typeof node === 'string') flat.push(node);
+      else node.children.forEach(walk);
+    };
+    walk(screen.getByTestId('route-ride'));
+    return texts.map((text) => flat.indexOf(text));
+  };
+
+  it('пройден с тремя участками — блок после сравнения и до «Ваш заезд»: сводка, пояснение, строки; суммы нет', async () => {
+    signedIn();
+    getRide.mockResolvedValue(rideDetail({ sections: threeSections }));
+    await open();
+    expect(await screen.findByTestId('route-ride-sections')).toBeOnTheScreen();
+    expect(screen.getByText('Участки')).toBeOnTheScreen();
+    expect(screen.getByText('Пройдено участков: 2 из 3')).toBeOnTheScreen();
+    expect(screen.getByText(hint)).toBeOnTheScreen();
+    expect(screen.getByText('Участок 1 · 0–10 км')).toBeOnTheScreen();
+    expect(screen.getByText('0:18:04')).toBeOnTheScreen();
+    expect(screen.getByText('Участок 2 · 10–25 км')).toBeOnTheScreen();
+    expect(screen.getByText('0:25:00')).toBeOnTheScreen();
+    expect(screen.getByText('К лучшему: +0:42')).toBeOnTheScreen();
+    expect(screen.getByText('Не пройден')).toBeOnTheScreen();
+    expect(screen.getByText('Лучшее время: 0:20:00')).toBeOnTheScreen();
+    expect(screen.getByTestId('route-ride-section-1')).toHaveProp(
+      'accessibilityLabel',
+      'Участок 1 · 0–10 км · 0:18:04 · Лучший',
+    );
+    expect(screen.getByTestId('route-ride-section-2')).toHaveProp(
+      'accessibilityLabel',
+      'Участок 2 · 10–25 км · 0:25:00 · К лучшему: +0:42',
+    );
+    expect(screen.getByTestId('route-ride-section-3')).toHaveProp(
+      'accessibilityLabel',
+      'Участок 3 · 25–36 км · Не пройден · Лучшее время: 0:20:00',
+    );
+    // RC-2: суммы времён пройденных нет ни текстом, ни в подписях
+    const sum = formatElapsed(1_084 + 1_500);
+    expect(screen.queryByText(new RegExp(sum))).toBeNull();
+    expect(screen.queryByLabelText(new RegExp(sum))).toBeNull();
+    const [isBest, sections, ride] = order('Это ваш лучший заезд', 'Участки', 'Ваш заезд');
+    expect(isBest).toBeGreaterThan(-1);
+    expect(sections).toBeGreaterThan(isBest);
+    expect(ride).toBeGreaterThan(sections);
+  });
+
+  it('не пройден с первым зачтённым участком — вердикт, причина, «Лучший: …» маршрута и время участка 1', async () => {
+    signedIn();
+    getRide.mockResolvedValue(
+      rideDetail({
+        status: 'not_passed',
+        reason: 'no_finish',
+        elapsedSec: null,
+        routeDistanceM: null,
+        comparison: {
+          best: { id: BEST_ID, elapsedSec: 7_477, rideStartedAt: EARLIER },
+          isBest: false,
+          deltaToBestSec: null,
+          previous: null,
+          deltaToPreviousSec: null,
+        },
+        sections: [rideSection(), missed(10_000, 20_000), missed(20_000, 30_000)],
+      }),
+    );
+    await open();
+    expect(await screen.findByTestId('route-ride-sections')).toBeOnTheScreen();
+    expect(screen.getByText('Нет финиша: трек не входит в ворота финиша')).toBeOnTheScreen();
+    expect(screen.getByText('Лучший: 2:04:37 · 5 октября')).toBeOnTheScreen();
+    expect(screen.getByText('Пройдено участков: 1 из 3')).toBeOnTheScreen();
+    expect(screen.getByText('0:18:04')).toBeOnTheScreen();
+    // вердикт «Не пройден» + две строки участков
+    expect(screen.getAllByText('Не пройден')).toHaveLength(3);
+    expect(screen.queryByText(/Лучшее время/)).toBeNull();
+  });
+
+  it('пустой список — блока нет, без подписей', async () => {
+    signedIn();
+    await open();
+    expect(await screen.findByText('Это ваш лучший заезд')).toBeOnTheScreen();
+    expect(screen.queryByTestId('route-ride-sections')).toBeNull();
+    expect(screen.queryByText('Участки')).toBeNull();
+  });
+
+  it('сбой (сервер отдаёт пустой список) — блока нет', async () => {
+    signedIn();
+    getRide.mockResolvedValue(failed());
+    await open();
+    expect(await screen.findByText('Проверить снова')).toBeOnTheScreen();
+    expect(screen.queryByTestId('route-ride-sections')).toBeNull();
+  });
+
+  it('проверка идёт с участками в ответе — блока нет; после финала (опрос) — появился', async () => {
+    signedIn();
+    getRide
+      .mockResolvedValueOnce(
+        rideDetail({ status: 'checking', elapsedSec: null, sections: threeSections }),
+      )
+      .mockResolvedValue(rideDetail({ sections: threeSections }));
+    await open();
+    expect(await screen.findByText('Проверяем заезд…')).toBeOnTheScreen();
+    expect(screen.queryByTestId('route-ride-sections')).toBeNull();
+    await advance(3000);
+    expect(await screen.findByTestId('route-ride-sections')).toBeOnTheScreen();
+  });
+
+  it('незнакомый статус участка (разбор схемы) — «Статус неизвестен» без времени', async () => {
+    signedIn();
+    getRide.mockResolvedValue(
+      RouteRideDetail.parse({
+        ...rideDetail(),
+        sections: [{ ...rideSection(), status: 'x', elapsedSec: null, isBest: false }],
+      }),
+    );
+    await open();
+    expect(await screen.findByTestId('route-ride-sections')).toBeOnTheScreen();
+    expect(screen.getByText('Статус неизвестен')).toBeOnTheScreen();
+    expect(screen.getByText('Пройдено участков: 0 из 1')).toBeOnTheScreen();
+  });
+
+  it('старый ответ без поля sections — экран без блока, без ошибок', async () => {
+    signedIn();
+    const { sections: _omit, ...legacy } = rideDetail();
+    getRide.mockResolvedValue(RouteRideDetail.parse(legacy));
+    await open();
+    expect(await screen.findByText('Это ваш лучший заезд')).toBeOnTheScreen();
+    expect(screen.queryByTestId('route-ride-sections')).toBeNull();
   });
 });

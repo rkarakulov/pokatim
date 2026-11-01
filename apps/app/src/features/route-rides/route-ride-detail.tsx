@@ -39,9 +39,11 @@ import {
   routeRideFailureText,
   routeRideOriginText,
   routeRideReasonText,
+  routeRideSectionsShown,
   routeRideSourceLabel,
   routeRideStatusPill,
 } from './route-ride-format';
+import { RouteRideSections } from './route-ride-sections';
 
 /**
  * «Проверить снова» у `failed` (route-rides-03): `POST { activityId }` своей основной из детали (без запроса
@@ -161,6 +163,7 @@ function RideView({
           {line}
         </Text>
       ))}
+      {routeRideSectionsShown(ride) ? <RouteRideSections sections={ride.sections} /> : null}
       <Kicker label={t('routes.rides.result.ride')} />
       <DetailRow label={t('routes.rides.result.date')}>
         {formatMinskDateTime(ride.activity.startedAt, now)}
@@ -181,7 +184,8 @@ function RideView({
 
 /**
  * «Заезд по маршруту» (`/routes/rides/<routeId>/<rideId>[?mine=1]`, route-rides-02 A4) — только вошедшим, без SSR-данных
- * и OG. Статус, вердикт и время, сравнение со своими заездами (только сервер), данные заезда, карта с треком.
+ * и OG. Статус, вердикт и время, сравнение со своими заездами (только сервер), участки (route-rides-05), данные
+ * заезда, карта с треком.
  * Невалидные id и 404 — «Заезд не найден» + «К маршруту»; проверка идёт — опрос (RC-6); pull-to-refresh — деталь и
  * трек.
  */
