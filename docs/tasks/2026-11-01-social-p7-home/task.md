@@ -701,7 +701,7 @@ ride-going-action, going-stack, route-list-card}.tsx, features/notifications/not
 
 ## 12. Outcome
 
-Coder, 2026-11-01. Этап 0 «Свои» по коду закрыт (P0–P7); RC-P7-1 реализован вариантом (a) — ждёт ответа автора.
+Coder, 2026-11-01. Этап 0 «Свои» по коду закрыт (P0–P7); RC-P7-1 реализован вариантом (a); автор подтвердил (a) 2026-11-01.
 
 **Сделано (коммиты по §7):**
 1. События `social.*` (payload — id) в транзакциях `insert` реакций и `linkInvite`; порт `SOCIAL_NOTICES`;
