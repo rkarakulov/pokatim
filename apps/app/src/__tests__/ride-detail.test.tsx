@@ -229,6 +229,13 @@ describe('карточка райда: гость (AC8)', () => {
 describe('карточка райда: вошедший (AC1–AC6)', () => {
   beforeEach(signedIn);
 
+  it('переход из уведомления (`?from=notification`) — «Я иду» с источником notification (K12, social-p7)', async () => {
+    joinRide.mockResolvedValue(view({ goingCount: 6 }, viewer('participant', { canLeave: true })));
+    await openSignedIn(`/rides/${ID}?from=notification`);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Я иду' }));
+    expect(joinRide).toHaveBeenCalledWith(liveSession.accessToken, ID, 'notification');
+  });
+
   it('состояние зрителя — me с Bearer; «Я иду» → «Вы идёте · …» и «Не иду»; «Не иду» → снова «Я иду»', async () => {
     joinRide.mockResolvedValue(view({ goingCount: 6 }, viewer('participant', { canLeave: true })));
     leaveRide.mockResolvedValue(view({ goingCount: 5 }, viewer('none', { canJoin: true })));
