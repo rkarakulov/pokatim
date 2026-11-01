@@ -23,7 +23,7 @@ import type { Map as MapLibreMap } from 'maplibre-gl';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 
 import { loadMaplibre } from './load-maplibre';
-import { MapControls } from './MapControls';
+import { MapControls, type MapFullscreen } from './MapControls';
 import { PANEL_MAP_THEME } from './panel-map-theme';
 import { ScrubLayer } from './ScrubMarker';
 import { useReducedMotion } from './use-reduced-motion';
@@ -40,7 +40,9 @@ const SCRUB_REPROJECT_EVENTS = ['resize', 'move'] as const;
  * `routeLayers`, как в приложении; цвета — роли `themes.panel.map.*`. Ошибка до `load` (стиль, первые тайлы) — сообщение поверх карты;
  * после `load` — без сообщения. `scrub` — маркер скраббинга оверлеем: пиксели линии — `map.project` после `load` и на
  * `resize`/`move` в стор вида (подписан только `ScrubLayer`). `variant`: `page` — страница маршрута, `compact` —
- * окно публикации и поле коридора (пропорция `MAP_ASPECT_RATIO`).
+ * окно публикации и поле коридора (пропорция `MAP_ASPECT_RATIO`). `fullscreen` — кнопка «На весь экран» блока, в
+ * котором лежит карта (admin-maps-desktop); смена режима карту не пересоздаёт — размер MapLibre берёт сам
+ * (`trackResize`, наблюдатель размера контейнера).
  */
 export function RouteMap({
   geometry,
@@ -49,6 +51,7 @@ export function RouteMap({
   variant,
   scrub,
   corridorWidthM,
+  fullscreen,
 }: {
   geometry: RouteMapGeometry;
   /** URL стиля из env (`mapStyleUrl`); без него вызывающий показывает `LinePreview` (RC-9) */
@@ -59,6 +62,7 @@ export function RouteMap({
   scrub?: ScrubStore;
   /** допуск коридора гонки, м; без него — карта маршрута без коридора */
   corridorWidthM?: number;
+  fullscreen?: MapFullscreen;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const scope = useId();
@@ -195,6 +199,7 @@ export function RouteMap({
               animate: animate.current,
             })
           }
+          {...(fullscreen ? { fullscreen } : {})}
         />
       ) : null}
     </div>
