@@ -56,8 +56,8 @@ function GoingRow({ ride, publicId, now }: { ride: RideCard; publicId: string; n
   );
 }
 
-/** «В свои» / «В своих» вошедшего: повтор убирает (K1, без подтверждения); отказ — текстом у кнопки. */
-function ConnectButton({ publicId, connected }: { publicId: string; connected: boolean }) {
+/** «В свои» / «В своих» вошедшего: повтор убирает (K1, без подтверждения); отказ — текстом у кнопки. Карточка строки результата гонки (P4) — тоже. */
+export function ConnectButton({ publicId, connected }: { publicId: string; connected: boolean }) {
   const mutation = useSetRiderConnection(publicId, { refreshList: true });
   return (
     <View style={styles.connect}>

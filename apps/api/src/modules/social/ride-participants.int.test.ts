@@ -128,6 +128,7 @@ describe('явка: отказы и окно (AC2, RC-3)', () => {
       canMark: false,
       canDecline: false,
       attended: null,
+      allThanked: false,
     });
   });
 
@@ -187,9 +188,18 @@ describe('«Я был» / «Меня не было» (AC3)', () => {
       canMark: false,
       canDecline: true,
       attended: {
-        riders: [{ name: 'Организатор', publicId: org.publicId, avatar: null }],
+        riders: [
+          {
+            name: 'Организатор',
+            publicId: org.publicId,
+            avatar: null,
+            self: false,
+            thanked: false,
+          },
+        ],
         hiddenCount: 1,
       },
+      allThanked: false,
     });
     const again = await post(m, ride.id, MARK);
     expect(again.body).toEqual(first.body);
@@ -203,6 +213,7 @@ describe('«Я был» / «Меня не было» (AC3)', () => {
       canMark: true,
       canDecline: false,
       attended: null,
+      allThanked: false,
     });
     const back = RideParticipants.parse((await post(m, ride.id, MARK)).body);
     expect(back.attendance?.state).toBe('attended');

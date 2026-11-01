@@ -40,7 +40,9 @@ import {
   attemptHidden,
   disqualifiedBeforePublication,
   entryActions,
+  isPublicProtocolRow,
   ownGroup,
+  publicTableMode,
   rankRows,
   resultStatus,
   storyCardEligible,
@@ -358,10 +360,11 @@ export class ResultsReadService {
   async publicResults(raceId: string, query: RaceResultsQuery): Promise<RaceResultsPage> {
     const race = await this.race(raceId);
     const cursorEntryId = query.cursor ? decodeCursor(query.cursor, RankCursorKey).id : null;
-    const empty = race.status === 'cancelled' || race.corridor === null;
-    if (!empty && race.protocolPublishedAt !== null) {
+    const mode = publicTableMode(race);
+    if (mode === 'protocol') {
       return this.protocolResults(race, query.group, cursorEntryId, query.limit);
     }
+    const empty = mode === 'empty';
     const unnamed = await this.repository.withSnapshot(async (session): Promise<UnnamedPage> => {
       const entries = await this.repository.countActiveEntries(raceId, session);
       const groups = empty ? [] : await this.repository.rankedGroups(raceId, session);
@@ -426,6 +429,33 @@ export class ResultsReadService {
       };
     });
     return this.withRiderNames(unnamed);
+  }
+
+  /**
+   * Строка публичной таблицы гонки по `entryId` — цель «Респекта» (P4, RC-P4-1, порт `RESULTS_FOR_SOCIAL`): та же
+   * видимость, что у `publicResults` (`publicTableMode`). До публикации — заявка со строкой с местом своей группы
+   * (активная, Verified, `best.ranked`, без DQ: снятые, финишёры и DQ отпадают); после — строка текущей ревизии
+   * (`isPublicProtocolRow`) в одной snapshot-сессии. Черновик, неизвестная гонка или заявка — `null`.
+   */
+  async publicRow(
+    entryId: string,
+  ): Promise<{ entryId: string; raceId: string; userId: string } | null> {
+    const entry = await this.repository.findEntryById(entryId);
+    if (!entry) return null;
+    const race = await this.races.get(entry.raceId);
+    if (!race) return null;
+    const mode = publicTableMode(race);
+    if (mode === 'empty') return null;
+    const target = { entryId, raceId: race.id, userId: entry.userId };
+    if (mode === 'provisional') {
+      const position = await this.repository.rankedPosition(race.id, entry.groupKey, entryId);
+      return position ? target : null;
+    }
+    return this.repository.withSnapshot(async (session) => {
+      const revision = await this.protocolRevision(race.id, session);
+      const row = await this.repository.protocolRow(race.id, revision, entryId, session);
+      return row && isPublicProtocolRow(row) ? { ...target, userId: row.userId } : null;
+    });
   }
 
   /**
@@ -541,9 +571,8 @@ export class ResultsReadService {
         groups,
         finishers,
         items: page.flatMap((row: RaceProtocolRowDoc) =>
-          row.place === null
-            ? []
-            : [
+          isPublicProtocolRow(row)
+            ? [
                 {
                   userId: row.userId,
                   entryNo: numbers.get(row.entryId) ?? null,
@@ -554,7 +583,8 @@ export class ResultsReadService {
                     elapsedSec: row.elapsedSec,
                   },
                 },
-              ],
+              ]
+            : [],
         ),
         nextCursor: rows.length > limit && last ? encodeCursor('e', last.entryId) : null,
       };

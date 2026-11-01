@@ -3351,4 +3351,23 @@ export const ru = {
     'Свои появятся после совместного райда или когда вы добавите кого-то из профиля',
   'social.error.RATE_LIMITED': 'Слишком много действий, попробуйте позже',
   'social.error.unknown': 'Не получилось. Попробуйте ещё раз.',
+  // «Свои», P4: «Спасибо за компанию» в «Ехали N» (K5) и «Респект» (K8)
+  'rides.thanks.one': 'Спасибо за компанию',
+  'rides.thanks.done': 'Вы сказали спасибо',
+  'rides.thanks.all': 'Поблагодарить всех',
+  'rides.thanks.allDone': 'Вы поблагодарили всех',
+  'rides.thanks.error.not_attended':
+    'Сказать спасибо можно только тем, кто был на райде вместе с вами',
+  'rides.thanks.error.unknown': 'Не удалось сказать спасибо',
+  'social.respect.action': 'Респект',
+  'social.respect.withCount': 'Респект · {count}',
+  'social.respect.received': {
+    one: 'респект {count}',
+    few: 'респект {count}',
+    many: 'респект {count}',
+    other: 'респект {count}',
+  },
+  'social.respect.author': 'Респект автору',
+  'social.respect.error.unknown': 'Не удалось сохранить респект',
+  'rides.thanks.error.not_found': 'Райдер больше недоступен — обновите список',
 } as const;

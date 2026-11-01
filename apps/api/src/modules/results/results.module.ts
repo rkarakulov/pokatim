@@ -20,6 +20,8 @@ import { RIDER_RESULTS } from './rider-results.port';
 import { ResultsAdminController } from './results-admin.controller';
 import { ResultsForDisputesService } from './results-for-disputes';
 import { ResultsForSharingService } from './results-for-sharing';
+import { ResultsForSocialService } from './results-for-social';
+import { RESULTS_FOR_SOCIAL } from './results-for-social.port';
 import { RESULTS_FOR_SHARING } from './results-for-sharing.port';
 import { ResultsForStandingsService } from './results-for-standings';
 import { ResultsForTicketsService } from './results-for-tickets';
@@ -49,7 +51,8 @@ import { ResultsRepository } from './results.repository';
  * `RESULTS_FOR_STANDINGS` (текущие ревизии и строки снимка протокола). Для `sharing` (story-cards) — порт
  * `RESULTS_FOR_SHARING` (факты и линия карточки для сторис). Для `riders` (rider-profile) — порт `RIDER_RESULTS`
  * (строки райдера в текущих ревизиях опубликованных протоколов). Для `tickets` (event-tickets) — порт
- * `RESULTS_FOR_TICKETS` (заявка райдера и заявки гонки пачками).
+ * `RESULTS_FOR_TICKETS` (заявка райдера и заявки гонки пачками). Для `social` («Свои» P4) — порт `RESULTS_FOR_SOCIAL`
+ * (строка публичной таблицы — цель «Респекта»).
  */
 @Module({
   imports: [RacesCoreModule, RoutesCoreModule, TracksCoreModule, ProfileCoreModule],
@@ -70,6 +73,8 @@ import { ResultsRepository } from './results.repository';
     { provide: RIDER_RESULTS, useExisting: RiderResultsService },
     ResultsForTicketsService,
     { provide: RESULTS_FOR_TICKETS, useExisting: ResultsForTicketsService },
+    ResultsForSocialService,
+    { provide: RESULTS_FOR_SOCIAL, useExisting: ResultsForSocialService },
   ],
   exports: [
     RacesCoreModule,
@@ -85,6 +90,7 @@ import { ResultsRepository } from './results.repository';
     RESULTS_FOR_SHARING,
     RIDER_RESULTS,
     RESULTS_FOR_TICKETS,
+    RESULTS_FOR_SOCIAL,
   ],
 })
 export class ResultsCoreModule {}

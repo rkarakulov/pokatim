@@ -108,3 +108,75 @@ describe('«Респект» (K8, RC-5)', () => {
     expect(await socialDb(h).events.countDocuments({ type: 'respect-sent' })).toBe(1);
   });
 });
+
+describe('«Поблагодарить всех» (P4, Q1, RC-P4-8)', () => {
+  it('всем явившимся, включая непубличных, кроме себя; повтор — 0 без новых событий', async () => {
+    const [org, b, c, d] = await riders(h, 'org', 'b', 'c', 'd');
+    const ride = await pastRide(h, org, [b, c, d]);
+    for (const who of [org, b, c])
+      await socialServices(h).attendance.markManual(who.userId, ride.id);
+    // уже поблагодарённый не получает второе
+    expect(await svc().thank(org.userId, ride.id, b.userId)).toBe(true);
+
+    expect(await svc().thankAll(org.userId, ride.id)).toBe(1);
+    expect([...(await svc().thankedBy(org.userId, ride.id))].sort()).toEqual(
+      [b.userId, c.userId].sort(),
+    );
+    expect(await svc().thankAll(org.userId, ride.id)).toBe(0);
+    expect(await socialDb(h).events.countDocuments({ type: 'thanks-sent' })).toBe(2);
+    // d без явки — не получатель; сам d без явки — 409
+    await expect(svc().thankAll(d.userId, ride.id)).rejects.toMatchObject(blocked('not_attended'));
+    expect(await socialDb(h).reactions.countDocuments({ recipientId: d.userId })).toBe(0);
+  });
+
+  it('единственный явившийся — 0 новых', async () => {
+    const [org, b] = await riders(h, 'org', 'b');
+    const ride = await pastRide(h, org, [b]);
+    await socialServices(h).attendance.markManual(org.userId, ride.id);
+    expect(await svc().thankAll(org.userId, ride.id)).toBe(0);
+  });
+});
+
+describe('«Респект» идемпотентно (P4, RC-P4-4)', () => {
+  const target = (recipientId: string) => ({
+    targetType: 'route' as const,
+    targetId: uuidv7(),
+    recipientId,
+  });
+
+  it('поставить, повтор не переключает; снять, повтор — no-op; себе — 409; поставившие — новые сверху', async () => {
+    const [a, b, owner] = await riders(h, 'a', 'b', 'owner');
+    const route = target(owner.userId);
+    expect(await svc().setRespect(a.userId, route, true)).toBe(true);
+    expect(await svc().setRespect(a.userId, route, true)).toBe(false);
+    expect(await svc().respectedBy(a.userId, route)).toBe(true);
+    h.clock.advance(1000);
+    expect(await svc().setRespect(b.userId, route, true)).toBe(true);
+    expect(await svc().respectActors(route, 10)).toEqual([b.userId, a.userId]);
+    expect(await svc().respectActors(route, 1)).toEqual([b.userId]);
+    expect(await svc().setRespect(a.userId, route, false)).toBe(true);
+    expect(await svc().setRespect(a.userId, route, false)).toBe(false);
+    expect(await svc().respectedBy(a.userId, route)).toBe(false);
+    expect(await svc().countFor('route', route.targetId, 'respect')).toBe(1);
+    await expect(svc().setRespect(owner.userId, route, true)).rejects.toMatchObject(
+      blocked('self'),
+    );
+    await expect(svc().setRespect(owner.userId, route, false)).rejects.toMatchObject(
+      blocked('self'),
+    );
+    expect(await socialDb(h).events.countDocuments({ type: 'respect-sent' })).toBe(2);
+  });
+
+  it('параллельные PUT true — одна запись и одно событие', async () => {
+    const [a, owner] = await riders(h, 'a', 'owner');
+    const route = target(owner.userId);
+    const results = await Promise.all([
+      svc().setRespect(a.userId, route, true),
+      svc().setRespect(a.userId, route, true),
+      svc().setRespect(a.userId, route, true),
+    ]);
+    expect(results.filter(Boolean)).toHaveLength(1);
+    expect(await socialDb(h).reactions.countDocuments({ actorId: a.userId })).toBe(1);
+    expect(await socialDb(h).events.countDocuments({ type: 'respect-sent' })).toBe(1);
+  });
+});

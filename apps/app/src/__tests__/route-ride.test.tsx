@@ -30,6 +30,9 @@ jest.mock('@/lib/api');
 const getRide = jest.mocked(api.getRouteRide);
 const checkRide = jest.mocked(api.checkRouteRide);
 const listCandidates = jest.mocked(api.listRouteRideCandidates);
+const getRouteRespect = jest.mocked(api.getRouteRespect);
+const setRouteRespect = jest.mocked(api.setRouteRespect);
+const NEUTRAL_RESPECT = { available: false, respected: false, count: 0, own: false, from: null };
 
 const NOW = new Date('2026-10-28T09:00:00Z');
 const TOKEN = liveSession.accessToken;
@@ -80,6 +83,8 @@ beforeEach(() => {
   jest.useFakeTimers({ now: NOW, advanceTimers: true });
   getRide.mockResolvedValue(rideDetail());
   jest.mocked(api.getRouteRideTrack).mockReturnValue(never());
+  // «Респект автору» (P4): по умолчанию — нейтральное состояние (маршрут команды)
+  getRouteRespect.mockResolvedValue(NEUTRAL_RESPECT);
 });
 afterEach(() => {
   jest.clearAllMocks();
@@ -452,5 +457,49 @@ describe('участки заезда (route-rides-05 B)', () => {
     await open();
     expect(await screen.findByText('Это ваш лучший заезд')).toBeOnTheScreen();
     expect(screen.queryByTestId('route-ride-sections')).toBeNull();
+  });
+});
+
+describe('«Респект автору» (P4, K8)', () => {
+  const available = { ...NEUTRAL_RESPECT, available: true };
+
+  it('пройден и `available` — «Респект автору»; нажатие — PUT { respected: true }', async () => {
+    signedIn();
+    getRouteRespect.mockResolvedValue(available);
+    setRouteRespect.mockResolvedValue({ ...available, respected: true, count: 1 });
+    await open();
+    const button = await screen.findByRole('button', { name: 'Респект автору' });
+    expect(getRouteRespect).toHaveBeenCalledWith(TOKEN, ROUTE_ID);
+    await fireEvent.press(button);
+    expect(setRouteRespect).toHaveBeenCalledWith(TOKEN, ROUTE_ID, { respected: true });
+    // число автору не показывается (Q4)
+    expect(screen.queryByText(/респект 1|Респект · 1/)).toBeNull();
+  });
+
+  it('свой маршрут (?mine=1) — без запроса и строки', async () => {
+    signedIn();
+    getRouteRespect.mockResolvedValue(available);
+    await open(`/routes/rides/${ROUTE_ID}/${RIDE_ID}?mine=1`);
+    expect(await screen.findByText('2:04:37')).toBeOnTheScreen();
+    expect(getRouteRespect).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'Респект автору' })).toBeNull();
+  });
+
+  it('`available: false` (команды, свой) — строки нет', async () => {
+    signedIn();
+    await open();
+    expect(await screen.findByText('2:04:37')).toBeOnTheScreen();
+    await waitFor(() => expect(getRouteRespect).toHaveBeenCalled());
+    expect(screen.queryByRole('button', { name: 'Респект автору' })).toBeNull();
+  });
+
+  it('не пройден — без запроса и строки', async () => {
+    signedIn();
+    getRide.mockResolvedValue(notPassed());
+    getRouteRespect.mockResolvedValue(available);
+    await open();
+    expect(await screen.findByText('Не пройден')).toBeOnTheScreen();
+    expect(getRouteRespect).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'Респект автору' })).toBeNull();
   });
 });

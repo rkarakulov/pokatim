@@ -37,3 +37,9 @@ export {
 } from './routes-for-sharing.port';
 /** Порт «Обзора» панели (admin-overview): заявки в каталог и маршруты с жалобами. */
 export { RoutesOverview } from './routes-overview';
+/** Порт для `social` («Свои» P4): маршрут райдера в каталоге — цель «Респекта автору» (K8). */
+export {
+  ROUTES_FOR_SOCIAL,
+  type RouteRespectTarget,
+  type RoutesForSocial,
+} from './routes-for-social.port';

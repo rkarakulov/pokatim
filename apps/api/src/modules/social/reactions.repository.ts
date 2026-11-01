@@ -44,6 +44,34 @@ export class ReactionsRepository {
     return this.reactions.countDocuments({ targetType, targetId, kind });
   }
 
+  /** Получатели реакций актёра на цели (P4: «спасибо» зрителя на райде) — префикс `social_reactions_unique`. */
+  async recipientsOf(
+    actorId: string,
+    kind: ReactionKind,
+    targetType: ReactionTargetType,
+    targetId: string,
+  ): Promise<Set<string>> {
+    const docs = await this.reactions
+      .find({ actorId, kind, targetType, targetId }, { projection: { _id: 0, recipientId: 1 } })
+      .toArray();
+    return new Set(docs.map((doc) => doc.recipientId));
+  }
+
+  /** Актёры реакций вида на цели, новые сверху, не больше `limit` (P4: `from` «Респекта» получателю). */
+  async actorsOf(
+    targetType: ReactionTargetType,
+    targetId: string,
+    kind: ReactionKind,
+    limit: number,
+  ): Promise<string[]> {
+    const docs = await this.reactions
+      .find({ targetType, targetId, kind }, { projection: { _id: 0, actorId: 1 } })
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(limit)
+      .toArray();
+    return docs.map((doc) => doc.actorId);
+  }
+
   /** Стирание (K13): свои реакции и полученные. */
   async deleteAllOf(userId: string): Promise<number> {
     const own = await this.reactions.deleteMany({ actorId: userId });

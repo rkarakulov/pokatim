@@ -78,6 +78,14 @@ beforeEach(() => {
   );
   getMyRaceEntry.mockResolvedValue(timed(true));
   getMyRaceDisputes.mockResolvedValue(myDisputes());
+  // «Респект» (P4): своя строка без полученных респектов — блока нет
+  jest.mocked(api.getRaceEntryRespect).mockResolvedValue({
+    available: false,
+    respected: false,
+    count: 0,
+    own: true,
+    from: { riders: [], hiddenCount: 0 },
+  });
   storyCardImageUrl.mockImplementation((token) => `https://api.test/v1/story-cards/${token}.png`);
 });
 afterEach(() => {
@@ -92,10 +100,14 @@ describe('входы (R8)', () => {
     expect(router.getPathname()).toBe(storyUrl);
   });
 
-  it('без canShareStory (и старый ответ без поля) — кнопки нет, своя строка не нажимаема', async () => {
+  it('без canShareStory (и старый ответ без поля) — своя строка нажимаема (P4 RC-P4-11), в карточке кнопки нет', async () => {
     getMyRaceEntry.mockResolvedValue(timed(false));
-    await open(`/races/${RACE_ID}`);
-    expect(await screen.findByLabelText('2, Вы, 1:42:05')).toBeOnTheScreen();
+    const router = await open(`/races/${RACE_ID}`);
+    await fireEvent.press(
+      await screen.findByRole('button', { name: 'Вы, 2 место, 1:42:05. Открыть карточку' }),
+    );
+    expect(router.getPathname()).toBe(`/races/result/${RACE_ID}/${ENTRY_ID}`);
+    expect(await screen.findAllByText('Ваш результат')).not.toHaveLength(0);
     expect(screen.queryByRole('button', { name: SHARE })).toBeNull();
   });
 

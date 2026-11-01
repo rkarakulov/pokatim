@@ -1,9 +1,9 @@
-import type { RideRiderGroup, RideRiderRow } from '@pokatim/contracts';
+import type { RideRiderRow } from '@pokatim/contracts';
 import { size, space } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
 import { TextAction, textStyle, useTheme } from '@rkarakulov/ui';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { RiderAvatar } from '@/components/rider-avatar';
@@ -12,7 +12,7 @@ import { riderPath } from '@/features/riders/queries';
 /** Строк до раскрытия «Показать всех» (K4). */
 export const COLLAPSED_ROWS = 5;
 
-function RiderRowView({ row }: { row: RideRiderRow }) {
+function RiderRowView({ row, trailing }: { row: RideRiderRow; trailing?: ReactNode }) {
   const theme = useTheme();
   const router = useRouter();
   const content = (
@@ -27,30 +27,44 @@ function RiderRowView({ row }: { row: RideRiderRow }) {
     </>
   );
   const publicId = row.publicId;
-  if (publicId === null) return <View style={styles.row}>{content}</View>;
+  const main =
+    publicId === null ? (
+      <View style={styles.row}>{content}</View>
+    ) : (
+      <Pressable
+        accessibilityRole="link"
+        accessibilityLabel={t('rides.participants.profileA11y', { name: row.name })}
+        onPress={() => router.push(riderPath(publicId))}
+        style={styles.row}
+      >
+        {content}
+      </Pressable>
+    );
+  if (trailing === undefined || trailing === null) return main;
+  // действие строки («Спасибо за компанию», P4) — справа от ссылки на профиль, не внутри неё
   return (
-    <Pressable
-      accessibilityRole="link"
-      accessibilityLabel={t('rides.participants.profileA11y', { name: row.name })}
-      onPress={() => router.push(riderPath(publicId))}
-      style={styles.row}
-    >
-      {content}
-    </Pressable>
+    <View style={styles.withTrailing}>
+      <View style={styles.main}>{main}</View>
+      {trailing}
+    </View>
   );
 }
 
 /**
  * Публичные райдеры райда (K4, RC-8): до `collapsedRows` строк «аватар · имя» (с `publicId` — ссылка на профиль), затем
  * «и ещё N» (`hiddenCount` — непубличные, не меняется после раскрытия) и «Показать всех» (только при большем числе
- * публичных строк: раскрывает остальные на месте и пропадает). Порядок — сервера (организатор первым).
+ * публичных строк: раскрывает остальные на месте и пропадает). Порядок — сервера (организатор первым). `trailing` —
+ * действие строки справа («Спасибо за компанию» в «Ехали N», P4).
  */
-export function RideRiderList({
+export function RideRiderList<Row extends RideRiderRow>({
   group,
   collapsedRows = COLLAPSED_ROWS,
+  trailing,
 }: {
-  group: RideRiderGroup;
+  group: { riders: readonly Row[]; hiddenCount: number };
   collapsedRows?: number;
+  /** действие справа в строке (P4); без него раскладка строки прежняя */
+  trailing?: (row: Row) => ReactNode;
 }) {
   const theme = useTheme();
   const [expanded, setExpanded] = useState(false);
@@ -59,7 +73,11 @@ export function RideRiderList({
   return (
     <View style={styles.list}>
       {rows.map((row, index) => (
-        <RiderRowView key={`${row.publicId ?? 'row'}-${index}`} row={row} />
+        <RiderRowView
+          key={`${row.publicId ?? 'row'}-${index}`}
+          row={row}
+          trailing={trailing?.(row)}
+        />
       ))}
       {group.hiddenCount > 0 ? (
         <Text style={[textStyle('meta'), { color: theme.text.secondary }]}>
@@ -79,5 +97,7 @@ const styles = StyleSheet.create({
   list: { gap: space.s2 },
   row: { minHeight: size.touchMin, flexDirection: 'row', alignItems: 'center', gap: space.s2 },
   name: { flex: 1 },
+  withTrailing: { flexDirection: 'row', alignItems: 'center', gap: space.s2 },
+  main: { flex: 1 },
   start: { alignItems: 'flex-start' },
 });
