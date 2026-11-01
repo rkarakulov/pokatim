@@ -6,7 +6,7 @@ import type { ChangedCursor } from '../../changed-since';
  * Порт `rides` для модуля `social` («Свои», ADR-0027 п. 1, через `modules/rides/index.ts`): факты райда для явки —
  * участники, фаза, старт и точная точка старта; ближайший райд райдера карточкой ленты («Идёт», P3). `social` коллекцию
  * `rides` не читает и фазу не вычисляет. P5: райды участника по окну старта (автоявка) и начавшиеся опубликованные
- * райды по окну старта (регламент «Как прошёл райд?»).
+ * райды по окну старта (регламент «Как прошёл райд?»). P7: ближайшие райды «своих» для Главной.
  */
 export const RIDES_FOR_SOCIAL = Symbol('RIDES_FOR_SOCIAL');
 
@@ -27,6 +27,12 @@ export interface SocialStartedRide {
   rideId: string;
   startsAt: Date;
   /** «Иду», организатор первым */
+  participantIds: string[];
+}
+
+/** Райд Главной «Свои» (social-p7): карточка ленты со зрителем и участники «Иду» (организатор первым). */
+export interface SocialUpcomingRide {
+  card: RideCard;
   participantIds: string[];
 }
 
@@ -56,4 +62,15 @@ export interface RidesForSocial {
     until: Date,
     limit: number,
   ): Promise<{ rides: SocialStartedRide[]; next: ChangedCursor | null }>;
+  /**
+   * Главная «Свои» (K7, social-p7): опубликованные райды со стартом в `(now, until]`, где участник «Иду» или
+   * организатор — кто-то из `riderIds`; `startsAt ↑, _id ↑`, ≤ `limit`; карточка — как в ленте, со зрителем `viewerId`.
+   */
+  upcomingWithRiders(
+    riderIds: readonly string[],
+    viewerId: string,
+    now: Date,
+    until: Date,
+    limit: number,
+  ): Promise<SocialUpcomingRide[]>;
 }

@@ -128,3 +128,11 @@ export type DismissRideReportsRequest = z.infer<typeof DismissRideReportsRequest
  */
 export const ResetRidePhotoRequest = z.strictObject({ photoId: RidePhotoId, reason: ActionReason });
 export type ResetRidePhotoRequest = z.infer<typeof ResetRidePhotoRequest>;
+
+/**
+ * `GET /v1/admin/rides/:id/photo?photoId=` (ride-photo-followups) — фото райда для карточки модерации у любого
+ * статуса (и у скрытого). `photoId` — из карточки: не текущее фото — `404` (модератор видит ровно то фото, которое
+ * удалит). Строгий: лишние ключи — `400`.
+ */
+export const ModerationRidePhotoQuery = z.strictObject({ photoId: RidePhotoId });
+export type ModerationRidePhotoQuery = z.infer<typeof ModerationRidePhotoQuery>;

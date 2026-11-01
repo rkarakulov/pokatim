@@ -19,4 +19,6 @@ export interface ResultsNotices {
   revisionAudience(raceId: string, revision: number): Promise<string[]>;
   /** Владелец заявки (дисквалификация и её отмена). */
   entryUser(entryId: string): Promise<string | null>;
+  /** Гонка заявки («Респект» строке результата, social-p7); заявки нет — `null`. */
+  entryRace(entryId: string): Promise<string | null>;
 }

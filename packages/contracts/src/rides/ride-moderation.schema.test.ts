@@ -6,6 +6,7 @@ import {
   ModerationRideDetail,
   ModerationRidePage,
   ModerationRideQuery,
+  ModerationRidePhotoQuery,
   ResetRidePhotoRequest,
   RestoreRideRequest,
   RIDE_MODERATION_STATES,
@@ -145,5 +146,16 @@ describe('ResetRidePhotoRequest (ride-photo)', () => {
     expect(
       ResetRidePhotoRequest.safeParse({ photoId: TOKEN, reason: 'Чужое фото', version: 1 }).success,
     ).toBe(false);
+  });
+});
+
+describe('ModerationRidePhotoQuery (ride-photo-followups)', () => {
+  it('photoId — токен фото; строгий; пустой или кривой — ошибка', () => {
+    expect(ModerationRidePhotoQuery.parse({ photoId: TOKEN })).toEqual({ photoId: TOKEN });
+    expect(ModerationRidePhotoQuery.safeParse({}).success).toBe(false);
+    expect(ModerationRidePhotoQuery.safeParse({ photoId: '' }).success).toBe(false);
+    expect(ModerationRidePhotoQuery.safeParse({ photoId: 'x' }).success).toBe(false);
+    expect(ModerationRidePhotoQuery.safeParse({ photoId: ID }).success).toBe(false);
+    expect(ModerationRidePhotoQuery.safeParse({ photoId: TOKEN, extra: '1' }).success).toBe(false);
   });
 });

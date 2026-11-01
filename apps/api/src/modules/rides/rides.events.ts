@@ -26,3 +26,14 @@ export const RIDES_PARTICIPANT_JOINED = 'rides.participant-joined';
 export const RIDES_REPORTS_RESOLVED = 'rides.reports-resolved';
 export const RidesReportsResolved = z.object({ rideId: z.uuid(), resolvedAt: z.iso.datetime() });
 export type RidesReportsResolved = z.infer<typeof RidesReportsResolved>;
+
+/**
+ * Модератор удалил фото организатора (ride-photo-followups R10): пишется в транзакции сброса; `seq` — `noticeSeq` райда
+ * после записи сброса (порядок схлопывания, N7). Без id фото и причины модератора (RC-3, N12).
+ */
+export const RIDES_PHOTO_RESET = 'rides.photo-reset';
+export const RidesPhotoReset = z.strictObject({
+  rideId: z.uuid(),
+  seq: z.number().int().positive(),
+});
+export type RidesPhotoReset = z.infer<typeof RidesPhotoReset>;

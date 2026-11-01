@@ -23,6 +23,8 @@ import {
 } from '@/features/home/queries';
 import { useOwnAvatarId } from '@/features/profile/queries';
 import { NameHint, useHomeNameHint } from '@/features/social/name-hint';
+import { useSocialHome } from '@/features/social/queries';
+import { SocialHomeSection } from '@/features/social/social-home-section';
 import { InstallBanner } from '@/features/pwa-install/install-banner';
 import { isSignedIn, useSessionStore } from '@/features/auth/session-store';
 import { HomeTickets } from '@/features/tickets/home-tickets';
@@ -97,15 +99,6 @@ export default function HomeScreen() {
   // аватар верхней панели (rider-profile): тот же кэш `['profile']`, что порядок разделов — без второго запроса
   const avatarId = useOwnAvatarId();
   const sections = orderHomeSections(AVAILABLE_HOME_SECTIONS, profile.reasons);
-  // подсказка имени K3 — на месте будущей секции «Свои» (K7, RC-P3-7): без слота (профиль не пришёл) — нет
-  const nameHint = useHomeNameHint(signedIn);
-  const hintSlot = nameHint.visible ? socialSlotIndex(sections, profile.reasons) : null;
-  const hint =
-    hintSlot === null ? null : (
-      <View style={styles.hint}>
-        <NameHint onLater={nameHint.later} />
-      </View>
-    );
   // «сейчас» подписей — на клиенте (Главная без SSR-данных, R6): новые данные, фокус, полночь по Минску
   const now = useMinskClock([
     races.dataUpdatedAt,
@@ -113,6 +106,24 @@ export default function HomeScreen() {
     routes.dataUpdatedAt,
     calendar.dataUpdatedAt,
   ]);
+  // слот «Свои» (K7, RC-P7-18): секция (есть строки) и под ней подсказка имени K3; профиль не пришёл — слота нет
+  const nameHint = useHomeNameHint(signedIn);
+  const socialHome = useSocialHome(signedIn);
+  const socialSlot = socialSlotIndex(sections, profile.reasons);
+  const socialShown = signedIn && (socialHome.data?.items.length ?? 0) > 0;
+  const slotContent =
+    socialSlot === null ? null : (
+      <>
+        {signedIn ? (
+          <SocialHomeSection data={socialHome.data} now={now} first={socialSlot === 0} />
+        ) : null}
+        {nameHint.visible ? (
+          <View style={styles.hint}>
+            <NameHint onLater={nameHint.later} />
+          </View>
+        ) : null}
+      </>
+    );
   // без сети при показанных данных — баннер (§4.12); без данных «Нет соединения» показывает слот раздела
   const hasData =
     races.data !== undefined ||
@@ -127,6 +138,7 @@ export default function HomeScreen() {
       calendar.refetch,
       profile.refetch,
       tickets.refetch,
+      socialHome.refetch,
     ],
     [
       races.refetch,
@@ -135,6 +147,7 @@ export default function HomeScreen() {
       calendar.refetch,
       profile.refetch,
       tickets.refetch,
+      socialHome.refetch,
     ],
   );
   const { refreshing, onRefresh } = usePullToRefresh(refetchers);
@@ -170,13 +183,13 @@ export default function HomeScreen() {
           <OfflineBanner hasData={hasData} style={styles.banner} />
           <HomeTickets query={tickets} />
           {sections.map(({ id, chosen }, index) => {
-            const before = index === hintSlot ? hint : null;
+            const before = index === socialSlot ? slotContent : null;
             const copy = SECTION_COPY[id];
             const frame = {
               kicker: t(copy.kicker),
               title: t(copy.title),
               chosen,
-              first: index === 0,
+              first: index === 0 && !(socialShown && socialSlot === 0),
               all: { label: t(copy.all), onPress: () => router.navigate(copy.href) },
             };
             const section =
@@ -286,7 +299,7 @@ export default function HomeScreen() {
               </Fragment>
             );
           })}
-          {hintSlot !== null && hintSlot >= sections.length ? hint : null}
+          {socialSlot !== null && socialSlot >= sections.length ? slotContent : null}
           {/* витрина компонентов — только в dev; «Выйти» — в «Настройках» (settings-hub) */}
           {__DEV__ ? (
             <View style={styles.footer}>

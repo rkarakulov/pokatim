@@ -13,6 +13,9 @@ import { RidePhotosService } from './ride-photos.service';
  */
 export const RIDE_PHOTO_CACHE_CONTROL = 'public, max-age=86400, immutable';
 
+/** Фото райда для карточки модерации (ride-photo-followups): только панель, не кэшируется нигде. */
+export const RIDE_PHOTO_MODERATION_CACHE_CONTROL = 'private, no-store';
+
 /**
  * Отдача фото райда (ride-photo): без входа, IP-лимит `public-read`; доступ — по непредсказуемому id и только пока это
  * текущее фото нескрытого райда (иначе 404 всем, включая организатора). Заголовки — `replyJpeg` после чтения.

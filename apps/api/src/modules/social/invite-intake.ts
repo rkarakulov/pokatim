@@ -30,8 +30,6 @@ export class InviteIntake {
     if (!live.has(inviterId)) return 'inviter_deleted';
     if (!live.has(event.userId)) return 'invitee_deleted';
     const registered = await this.connections.linkInvite(inviterId, event.userId);
-    // P7: уведомление пригласившему K10 «По вашей ссылке зарегистрировались» — здесь, по
-    // { inviterId, inviteeId: event.userId, registered }
     return registered ? 'linked' : 'already_linked';
   }
 }

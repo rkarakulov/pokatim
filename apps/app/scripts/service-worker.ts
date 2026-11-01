@@ -168,7 +168,7 @@ function targetPath(target) {
     case 'race':
       return id('raceId') && '/races/' + id('raceId');
     case 'ride':
-      return id('rideId') && '/rides/' + id('rideId');
+      return id('rideId') && '/rides/' + id('rideId') + '?from=notification';
     case 'dispute-response':
       return id('raceId') && id('disputeId') && '/races/dispute-response/' + id('raceId') + '/' + id('disputeId');
     case 'my-route':

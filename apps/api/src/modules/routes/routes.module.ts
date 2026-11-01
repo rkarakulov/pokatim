@@ -46,9 +46,11 @@ import { RoutesViewerController } from './routes-viewer.controller';
  * `RideRoutes` для `rides` (05c, без кэша), порт `RouteRideRoutes` для `route-rides` (route-rides-01, без кэша); удаление
  * маршрута с жалобами (`RouteDeletion`, routes-06) — общее для «Моих» и стирания; очереди модерации для «Обзора»
  * панели (`RoutesOverview`, admin-overview); порт OG-картинки `RoutesForSharing` для `sharing` (og-images); порт
- * `RoutesForSocial` для `social` («Свои» P4: маршрут райдера в каталоге — цель «Респекта автору»).
+ * `RoutesForSocial` для `social` («Свои» P4: маршрут райдера в каталоге — цель «Респекта автору»; P7 — новые маршруты
+ * «своих», имя автора — `RIDER_NAMES` из `ProfileCoreModule`, у него импортов нет — цикла нет).
  */
 @Module({
+  imports: [ProfileCoreModule],
   providers: [
     RoutesRepository,
     RouteReportsRepository,
