@@ -2163,13 +2163,6 @@ export const ru = {
   'routes.detail.racesMore': 'Показать ещё',
   'routes.detail.map.label': 'Карта маршрута: {distance}, старт и финиш отмечены',
   'routes.detail.map.failed': 'Карта не загрузилась',
-  // строки карточки «Моего маршрута» (routes-02; каталог с routes-03 — стат-блок)
-  'routes.detail.length': 'Длина',
-  'routes.detail.elevation': 'Набор высоты',
-  'routes.detail.elevationValue': '{gain} м',
-  'routes.detail.loop': 'Петля',
-  'routes.detail.yes': 'Да — старт и финиш в одном месте',
-  'routes.detail.no': 'Нет',
   // routes-03: карточка — чипы, стат-блок, профиль высоты, «Скачать GPX» (routes-formats: и KML, TCX)
   'routes.detail.chip.loop': 'Круговой',
   'routes.detail.chip.oneWay': 'В одну сторону',
