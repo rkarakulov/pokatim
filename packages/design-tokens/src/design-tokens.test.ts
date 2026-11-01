@@ -208,6 +208,7 @@ describe('раскладка приложения (layout)', () => {
       badgeGrid: 72,
       badgeHero: 152,
       ticketQr: 240,
+      mutedOpacity: 0.45,
     });
     // диск не перекрывает кольцо: отступ + толщина кольца с двух сторон + диск ≤ 1
     expect(2 * (badgeShape.ringInset + badgeShape.ringWidth) + badgeShape.disc).toBeLessThanOrEqual(

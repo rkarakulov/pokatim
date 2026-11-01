@@ -1,5 +1,5 @@
 import type { SocialConnectionRow, SocialConnections } from '@pokatim/contracts';
-import { motion, size, space, stroke } from '@pokatim/design-tokens';
+import { layout, motion, size, space, stroke } from '@pokatim/design-tokens';
 import { t } from '@pokatim/i18n';
 import {
   AsyncContent,
@@ -29,14 +29,16 @@ import {
   useSetRiderConnection,
   useSocialConnections,
 } from './queries';
-import { CONNECT_LABELS, connectionRowText } from './social-format';
+import { connectionRowText } from './social-format';
 
 const DOCUMENT_TITLE = `${t('social.title')} — ${t('app.name')}`;
 const SKELETON_ROWS = 3;
 
 /**
- * Строка «Свои»: аватар, имя, подпись по полям сервера; нажатие — профиль райдера. «Убрать из своих» — без
- * подтверждения, строка остаётся с «В свои» (можно вернуть) — локальное состояние экрана до ухода.
+ * Строка «Свои»: аватар, имя, подпись по полям сервера; нажатие — профиль райдера. Кнопка — всегда действие:
+ * «Убрать» (вторичная, без подтверждения) → строка остаётся до ухода с экрана приглушённой (имя серым, аватар
+ * прозрачнее, «Убраны из своих» — скринридеру) с основной «Вернуть» (локальное состояние экрана). Ширина кнопки — по
+ * самой длинной подписи, текст строки не меняется: соседи не прыгают.
  */
 function ConnectionRow({
   row,
@@ -53,7 +55,11 @@ function ConnectionRow({
   const router = useRouter();
   const mutation = useSetRiderConnection(row.publicId, { refreshList: false });
   const note = connectionRowText(row, now);
-  const connected = !removed;
+  // статус убранного — в имени ссылки для скринридера; видимая подпись та же: высота строки не меняется
+  const label = [row.name, note, removed ? t('social.row.removed') : null]
+    .filter(Boolean)
+    .join('. ');
+  const nameColor = removed ? theme.text.secondary : theme.text.primary;
   return (
     <View
       testID={`social-row-${row.publicId}`}
@@ -62,13 +68,19 @@ function ConnectionRow({
       <View style={styles.rowLine}>
         <Pressable
           accessibilityRole="link"
-          accessibilityLabel={note ? `${row.name}. ${note}` : row.name}
+          accessibilityLabel={label}
           onPress={() => router.push(riderPath(row.publicId))}
           style={({ pressed }) => [styles.who, { opacity: pressed ? motion.pressedOpacity : 1 }]}
         >
-          <RiderAvatar avatarId={row.avatar?.id ?? null} dimension={size.avatarTopBar} decorative />
+          <View testID="social-row-avatar" style={removed ? styles.muted : null}>
+            <RiderAvatar
+              avatarId={row.avatar?.id ?? null}
+              dimension={size.avatarTopBar}
+              decorative
+            />
+          </View>
           <View style={styles.text}>
-            <Text numberOfLines={1} style={[textStyle('label'), { color: theme.text.primary }]}>
+            <Text numberOfLines={1} style={[textStyle('label'), { color: nameColor }]}>
               {row.name}
             </Text>
             {note ? (
@@ -77,12 +89,15 @@ function ConnectionRow({
           </View>
         </Pressable>
         <Button
-          label={t(connected ? 'social.connected' : 'social.connect')}
-          reserveLabels={CONNECT_LABELS}
-          variant={connected ? 'secondary' : 'primary'}
+          label={t(removed ? 'social.row.restore' : 'social.row.disconnect')}
+          accessibilityLabel={t(removed ? 'social.a11y.restore' : 'social.a11y.disconnect', {
+            name: row.name,
+          })}
+          reserveLabels={[t('social.row.disconnect'), t('social.row.restore')]}
+          variant={removed ? 'primary' : 'secondary'}
           loading={mutation.isPending}
           onPress={() =>
-            mutation.mutate(!connected, { onSuccess: (view) => onToggled(!view.connected) })
+            mutation.mutate(removed, { onSuccess: (view) => onToggled(!view.connected) })
           }
         />
       </View>
@@ -105,7 +120,7 @@ function ConnectionsSkeleton() {
 
 function ConnectionsList({ data }: { data: SocialConnections }) {
   const now = useMinskClock([]);
-  // убранные на этом экране (по publicId): строка остаётся с «В свои» до ухода (K1, без подтверждения)
+  // убранные на этом экране (по publicId): строка остаётся с «Вернуть» до ухода (K1, без подтверждения)
   const [removed, setRemoved] = useState<ReadonlySet<string>>(() => new Set());
   const toggle = useCallback((publicId: string, isRemoved: boolean) => {
     setRemoved((current) => {
@@ -139,7 +154,7 @@ export function SocialScreen() {
   const theme = useTheme();
   const queryClient = useQueryClient();
   const connections = useSocialConnections();
-  // версия ответа сервера: новый ответ сбрасывает «убранные на экране» (вернули из профиля — снова в «своих»)
+  // версия ответа сервера: новый ответ сбрасывает «убранные на экране» (вернули из профиля — снова «Убрать»)
   const listVersion = connections.dataUpdatedAt;
   useFocusEffect(
     useCallback(
@@ -200,4 +215,6 @@ const styles = StyleSheet.create({
   rowLine: { flexDirection: 'row', alignItems: 'center', gap: space.s3 },
   who: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.s3 },
   text: { flex: 1 },
+  // убранный из «Своих»: аватар приглушён, имя — вторичным цветом
+  muted: { opacity: layout.mutedOpacity },
 });
