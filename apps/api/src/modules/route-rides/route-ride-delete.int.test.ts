@@ -18,6 +18,7 @@ import { seedRouteRide } from '../../../test/route-ride-seed';
 import { rideGpx, rider, uploadRide } from '../../../test/results';
 import { routesDb } from '../../../test/routes';
 import { RouteRideAutoProcessor } from './route-ride-auto.processor';
+import { RouteRidesRepository } from './route-rides.repository';
 import { ROUTE_RIDE_DELETE_POLICY } from './route-rides.policy';
 
 /**
@@ -203,6 +204,49 @@ describe('POST /v1/routes/:routeId/rides/:rideId/delete', () => {
       planned: 1,
       passed: 0,
     });
+    expect(await routeRidesDb(h).rides.countDocuments({ routeId: own })).toBe(0);
+  });
+
+  it('AC5: удаление не закоммичено, когда прогон пишет в план, — конфликт записи, после коммита автозаезда нет', async () => {
+    const me = await rider(h);
+    const own = await ownCorridorRoute(h, me.userId);
+    const upload = await uploadRide(h, me.auth, rideGpx('clean.gpx', daysAgo(h, 1)));
+    const [event] = (await autoEvents(h)).filter(
+      (item) => (item.payload as { activityId: string }).activityId === upload.activityId,
+    );
+    // транзакция удаления (API) держится открытой после своих записей, пока её не отпустят
+    const api = h.app.get(RouteRidesRepository, { strict: false });
+    const deleteOwn = api.deleteOwn.bind(api);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let written!: () => void;
+    const wrote = new Promise<void>((resolve) => (written = resolve));
+    vi.spyOn(api, 'deleteOwn').mockImplementationOnce(async (...args) => {
+      const deleted = await deleteOwn(...args);
+      written();
+      await gate;
+      return deleted;
+    });
+
+    const worker = routeRidesRepository(h);
+    const mark = worker.markPlannedInsert.bind(worker);
+    let deleting: Promise<{ status: number }> | undefined;
+    vi.spyOn(worker, 'markPlannedInsert').mockImplementationOnce(async (tx, id, routeId) => {
+      // заезд другой активности по тому же маршруту: уникальный ключ не пересекается со вставкой — сериализует
+      // только запись в план
+      const manual = await seedRouteRide(h, me.userId, routeId, 900, daysAgo(h, 2));
+      deleting = remove(me.auth, routeId, manual.rideId);
+      await wrote;
+      setTimeout(release, 300);
+      // запись в план под незакоммиченным `$pull` — конфликт; повтор транзакции видит план без маршрута
+      return mark(tx, id, routeId);
+    });
+    const auto = h.worker.get(RouteRideAutoProcessor);
+    expect(await auto.process(outboxJob(event!.type, event!._id))).toEqual({
+      planned: 1,
+      passed: 0,
+    });
+    expect((await deleting!).status).toBe(204);
     expect(await routeRidesDb(h).rides.countDocuments({ routeId: own })).toBe(0);
   });
 });
