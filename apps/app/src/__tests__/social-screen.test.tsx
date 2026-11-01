@@ -88,11 +88,11 @@ describe('экран «Свои» /social (P3, K6)', () => {
     await waitFor(() => expect(router.getPathname()).toBe(`/riders/${BORIS}`));
   });
 
-  it('«В своих» → PUT false, строка остаётся с «В свои»; повтор → PUT true; список не перезапрашивается', async () => {
+  it('«Убрать из своих» → PUT false, строка остаётся с «В свои»; повтор → PUT true; список не перезапрашивается', async () => {
     setConnection.mockResolvedValueOnce(social(false));
     await openSocial();
     expect(await screen.findByText('Борис Л.')).toBeOnTheScreen();
-    await fireEvent.press(rowOf(BORIS).getByRole('button', { name: 'В своих' }));
+    await fireEvent.press(rowOf(BORIS).getByRole('button', { name: 'Убрать из своих' }));
     expect(setConnection).toHaveBeenCalledWith(liveSession.accessToken, BORIS, {
       connected: false,
     });
@@ -104,16 +104,16 @@ describe('экран «Свои» /social (P3, K6)', () => {
     expect(setConnection).toHaveBeenLastCalledWith(liveSession.accessToken, BORIS, {
       connected: true,
     });
-    expect(await rowOf(BORIS).findByRole('button', { name: 'В своих' })).toBeOnTheScreen();
+    expect(await rowOf(BORIS).findByRole('button', { name: 'Убрать из своих' })).toBeOnTheScreen();
     expect(list).toHaveBeenCalledTimes(1);
   });
 
-  it('новый ответ списка сбрасывает убранные на экране (вернули из профиля — снова «В своих»)', async () => {
+  it('новый ответ списка сбрасывает убранные на экране (вернули из профиля — снова в «своих»)', async () => {
     setConnection.mockResolvedValueOnce(social(false));
     const client = createTestQueryClient();
     await openSocial(client);
     expect(await screen.findByText('Борис Л.')).toBeOnTheScreen();
-    await fireEvent.press(rowOf(BORIS).getByRole('button', { name: 'В своих' }));
+    await fireEvent.press(rowOf(BORIS).getByRole('button', { name: 'Убрать из своих' }));
     expect(await rowOf(BORIS).findByRole('button', { name: 'В свои' })).toBeOnTheScreen();
 
     // ответ сервера тот же (структурно равен), меняется только dataUpdatedAt
@@ -121,7 +121,7 @@ describe('экран «Свои» /social (P3, K6)', () => {
     await client.refetchQueries({ queryKey: ['social'] });
     // список перемонтирован — строку ищем заново на каждой попытке
     await waitFor(() =>
-      expect(rowOf(BORIS).getByRole('button', { name: 'В своих' })).toBeOnTheScreen(),
+      expect(rowOf(BORIS).getByRole('button', { name: 'Убрать из своих' })).toBeOnTheScreen(),
     );
   });
 
@@ -135,7 +135,7 @@ describe('экран «Свои» /social (P3, K6)', () => {
     );
     await openSocial();
     expect(await screen.findByText('Анна К.')).toBeOnTheScreen();
-    await fireEvent.press(rowOf(ANNA).getByRole('button', { name: 'В своих' }));
+    await fireEvent.press(rowOf(ANNA).getByRole('button', { name: 'Убрать из своих' }));
     await fireEvent.press(await rowOf(ANNA).findByRole('button', { name: 'В свои' }));
     expect(
       await rowOf(ANNA).findByText('Слишком много действий, попробуйте позже'),
